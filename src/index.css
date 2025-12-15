@@ -1,0 +1,349 @@
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+/* 
+  ========================================
+  BANTUIN.ONLINE — Editorial Clean Design System
+  ========================================
+  Typography: Fraunces (display) + DM Sans (body)
+  Palette: Off-white, Ink black, Coral accent
+  Style: Magazine-inspired, paper texture, sharp edges
+*/
+
+@layer base {
+  :root {
+    /* Typography */
+    --font-display: "Fraunces", Georgia, serif;
+    --font-body: "DM Sans", system-ui, sans-serif;
+
+    /* Editorial Color Palette */
+    --background: 40 33% 98%;
+    --foreground: 0 0% 4%;
+
+    --card: 40 20% 99%;
+    --card-foreground: 0 0% 4%;
+
+    --popover: 40 20% 99%;
+    --popover-foreground: 0 0% 4%;
+
+    /* Coral Accent */
+    --primary: 12 100% 64%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 40 10% 94%;
+    --secondary-foreground: 0 0% 4%;
+
+    --muted: 40 10% 94%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 12 100% 64%;
+    --accent-foreground: 0 0% 100%;
+    --accent-subtle: 12 100% 96%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 10% 88%;
+    --input: 40 10% 88%;
+    --ring: 12 100% 64%;
+
+    /* Sharp corners for editorial look */
+    --radius: 0.125rem;
+
+    --sidebar-background: 40 33% 98%;
+    --sidebar-foreground: 0 0% 20%;
+    --sidebar-primary: 0 0% 4%;
+    --sidebar-primary-foreground: 40 33% 98%;
+    --sidebar-accent: 40 10% 94%;
+    --sidebar-accent-foreground: 0 0% 4%;
+    --sidebar-border: 40 10% 88%;
+    --sidebar-ring: 12 100% 64%;
+  }
+
+  .dark {
+    --background: 0 0% 6%;
+    --foreground: 40 20% 96%;
+
+    --card: 0 0% 9%;
+    --card-foreground: 40 20% 96%;
+
+    --popover: 0 0% 9%;
+    --popover-foreground: 40 20% 96%;
+
+    --primary: 12 100% 64%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 40 20% 96%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 40 10% 60%;
+
+    --accent: 12 100% 64%;
+    --accent-foreground: 0 0% 100%;
+    --accent-subtle: 12 40% 15%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 12 100% 64%;
+
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 40 20% 90%;
+    --sidebar-primary: 12 100% 64%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 40 20% 90%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 12 100% 64%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+    /* Font display swap fallback for CLS prevention */
+    font-display: swap;
+    /* Smooth theme transition */
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* Paper grain texture overlay - subtle for editorial feel */
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.03;
+    z-index: 1000;
+    /* will-change for GPU acceleration */
+    will-change: opacity;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  }
+
+  /* Editorial Typography with font-display swap */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-display: swap;
+  }
+
+  h1 {
+    @apply text-4xl md:text-5xl lg:text-6xl;
+    line-height: 1.1;
+  }
+
+  h2 {
+    @apply text-2xl md:text-3xl;
+    line-height: 1.2;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Font utilities */
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  /* Editorial horizontal rule */
+  .editorial-rule {
+    @apply h-0.5 bg-primary;
+    width: 3rem;
+  }
+
+  .editorial-rule-wide {
+    @apply h-px bg-border;
+    width: 100%;
+  }
+
+  /* Numbered label (01, 02, etc.) */
+  .numbered-label {
+    @apply font-body text-xs font-medium tracking-widest text-muted-foreground;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Editorial link underline */
+  .editorial-link {
+    @apply relative inline-block;
+  }
+
+  .editorial-link::after {
+    content: "";
+    @apply absolute bottom-0 left-0 h-px w-0 bg-foreground transition-all duration-300 ease-out;
+  }
+
+  .editorial-link:hover::after {
+    @apply w-full;
+  }
+
+  /* Card hover accent border */
+  .card-accent-border {
+    @apply relative overflow-hidden;
+  }
+
+  .card-accent-border::before {
+    content: "";
+    @apply absolute left-0 top-0 h-full w-0 bg-primary transition-all duration-200 ease-out;
+  }
+
+  .card-accent-border:hover::before {
+    @apply w-1;
+  }
+}
+
+/* Staggered animations - GPU accelerated for better INP */
+@layer utilities {
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 20px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translate3d(-10px, 0, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out forwards;
+    opacity: 0;
+    will-change: opacity, transform;
+    contain: layout style paint;
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.4s ease-out forwards;
+    opacity: 0;
+    will-change: opacity, transform;
+    contain: layout style paint;
+  }
+
+  /* Stagger delays */
+  .stagger-1 {
+    animation-delay: 0.1s;
+  }
+  .stagger-2 {
+    animation-delay: 0.2s;
+  }
+  .stagger-3 {
+    animation-delay: 0.3s;
+  }
+  .stagger-4 {
+    animation-delay: 0.4s;
+  }
+  .stagger-5 {
+    animation-delay: 0.5s;
+  }
+  .stagger-6 {
+    animation-delay: 0.6s;
+  }
+
+  /* Skeleton shimmer effect */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted) / 0.5) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite linear;
+  }
+
+  /* Button bounce on click */
+  .btn-bounce:active {
+    animation: bounce-subtle 0.3s ease-in-out;
+  }
+
+  /* Success pop animation */
+  .success-pop {
+    animation: pop 0.2s ease-out;
+  }
+
+  /* Global confetti styles */
+  .confetti-piece {
+    position: fixed;
+    width: 10px;
+    height: 10px;
+    top: -10px;
+    pointer-events: none;
+    animation: confetti 3s ease-out forwards;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes bounce-subtle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes confetti {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
