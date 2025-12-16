@@ -1,16 +1,13 @@
-
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 interface PageTransitionProps {
-  children: ReactNode;
+	children: ReactNode;
 }
 
-const PageTransition = ({ children }: PageTransitionProps) => {
-  return (
-    <div className="animate-fade-in-up">
-      {children}
-    </div>
-  );
+const PageTransition = ({
+	children,
+}: PageTransitionProps): React.JSX.Element => {
+	return <div className="animate-fade-in-up">{children}</div>;
 };
 
 export default PageTransition;

@@ -5,22 +5,22 @@ import LanguageDetector from "i18next-browser-languagedetector";
 import en from "../locales/en.json";
 import id from "../locales/id.json";
 
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources: {
-      en: {
-        translation: en,
-      },
-      id: {
-        translation: id,
-      },
-    },
-    fallbackLng: "en",
-    interpolation: {
-      escapeValue: false, // react already safes from xss
-    },
-  });
+void i18n
+	.use(LanguageDetector)
+	.use(initReactI18next)
+	.init({
+		resources: {
+			en: {
+				translation: en,
+			},
+			id: {
+				translation: id,
+			},
+		},
+		fallbackLng: "en",
+		interpolation: {
+			escapeValue: false, // react already safes from xss
+		},
+	});
 
 export default i18n;

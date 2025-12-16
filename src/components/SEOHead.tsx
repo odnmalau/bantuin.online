@@ -1,78 +1,76 @@
-import { Helmet } from 'react-helmet-async';
-import { useTranslation } from 'react-i18next';
-
+import { Helmet } from "react-helmet-async";
+import { useTranslation } from "react-i18next";
 
 interface SEOHeadProps {
-  title: string;
-  description: string;
-  path: string;
-  keywords?: string[];
-  ogImage?: string;
+	title: string;
+	description: string;
+	path: string;
+	keywords?: Array<string>;
+	ogImage?: string;
 }
 
-const BASE_URL = 'https://bantuin.online';
+const BASE_URL = "https://bantuin.online";
 
-export const SEOHead = ({ 
-  title, 
-  description, 
-  path, 
-  keywords = [],
-  ogImage = '/og-default.png'
-}: SEOHeadProps) => {
-  const fullTitle = `${title} - Bantuin.online`;
-  const canonicalUrl = `${BASE_URL}${path}`;
-  
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": title,
-    "description": description,
-    "url": canonicalUrl,
-    "applicationCategory": "UtilityApplication",
-    "operatingSystem": "Web Browser",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "IDR"
-    },
-    "creator": {
-      "@type": "Organization",
-      "name": "Bantuin.online"
-    }
-  };
+export const SEOHead = ({
+	title,
+	description,
+	path,
+	keywords = [],
+	ogImage = "/og-default.png",
+}: SEOHeadProps): React.JSX.Element => {
+	const fullTitle = `${title} - Bantuin.online`;
+	const canonicalUrl = `${BASE_URL}${path}`;
 
-  const { i18n } = useTranslation();
-  const currentLocale = i18n.language === 'id' ? 'id_ID' : 'en_US';
+	const structuredData = {
+		"@context": "https://schema.org",
+		"@type": "WebApplication",
+		name: title,
+		description: description,
+		url: canonicalUrl,
+		applicationCategory: "UtilityApplication",
+		operatingSystem: "Web Browser",
+		offers: {
+			"@type": "Offer",
+			price: "0",
+			priceCurrency: "IDR",
+		},
+		creator: {
+			"@type": "Organization",
+			name: "Bantuin.online",
+		},
+	};
 
-  return (
-    <Helmet>
-      <title>{fullTitle}</title>
-      <meta name="description" content={description} />
-      {keywords.length > 0 && (
-        <meta name="keywords" content={keywords.join(', ')} />
-      )}
-      <link rel="canonical" href={canonicalUrl} />
-      
-      {/* OpenGraph */}
-      <meta property="og:type" content="website" />
-      <meta property="og:title" content={fullTitle} />
-      <meta property="og:description" content={description} />
-      <meta property="og:url" content={canonicalUrl} />
-      <meta property="og:image" content={`${BASE_URL}${ogImage}`} />
-      <meta property="og:site_name" content="Bantuin.online" />
-      <meta property="og:locale" content={currentLocale} />
+	const { i18n } = useTranslation();
+	const currentLocale = i18n.language === "id" ? "id_ID" : "en_US";
 
-      
-      {/* Twitter Card */}
-      <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content={fullTitle} />
-      <meta name="twitter:description" content={description} />
-      <meta name="twitter:image" content={`${BASE_URL}${ogImage}`} />
-      
-      {/* Structured Data */}
-      <script type="application/ld+json">
-        {JSON.stringify(structuredData)}
-      </script>
-    </Helmet>
-  );
+	return (
+		<Helmet>
+			<title>{fullTitle}</title>
+			<meta content={description} name="description" />
+			{keywords.length > 0 && (
+				<meta content={keywords.join(", ")} name="keywords" />
+			)}
+			<link href={canonicalUrl} rel="canonical" />
+
+			{/* OpenGraph */}
+			<meta content="website" property="og:type" />
+			<meta content={fullTitle} property="og:title" />
+			<meta content={description} property="og:description" />
+			<meta content={canonicalUrl} property="og:url" />
+			<meta content={`${BASE_URL}${ogImage}`} property="og:image" />
+			<meta content="Bantuin.online" property="og:site_name" />
+			<meta content={currentLocale} property="og:locale" />
+
+			{/* Twitter Card */}
+			<meta content="summary_large_image" name="twitter:card" />
+			<meta content={fullTitle} name="twitter:title" />
+			<meta content={description} name="twitter:description" />
+			<meta content={`${BASE_URL}${ogImage}`} name="twitter:image" />
+
+			{/* Structured Data */}
+			<script type="application/ld+json">
+				{JSON.stringify(structuredData)}
+			</script>
+		</Helmet>
+	);
 };

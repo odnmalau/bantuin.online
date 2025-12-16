@@ -36,58 +36,89 @@ const Watermark = lazy(() => import("./pages/tools/Watermark"));
 const DiffChecker = lazy(() => import("./pages/tools/DiffChecker"));
 
 // Minimal loading fallback to prevent CLS
-const PageLoader = () => (
-  <div className="flex min-h-screen items-center justify-center">
-    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-  </div>
+const PageLoader = (): React.JSX.Element => (
+	<div className="flex min-h-screen items-center justify-center">
+		<div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+	</div>
 );
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <HelmetProvider>
-    <ThemeProvider attribute="class" defaultTheme="system" storageKey="bantuin-theme">
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <OfflineIndicator />
-          <InstallPrompt />
-          <BrowserRouter>
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/tools/whatsapp" element={<WhatsAppGenerator />} />
-                <Route path="/tools/compress" element={<ImageCompressor />} />
-                <Route path="/tools/pas-foto" element={<PasFoto />} />
-                <Route path="/tools/pdf-merge" element={<PdfMerger />} />
-                <Route path="/tools/qr-code" element={<QRCodeGenerator />} />
-                <Route path="/tools/text-case" element={<TextCaseConverter />} />
-                <Route path="/tools/word-counter" element={<WordCounter />} />
-                <Route path="/tools/age-calculator" element={<AgeCalculator />} />
-                <Route path="/tools/json-formatter" element={<JsonFormatter />} />
-                <Route path="/tools/image-to-base64" element={<ImageToBase64 />} />
-                <Route path="/tools/screenshot-to-pdf" element={<ScreenshotToPdf />} />
-                <Route path="/tools/password-generator" element={<PasswordGenerator />} />
-                <Route path="/tools/color-picker" element={<ColorPicker />} />
-                <Route path="/tools/lorem-ipsum" element={<LoremIpsum />} />
-                <Route path="/tools/unit-converter" element={<UnitConverter />} />
-                <Route path="/tools/invoice-generator" element={<InvoiceGenerator />} />
-                <Route path="/tools/random-picker" element={<RandomPicker />} />
-                <Route path="/tools/terbilang" element={<Terbilang />} />
-                <Route path="/tools/signature-pad" element={<SignaturePad />} />
-                <Route path="/tools/image-converter" element={<ImageConverter />} />
-                <Route path="/tools/watermark" element={<Watermark />} />
-                <Route path="/tools/diff-checker" element={<DiffChecker />} />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
-  </HelmetProvider>
+const App = (): React.JSX.Element => (
+	<HelmetProvider>
+		<ThemeProvider
+			attribute="class"
+			defaultTheme="system"
+			storageKey="bantuin-theme"
+		>
+			<QueryClientProvider client={queryClient}>
+				<TooltipProvider>
+					<Toaster />
+					<Sonner />
+					<OfflineIndicator />
+					<InstallPrompt />
+					<BrowserRouter>
+						<Suspense fallback={<PageLoader />}>
+							<Routes>
+								<Route element={<Index />} path="/" />
+								<Route element={<WhatsAppGenerator />} path="/tools/whatsapp" />
+								<Route element={<ImageCompressor />} path="/tools/compress" />
+								<Route element={<PasFoto />} path="/tools/pas-foto" />
+								<Route element={<PdfMerger />} path="/tools/pdf-merge" />
+								<Route element={<QRCodeGenerator />} path="/tools/qr-code" />
+								<Route
+									element={<TextCaseConverter />}
+									path="/tools/text-case"
+								/>
+								<Route element={<WordCounter />} path="/tools/word-counter" />
+								<Route
+									element={<AgeCalculator />}
+									path="/tools/age-calculator"
+								/>
+								<Route
+									element={<JsonFormatter />}
+									path="/tools/json-formatter"
+								/>
+								<Route
+									element={<ImageToBase64 />}
+									path="/tools/image-to-base64"
+								/>
+								<Route
+									element={<ScreenshotToPdf />}
+									path="/tools/screenshot-to-pdf"
+								/>
+								<Route
+									element={<PasswordGenerator />}
+									path="/tools/password-generator"
+								/>
+								<Route element={<ColorPicker />} path="/tools/color-picker" />
+								<Route element={<LoremIpsum />} path="/tools/lorem-ipsum" />
+								<Route
+									element={<UnitConverter />}
+									path="/tools/unit-converter"
+								/>
+								<Route
+									element={<InvoiceGenerator />}
+									path="/tools/invoice-generator"
+								/>
+								<Route element={<RandomPicker />} path="/tools/random-picker" />
+								<Route element={<Terbilang />} path="/tools/terbilang" />
+								<Route element={<SignaturePad />} path="/tools/signature-pad" />
+								<Route
+									element={<ImageConverter />}
+									path="/tools/image-converter"
+								/>
+								<Route element={<Watermark />} path="/tools/watermark" />
+								<Route element={<DiffChecker />} path="/tools/diff-checker" />
+								{/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+								<Route element={<NotFound />} path="*" />
+							</Routes>
+						</Suspense>
+					</BrowserRouter>
+				</TooltipProvider>
+			</QueryClientProvider>
+		</ThemeProvider>
+	</HelmetProvider>
 );
 
 export default App;

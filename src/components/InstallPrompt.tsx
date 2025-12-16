@@ -5,100 +5,108 @@ import { Button } from "@/components/ui/button";
 import { Download, X } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+	prompt: () => Promise<void>;
+	userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-const InstallPrompt = () => {
-  const { t } = useTranslation();
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [dismissed, setDismissed] = useState(() => {
-      // Check if already dismissed during initialization to avoid effect sync state updates
-      return !!localStorage.getItem("bantuin-install-dismissed");
-  });
+const InstallPrompt = (): React.JSX.Element | null => {
+	const { t } = useTranslation();
+	const [deferredPrompt, setDeferredPrompt] =
+		useState<BeforeInstallPromptEvent | null>(null);
+	const [showPrompt, setShowPrompt] = useState(false);
+	const [dismissed, setDismissed] = useState(() => {
+		// Check if already dismissed during initialization to avoid effect sync state updates
+		return !!localStorage.getItem("bantuin-install-dismissed");
+	});
 
-  useEffect(() => {
-    if (dismissed) return;
+	useEffect((): (() => void) | undefined => {
+		if (dismissed) return;
 
-    // Check if already installed
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      return;
-    }
+		// Check if already installed
+		if (window.matchMedia("(display-mode: standalone)").matches) {
+			return;
+		}
 
-    const handleBeforeInstall = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      
-      // Show prompt after a delay (2nd page view or after 3 seconds)
-      const visitCount = parseInt(localStorage.getItem("bantuin-visit-count") || "0") + 1;
-      localStorage.setItem("bantuin-visit-count", String(visitCount));
-      
-      if (visitCount >= 2) {
-        setTimeout(() => setShowPrompt(true), 1000);
-      } else {
-        setTimeout(() => setShowPrompt(true), 5000);
-      }
-    };
+		const handleBeforeInstall = (event: Event): void => {
+			event.preventDefault();
+			setDeferredPrompt(event as BeforeInstallPromptEvent);
 
-    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+			// Show prompt after a delay (2nd page view or after 3 seconds)
+			const visitCount =
+				parseInt(localStorage.getItem("bantuin-visit-count") || "0") + 1;
+			localStorage.setItem("bantuin-visit-count", String(visitCount));
 
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
-    };
-  }, []);
+			if (visitCount >= 2) {
+				setTimeout((): void => {
+					setShowPrompt(true);
+				}, 1000);
+			} else {
+				setTimeout((): void => {
+					setShowPrompt(true);
+				}, 5000);
+			}
+		};
 
-  const handleInstall = async () => {
-    if (!deferredPrompt) return;
+		window.addEventListener("beforeinstallprompt", handleBeforeInstall);
 
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === "accepted") {
-      setShowPrompt(false);
-    }
-    setDeferredPrompt(null);
-  };
+		return (): void => {
+			window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+		};
+	}, [dismissed]);
 
-  const handleDismiss = () => {
-    setShowPrompt(false);
-    setDismissed(true);
-    localStorage.setItem("bantuin-install-dismissed", "true");
-  };
+	const handleInstall = async (): Promise<void> => {
+		if (!deferredPrompt) return;
 
-  if (!showPrompt || dismissed || !deferredPrompt) return null;
+		await deferredPrompt.prompt();
+		const { outcome } = await deferredPrompt.userChoice;
 
-  return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 animate-fade-in md:left-auto md:right-4 md:max-w-sm">
-      <div className="rounded-lg border border-border bg-card p-4 shadow-lg">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-            <Download className="h-5 w-5 text-primary" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-foreground">{t('install_prompt.title')}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t('install_prompt.desc')}
-            </p>
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" onClick={handleInstall}>
-                {t('install_prompt.install')}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleDismiss}>
-                {t('install_prompt.later')}
-              </Button>
-            </div>
-          </div>
-          <button
-            onClick={handleDismiss}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+		if (outcome === "accepted") {
+			setShowPrompt(false);
+		}
+		setDeferredPrompt(null);
+	};
+
+	const handleDismiss = (): void => {
+		setShowPrompt(false);
+		setDismissed(true);
+		localStorage.setItem("bantuin-install-dismissed", "true");
+	};
+
+	if (!showPrompt || dismissed || !deferredPrompt) return null;
+
+	return (
+		<div className="fixed bottom-4 left-4 right-4 z-50 animate-fade-in md:left-auto md:right-4 md:max-w-sm">
+			<div className="rounded-lg border border-border bg-card p-4 shadow-lg">
+				<div className="flex items-start gap-3">
+					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+						<Download className="h-5 w-5 text-primary" />
+					</div>
+					<div className="flex-1">
+						<h3 className="font-semibold text-foreground">
+							{t("install_prompt.title")}
+						</h3>
+						<p className="mt-1 text-sm text-muted-foreground">
+							{t("install_prompt.desc")}
+						</p>
+						<div className="mt-3 flex gap-2">
+							<Button size="sm" onClick={handleInstall}>
+								{t("install_prompt.install")}
+							</Button>
+							<Button size="sm" variant="ghost" onClick={handleDismiss}>
+								{t("install_prompt.later")}
+							</Button>
+						</div>
+					</div>
+					<button
+						className="text-muted-foreground hover:text-foreground"
+						onClick={handleDismiss}
+					>
+						<X className="h-4 w-4" />
+					</button>
+				</div>
+			</div>
+		</div>
+	);
 };
 
 export default InstallPrompt;
