@@ -1,12 +1,14 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Cake, Calendar } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 const AgeCalculator = () => {
+  const { t } = useTranslation();
   const [birthDate, setBirthDate] = useState("");
 
   const result = useMemo(() => {
@@ -54,20 +56,22 @@ const AgeCalculator = () => {
     // Western Zodiac
     const month = birth.getMonth() + 1;
     const day = birth.getDate();
+    // Using t() inside loop or map might be inefficient if re-render frequent, 
+    // but here it is memoized. Better to construct the array using t().
     const zodiacSigns = [
-      { name: "Capricorn", emoji: "♑", start: [1, 1], end: [1, 19] },
-      { name: "Aquarius", emoji: "♒", start: [1, 20], end: [2, 18] },
-      { name: "Pisces", emoji: "♓", start: [2, 19], end: [3, 20] },
-      { name: "Aries", emoji: "♈", start: [3, 21], end: [4, 19] },
-      { name: "Taurus", emoji: "♉", start: [4, 20], end: [5, 20] },
-      { name: "Gemini", emoji: "♊", start: [5, 21], end: [6, 20] },
-      { name: "Cancer", emoji: "♋", start: [6, 21], end: [7, 22] },
-      { name: "Leo", emoji: "♌", start: [7, 23], end: [8, 22] },
-      { name: "Virgo", emoji: "♍", start: [8, 23], end: [9, 22] },
-      { name: "Libra", emoji: "♎", start: [9, 23], end: [10, 22] },
-      { name: "Scorpio", emoji: "♏", start: [10, 23], end: [11, 21] },
-      { name: "Sagittarius", emoji: "♐", start: [11, 22], end: [12, 21] },
-      { name: "Capricorn", emoji: "♑", start: [12, 22], end: [12, 31] },
+      { name: t("age.zodiac_data.western.capricorn"), emoji: "♑", start: [1, 1], end: [1, 19] },
+      { name: t("age.zodiac_data.western.aquarius"), emoji: "♒", start: [1, 20], end: [2, 18] },
+      { name: t("age.zodiac_data.western.pisces"), emoji: "♓", start: [2, 19], end: [3, 20] },
+      { name: t("age.zodiac_data.western.aries"), emoji: "♈", start: [3, 21], end: [4, 19] },
+      { name: t("age.zodiac_data.western.taurus"), emoji: "♉", start: [4, 20], end: [5, 20] },
+      { name: t("age.zodiac_data.western.gemini"), emoji: "♊", start: [5, 21], end: [6, 20] },
+      { name: t("age.zodiac_data.western.cancer"), emoji: "♋", start: [6, 21], end: [7, 22] },
+      { name: t("age.zodiac_data.western.leo"), emoji: "♌", start: [7, 23], end: [8, 22] },
+      { name: t("age.zodiac_data.western.virgo"), emoji: "♍", start: [8, 23], end: [9, 22] },
+      { name: t("age.zodiac_data.western.libra"), emoji: "♎", start: [9, 23], end: [10, 22] },
+      { name: t("age.zodiac_data.western.scorpio"), emoji: "♏", start: [10, 23], end: [11, 21] },
+      { name: t("age.zodiac_data.western.sagittarius"), emoji: "♐", start: [11, 22], end: [12, 21] },
+      { name: t("age.zodiac_data.western.capricorn"), emoji: "♑", start: [12, 22], end: [12, 31] },
     ];
 
     let westernZodiac = zodiacSigns[0];
@@ -85,18 +89,18 @@ const AgeCalculator = () => {
 
     // Chinese Zodiac (Shio)
     const chineseZodiacs = [
-      { name: "Tikus", emoji: "🐀" },
-      { name: "Kerbau", emoji: "🐂" },
-      { name: "Macan", emoji: "🐅" },
-      { name: "Kelinci", emoji: "🐇" },
-      { name: "Naga", emoji: "🐉" },
-      { name: "Ular", emoji: "🐍" },
-      { name: "Kuda", emoji: "🐴" },
-      { name: "Kambing", emoji: "🐐" },
-      { name: "Monyet", emoji: "🐵" },
-      { name: "Ayam", emoji: "🐓" },
-      { name: "Anjing", emoji: "🐕" },
-      { name: "Babi", emoji: "🐷" },
+      { name: t("age.zodiac_data.chinese.rat"), emoji: "🐀" },
+      { name: t("age.zodiac_data.chinese.ox"), emoji: "🐂" },
+      { name: t("age.zodiac_data.chinese.tiger"), emoji: "🐅" },
+      { name: t("age.zodiac_data.chinese.rabbit"), emoji: "🐇" },
+      { name: t("age.zodiac_data.chinese.dragon"), emoji: "🐉" },
+      { name: t("age.zodiac_data.chinese.snake"), emoji: "🐍" },
+      { name: t("age.zodiac_data.chinese.horse"), emoji: "🐴" },
+      { name: t("age.zodiac_data.chinese.goat"), emoji: "🐐" },
+      { name: t("age.zodiac_data.chinese.monkey"), emoji: "🐵" },
+      { name: t("age.zodiac_data.chinese.rooster"), emoji: "🐓" },
+      { name: t("age.zodiac_data.chinese.dog"), emoji: "🐕" },
+      { name: t("age.zodiac_data.chinese.pig"), emoji: "🐷" },
     ];
     const chineseZodiac = chineseZodiacs[(birth.getFullYear() - 4) % 12];
 
@@ -109,28 +113,26 @@ const AgeCalculator = () => {
       westernZodiac,
       chineseZodiac,
     };
-  }, [birthDate]);
-
-  const meta = toolsMetadata.age;
+  }, [birthDate, t]);
 
   return (
     <ToolPageLayout
       toolNumber="08"
-      title="Kalkulator Usia"
-      subtitle="Hitung Usia Lengkap"
-      description="Hitung usia dari tanggal lahir, termasuk zodiak dan shio."
+      title={t('tool_items.age_calculator.title')}
+      subtitle={t('age.subtitle')}
+      description={t('tool_items.age_calculator.desc')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('age.meta.title')}
+        description={t('age.meta.description')}
+        path="/tools/age"
+        keywords={t('age.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Date Input */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Tanggal Lahir
+            {t('age.label_date')}
           </label>
           <Input
             type="date"
@@ -146,14 +148,14 @@ const AgeCalculator = () => {
           <div className="animate-fade-in space-y-4">
             {/* Main Age Display */}
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-6 text-center">
-              <p className="mb-2 text-sm text-muted-foreground">Usia Anda</p>
+              <p className="mb-2 text-sm text-muted-foreground">{t('age.res_age')}</p>
               <div className="flex items-center justify-center gap-4">
                 <div>
                   <span className="font-display text-4xl font-bold text-primary">
                     {result.years}
                   </span>
                   <span className="ml-1 text-sm text-muted-foreground">
-                    tahun
+                    {t('age.res_year')}
                   </span>
                 </div>
                 <div>
@@ -161,7 +163,7 @@ const AgeCalculator = () => {
                     {result.months}
                   </span>
                   <span className="ml-1 text-sm text-muted-foreground">
-                    bulan
+                    {t('age.res_month')}
                   </span>
                 </div>
                 <div>
@@ -169,7 +171,7 @@ const AgeCalculator = () => {
                     {result.days}
                   </span>
                   <span className="ml-1 text-sm text-muted-foreground">
-                    hari
+                    {t('age.res_day')}
                   </span>
                 </div>
               </div>
@@ -182,7 +184,7 @@ const AgeCalculator = () => {
                 <p className="font-display text-xl font-bold text-foreground">
                   {result.totalDays.toLocaleString()}
                 </p>
-                <p className="text-xs text-muted-foreground">hari sudah hidup</p>
+                <p className="text-xs text-muted-foreground">{t('age.stat_life')}</p>
               </div>
               <div className="rounded-lg border border-border bg-card p-4 text-center">
                 <Cake className="mx-auto mb-2 h-5 w-5 text-primary" />
@@ -190,7 +192,7 @@ const AgeCalculator = () => {
                   {result.daysUntilBirthday}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  hari lagi ulang tahun
+                  {t('age.stat_bday')}
                 </p>
               </div>
             </div>
@@ -198,7 +200,7 @@ const AgeCalculator = () => {
             {/* Zodiac */}
             <div className="rounded-lg border border-border bg-secondary/30 p-4">
               <h3 className="mb-3 font-display text-sm font-semibold text-foreground">
-                Zodiak
+                {t('age.zodiac')}
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
@@ -207,7 +209,7 @@ const AgeCalculator = () => {
                     <p className="font-medium text-foreground">
                       {result.westernZodiac.name}
                     </p>
-                    <p className="text-xs text-muted-foreground">Zodiak Barat</p>
+                    <p className="text-xs text-muted-foreground">{t('age.zodiac_w')}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -216,7 +218,7 @@ const AgeCalculator = () => {
                     <p className="font-medium text-foreground">
                       {result.chineseZodiac.name}
                     </p>
-                    <p className="text-xs text-muted-foreground">Shio</p>
+                    <p className="text-xs text-muted-foreground">{t('age.zodiac_c')}</p>
                   </div>
                 </div>
               </div>
@@ -229,7 +231,7 @@ const AgeCalculator = () => {
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
             <Cake className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Masukkan tanggal lahir untuk melihat hasil
+              {t('age.empty_state')}
             </p>
           </div>
         )}

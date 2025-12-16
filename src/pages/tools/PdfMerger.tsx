@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { FileUp, GripVertical, Trash2, Download, Files } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,7 +7,6 @@ import { useToast } from "@/hooks/use-toast";
 import { PDFDocument } from "pdf-lib";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 interface PdfFile {
   id: string;
@@ -16,6 +16,7 @@ interface PdfFile {
 }
 
 const PdfMerger = () => {
+  const { t } = useTranslation();
   const [pdfFiles, setPdfFiles] = useState<PdfFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -42,8 +43,8 @@ const PdfMerger = () => {
 
     if (pdfFilesArray.length === 0) {
       toast({
-        title: "Format tidak didukung",
-        description: "Mohon upload file PDF saja.",
+        title: t('pdf_merger.toast_format_error'),
+        description: t('pdf_merger.toast_format_error_desc'),
         variant: "destructive",
       });
       return;
@@ -53,13 +54,13 @@ const PdfMerger = () => {
       const newPdfFiles = await Promise.all(pdfFilesArray.map(loadPdfInfo));
       setPdfFiles((prev) => [...prev, ...newPdfFiles]);
       toast({
-        title: "File ditambahkan",
-        description: `${newPdfFiles.length} file PDF berhasil ditambahkan.`,
+        title: t('pdf_merger.toast_add_success'),
+        description: t('pdf_merger.toast_add_success_desc', { count: newPdfFiles.length }),
       });
     } catch (error) {
       toast({
-        title: "Gagal membaca PDF",
-        description: "Pastikan file PDF tidak rusak atau terenkripsi.",
+        title: t('pdf_merger.toast_read_error'),
+        description: t('pdf_merger.toast_read_error_desc'),
         variant: "destructive",
       });
     }
@@ -94,8 +95,8 @@ const PdfMerger = () => {
   const mergePdfs = useCallback(async () => {
     if (pdfFiles.length < 2) {
       toast({
-        title: "Minimal 2 file",
-        description: "Tambahkan minimal 2 file PDF untuk digabung.",
+        title: t('pdf_merger.toast_min_files'),
+        description: t('pdf_merger.toast_min_files_desc'),
         variant: "destructive",
       });
       return;
@@ -129,36 +130,34 @@ const PdfMerger = () => {
       URL.revokeObjectURL(url);
 
       toast({
-        title: "Berhasil!",
-        description: `${pdfFiles.length} file PDF berhasil digabung.`,
+        title: t('pdf_merger.toast_success'),
+        description: t('pdf_merger.toast_success_desc', { count: pdfFiles.length }),
       });
     } catch (error) {
       toast({
-        title: "Gagal menggabung PDF",
-        description: "Terjadi kesalahan saat memproses file.",
+        title: t('pdf_merger.toast_merge_error'),
+        description: t('pdf_merger.toast_merge_error_desc'),
         variant: "destructive",
       });
     } finally {
       setIsProcessing(false);
     }
-  }, [pdfFiles, toast]);
+  }, [pdfFiles, toast, t]);
 
   const totalPages = pdfFiles.reduce((sum, f) => sum + f.pageCount, 0);
-
-  const meta = toolsMetadata.pdf;
 
   return (
     <ToolPageLayout
       toolNumber="04"
-      title="Gabung PDF"
-      subtitle="PDF Merger"
-      description="Gabungkan beberapa file PDF menjadi satu — 100% offline & privat"
+      title={t('pdf_merger.title')}
+      subtitle={t('pdf_merger.subtitle')}
+      description={t('pdf_merger.desc_page')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('pdf_merger.meta.title')}
+        description={t('pdf_merger.meta.description')}
+        path="/tools/pdf"
+        keywords={t('pdf_merger.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Upload Area */}
@@ -167,10 +166,10 @@ const PdfMerger = () => {
             <label className="flex cursor-pointer flex-col items-center justify-center">
               <FileUp className="mb-4 h-12 w-12 text-muted-foreground" />
               <span className="mb-2 font-display text-lg font-medium text-foreground">
-                Upload file PDF
+                {t('pdf_merger.card_upload_title')}
               </span>
               <span className="text-sm text-muted-foreground">
-                Klik atau drag & drop file PDF di sini
+                {t('pdf_merger.card_upload_desc')}
               </span>
               <input
                 type="file"
@@ -188,10 +187,10 @@ const PdfMerger = () => {
           <div className="animate-fade-in-up stagger-2 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-display font-medium text-foreground">
-                File PDF ({pdfFiles.length})
+                {t('pdf_merger.list_title', { count: pdfFiles.length })}
               </h3>
               <span className="text-sm text-muted-foreground">
-                Total: {totalPages} halaman
+                {t('pdf_merger.list_total_pages', { count: totalPages })}
               </span>
             </div>
 
@@ -219,7 +218,7 @@ const PdfMerger = () => {
                         {pdfFile.name}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {pdfFile.pageCount} halaman
+                        {pdfFile.pageCount} {t('pdf_merger.list_pages_suffix')}
                       </p>
                     </div>
                     <Button
@@ -236,7 +235,7 @@ const PdfMerger = () => {
             </div>
 
             <p className="text-center text-xs text-muted-foreground">
-              Drag & drop untuk mengubah urutan file
+              {t('pdf_merger.hint_drag')}
             </p>
           </div>
         )}
@@ -249,7 +248,7 @@ const PdfMerger = () => {
               onClick={() => setPdfFiles([])}
               className="flex-1 rounded-sm"
             >
-              Reset
+              {t('pdf_merger.btn_reset')}
             </Button>
           )}
           <Button
@@ -258,16 +257,15 @@ const PdfMerger = () => {
             className="flex-1 gap-2 rounded-sm"
           >
             <Download className="h-4 w-4" />
-            {isProcessing ? "Memproses..." : "Gabung & Download"}
+            {isProcessing ? t('pdf_merger.btn_processing') : t('pdf_merger.btn_merge')}
           </Button>
         </div>
 
         {/* Tips */}
         <div className="animate-fade-in-up stagger-4 border-l-2 border-primary bg-muted/30 p-4 pl-6">
-          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-foreground">Tips</h3>
+          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-foreground">{t('pdf_merger.tips_title')}</h3>
           <p className="text-sm text-muted-foreground">
-            Semua proses dilakukan di browser kamu. 
-            File PDF tidak diunggah ke server manapun — 100% privasi terjamin.
+            {t('pdf_merger.tips_desc')}
           </p>
         </div>
       </div>

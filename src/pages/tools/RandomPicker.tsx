@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
+
 
 interface Winner {
   name: string;
@@ -24,6 +25,7 @@ interface Winner {
 }
 
 const RandomPicker = () => {
+  const { t } = useTranslation();
   const [namesInput, setNamesInput] = useState("");
   const [names, setNames] = useState<string[]>([]);
   const [winners, setWinners] = useState<Winner[]>([]);
@@ -52,9 +54,9 @@ const RandomPicker = () => {
       const text = await navigator.clipboard.readText();
       const newInput = namesInput ? `${namesInput}\n${text}` : text;
       handleInputChange(newInput);
-      toast.success("Berhasil paste dari clipboard!");
+      toast.success(t('random_picker.toast_paste_success'));
     } catch {
-      toast.error("Gagal membaca clipboard");
+      toast.error(t('random_picker.toast_paste_error'));
     }
   };
 
@@ -80,13 +82,13 @@ const RandomPicker = () => {
 
   const startSpin = () => {
     if (names.length === 0) {
-      toast.error("Masukkan nama terlebih dahulu!");
+      toast.error(t('random_picker.toast_empty_names'));
       return;
     }
 
     if (names.length < winnerCount) {
       toast.error(
-        `Jumlah nama (${names.length}) kurang dari jumlah pemenang (${winnerCount})`
+        t('random_picker.toast_count_error', { names: names.length, winners: winnerCount })
       );
       return;
     }
@@ -129,7 +131,7 @@ const RandomPicker = () => {
         setShowConfetti(true);
 
         // Play celebration sound (optional)
-        toast.success(`🎉 Selamat kepada ${finalWinners.join(", ")}!`);
+        toast.success(t('random_picker.toast_congrats', { names: finalWinners.join(", ") }));
 
         // Hide confetti after animation
         setTimeout(() => setShowConfetti(false), 3000);
@@ -139,9 +141,16 @@ const RandomPicker = () => {
 
   const shareToWhatsApp = () => {
     if (currentDisplay.length === 0) return;
-    const text = `🎉 *HASIL KOCOK ARISAN*\n\nPemenang:\n${currentDisplay
+    
+    const winnersList = currentDisplay
       .map((w, i) => `${i + 1}. ${w}`)
-      .join("\n")}\n\nDikocok menggunakan Bantuin.online`;
+      .join("\n");
+
+    const text = t('random_picker.whatsapp_template', { 
+      winners: winnersList,
+      interpolation: { escapeValue: false } 
+    });
+    
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
@@ -154,51 +163,51 @@ const RandomPicker = () => {
   return (
     <ToolPageLayout
       toolNumber="17"
-      title="Kocok Arisan"
-      subtitle="Random Picker"
-      description="Pilih pemenang arisan, doorprize, atau pembagian kelompok secara acak dengan animasi seru!"
+      title={t('random_picker.title')}
+      subtitle={t('random_picker.subtitle')}
+      description={t('random_picker.desc_page')}
     >
       <SEOHead
-        title={toolsMetadata.random.title}
-        description={toolsMetadata.random.description}
-        path={toolsMetadata.random.path}
-        keywords={toolsMetadata.random.keywords}
+        title={t('random.meta.title')}
+        description={t('random.meta.description')}
+        path="/tools/random-picker"
+        keywords={t('random.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Input Section */}
         <div className="space-y-4 rounded-lg border border-border bg-card p-6">
           <div className="flex items-center justify-between">
-            <Label className="text-base font-medium">Daftar Nama</Label>
+            <Label className="text-base font-medium">{t('random_picker.label_names')}</Label>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handlePaste}>
                 <Clipboard className="mr-2 h-4 w-4" />
-                Paste
+                {t('random_picker.btn_paste')}
               </Button>
               <Button variant="outline" size="sm" onClick={handleClear}>
                 <Trash2 className="mr-2 h-4 w-4" />
-                Hapus
+                {t('random_picker.btn_clear')}
               </Button>
             </div>
           </div>
           <Textarea
-            placeholder="Masukkan nama (satu per baris atau pisahkan dengan koma)&#10;Contoh:&#10;Budi&#10;Ani&#10;Dewi, Rudi, Siti"
+            placeholder={t('random_picker.placeholder_names')}
             value={namesInput}
             onChange={(e) => handleInputChange(e.target.value)}
             className="min-h-[150px] font-mono text-sm"
           />
           <p className="text-sm text-muted-foreground">
-            Total:{" "}
+            {t('random_picker.text_total')}{" "}
             <span className="font-semibold text-foreground">
               {names.length}
             </span>{" "}
-            nama
+            {t('random_picker.text_names')}
           </p>
         </div>
 
         {/* Options */}
         <div className="grid gap-4 rounded-lg border border-border bg-card p-6 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="winnerCount">Jumlah Pemenang</Label>
+            <Label htmlFor="winnerCount">{t('random_picker.label_winner_count')}</Label>
             <Input
               id="winnerCount"
               type="number"
@@ -213,10 +222,10 @@ const RandomPicker = () => {
           <div className="flex items-center justify-between rounded-lg border border-border p-4">
             <div>
               <Label htmlFor="removeWinner" className="cursor-pointer">
-                Hapus Pemenang dari List
+                {t('random_picker.label_remove_winner')}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Untuk arisan bergilir
+                {t('random_picker.hint_remove_winner')}
               </p>
             </div>
             <Switch
@@ -269,7 +278,7 @@ const RandomPicker = () => {
               </div>
             ) : (
               <p className="text-muted-foreground">
-                Tekan tombol untuk mulai mengocok...
+                {t('random_picker.text_empty_state')}
               </p>
             )}
           </div>
@@ -283,12 +292,12 @@ const RandomPicker = () => {
             {isSpinning ? (
               <>
                 <Sparkles className="mr-2 h-5 w-5 animate-spin" />
-                Mengocok...
+                {t('random_picker.btn_shuffling')}
               </>
             ) : (
               <>
                 <Shuffle className="mr-2 h-5 w-5" />
-                Kocok Sekarang!
+                {t('random_picker.btn_shuffle')}
               </>
             )}
           </Button>
@@ -300,7 +309,7 @@ const RandomPicker = () => {
               className="mt-4 w-full"
             >
               <MessageCircle className="mr-2 h-4 w-4" />
-              Bagikan ke WhatsApp
+              {t('random_picker.btn_whatsapp')}
             </Button>
           )}
         </div>
@@ -311,11 +320,11 @@ const RandomPicker = () => {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Trophy className="h-5 w-5 text-primary" />
-                <h3 className="font-display font-semibold">Riwayat Pemenang</h3>
+                <h3 className="font-display font-semibold">{t('random_picker.card_history')}</h3>
               </div>
               <Button variant="ghost" size="sm" onClick={resetWinners}>
                 <RotateCcw className="mr-2 h-4 w-4" />
-                Reset
+                {t('random_picker.btn_reset')}
               </Button>
             </div>
             <div className="space-y-2">

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +16,7 @@ interface ShareButtonProps {
 }
 
 const ShareButton = ({ title, description }: ShareButtonProps) => {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const url = window.location.href;
   const text = description ? `${title} - ${description}` : title;
@@ -32,7 +34,7 @@ const ShareButton = ({ title, description }: ShareButtonProps) => {
   const copyLink = async () => {
     await navigator.clipboard.writeText(url);
     setCopied(true);
-    toast.success("Link disalin!");
+    toast.success(t('common.link_copied'));
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -55,7 +57,7 @@ const ShareButton = ({ title, description }: ShareButtonProps) => {
     return (
       <Button variant="outline" size="sm" onClick={handleNativeShare}>
         <Share2 className="mr-2 h-4 w-4" />
-        Bagikan
+        {t('common.share')}
       </Button>
     );
   }
@@ -65,7 +67,7 @@ const ShareButton = ({ title, description }: ShareButtonProps) => {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
           <Share2 className="mr-2 h-4 w-4" />
-          Bagikan
+          {t('common.share')}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48 bg-popover">
@@ -83,7 +85,7 @@ const ShareButton = ({ title, description }: ShareButtonProps) => {
           ) : (
             <Link className="mr-2 h-4 w-4" />
           )}
-          {copied ? "Disalin!" : "Salin Link"}
+          {copied ? t('common.copied') : t('common.copy_link')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

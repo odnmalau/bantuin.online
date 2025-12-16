@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+
 import { Download, X } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -8,17 +10,16 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const InstallPrompt = () => {
+  const { t } = useTranslation();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+      // Check if already dismissed during initialization to avoid effect sync state updates
+      return !!localStorage.getItem("bantuin-install-dismissed");
+  });
 
   useEffect(() => {
-    // Check if already dismissed
-    const wasDismissed = localStorage.getItem("bantuin-install-dismissed");
-    if (wasDismissed) {
-      setDismissed(true);
-      return;
-    }
+    if (dismissed) return;
 
     // Check if already installed
     if (window.matchMedia("(display-mode: standalone)").matches) {
@@ -75,16 +76,16 @@ const InstallPrompt = () => {
             <Download className="h-5 w-5 text-primary" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-foreground">Install Bantuin.online</h3>
+            <h3 className="font-semibold text-foreground">{t('install_prompt.title')}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Akses lebih cepat langsung dari home screen. Bisa dipakai offline!
+              {t('install_prompt.desc')}
             </p>
             <div className="mt-3 flex gap-2">
               <Button size="sm" onClick={handleInstall}>
-                Install
+                {t('install_prompt.install')}
               </Button>
               <Button size="sm" variant="ghost" onClick={handleDismiss}>
-                Nanti saja
+                {t('install_prompt.later')}
               </Button>
             </div>
           </div>

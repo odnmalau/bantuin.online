@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import ToolPageLayout from "@/components/ToolPageLayout";
+
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,7 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { Upload, Download, X, Image, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
+
 
 type OutputFormat = "jpeg" | "png" | "webp";
 
@@ -42,6 +44,7 @@ const formatBytes = (bytes: number): string => {
 };
 
 const ImageConverter = () => {
+  const { t } = useTranslation();
   const [files, setFiles] = useState<File[]>([]);
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("jpeg");
   const [quality, setQuality] = useState(80);
@@ -56,14 +59,15 @@ const ImageConverter = () => {
       file.type.startsWith("image/")
     );
     
+    
     if (imageFiles.length === 0) {
-      toast.error("Pilih file gambar yang valid");
+      toast.error(t('converter.toast_error_select'));
       return;
     }
     
     setFiles((prev) => [...prev, ...imageFiles]);
     setConvertedImages([]);
-  }, []);
+  }, [t]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -129,7 +133,7 @@ const ImageConverter = () => {
 
   const handleConvert = async () => {
     if (files.length === 0) {
-      toast.error("Pilih gambar terlebih dahulu");
+      toast.error(t('converter.toast_error_select'));
       return;
     }
     
@@ -138,9 +142,9 @@ const ImageConverter = () => {
     try {
       const results = await Promise.all(files.map(convertImage));
       setConvertedImages(results);
-      toast.success(`${results.length} gambar berhasil dikonversi!`);
+      toast.success(`${results.length} ${t('converter.toast_success')}`);
     } catch (error) {
-      toast.error("Gagal mengkonversi gambar");
+      toast.error(t('converter.toast_fail'));
     } finally {
       setIsConverting(false);
     }
@@ -158,7 +162,7 @@ const ImageConverter = () => {
     convertedImages.forEach((img, index) => {
       setTimeout(() => downloadImage(img), index * 200);
     });
-    toast.success("Mengunduh semua gambar...");
+    toast.success(t('converter.toast_download_all'));
   };
 
   const clearAll = () => {
@@ -171,15 +175,15 @@ const ImageConverter = () => {
   return (
     <ToolPageLayout
       toolNumber="20"
-      title="Image Converter"
-      subtitle="Konversi Format Gambar"
-      description="Konversi gambar WebP, PNG, JPG, dan format lainnya secara offline. Privasi terjamin, tidak ada upload ke server."
+      title={t('tool_items.image_converter.title')}
+      subtitle={t('converter.subtitle')}
+      description={t('tool_items.image_converter.desc')}
     >
       <SEOHead
-        title={toolsMetadata.converter.title}
-        description={toolsMetadata.converter.description}
-        path={toolsMetadata.converter.path}
-        keywords={toolsMetadata.converter.keywords}
+        title={t('converter.meta.title')}
+        description={t('converter.meta.description')}
+        path="/tools/image-converter"
+        keywords={t('converter.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Upload Area */}
@@ -206,9 +210,9 @@ const ImageConverter = () => {
           />
           <label htmlFor="file-input" className="cursor-pointer">
             <Upload className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-            <p className="text-lg font-medium">Drop gambar di sini atau klik untuk upload</p>
+            <p className="text-lg font-medium">{t('converter.drop_text')}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Mendukung WebP, PNG, JPG, GIF, BMP, AVIF (max 10MB per file)
+              {t('converter.support_text')}
             </p>
           </label>
         </div>
@@ -217,9 +221,9 @@ const ImageConverter = () => {
         {files.length > 0 && (
           <div className="space-y-3 rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between">
-              <Label className="text-base font-medium">{files.length} File Dipilih</Label>
+              <Label className="text-base font-medium">{files.length} {t('converter.files_selected')}</Label>
               <Button variant="ghost" size="sm" onClick={clearAll}>
-                Hapus Semua
+                {t('converter.btn_clear')}
               </Button>
             </div>
             <div className="max-h-[200px] space-y-2 overflow-y-auto">
@@ -247,7 +251,7 @@ const ImageConverter = () => {
         {/* Options */}
         <div className="grid gap-4 rounded-lg border border-border bg-card p-6 sm:grid-cols-2">
           <div className="space-y-3">
-            <Label>Format Output</Label>
+            <Label>{t('converter.format_output')}</Label>
             <Select value={outputFormat} onValueChange={(v) => setOutputFormat(v as OutputFormat)}>
               <SelectTrigger>
                 <SelectValue />
@@ -262,7 +266,7 @@ const ImageConverter = () => {
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Kualitas</Label>
+              <Label>{t('converter.label_quality')}</Label>
               <span className="text-sm font-medium text-primary">{quality}%</span>
             </div>
             <Slider
@@ -274,7 +278,7 @@ const ImageConverter = () => {
               disabled={outputFormat === "png"}
             />
             {outputFormat === "png" && (
-              <p className="text-xs text-muted-foreground">PNG selalu lossless (100%)</p>
+              <p className="text-xs text-muted-foreground">{t('converter.png_info')}</p>
             )}
           </div>
         </div>
@@ -289,12 +293,12 @@ const ImageConverter = () => {
           {isConverting ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Mengkonversi...
+              {t('converter.converting')}
             </>
           ) : (
             <>
               <ArrowRight className="mr-2 h-5 w-5" />
-              Konversi {files.length > 0 ? `${files.length} Gambar` : "Gambar"}
+              {t('converter.btn_convert')}
             </>
           )}
         </Button>
@@ -303,11 +307,11 @@ const ImageConverter = () => {
         {convertedImages.length > 0 && (
           <div className="space-y-4 rounded-lg border border-border bg-card p-6">
             <div className="flex items-center justify-between">
-              <Label className="text-base font-medium">Hasil Konversi</Label>
+              <Label className="text-base font-medium">{t('converter.res_title')}</Label>
               {convertedImages.length > 1 && (
                 <Button variant="outline" size="sm" onClick={downloadAll}>
                   <Download className="mr-2 h-4 w-4" />
-                  Unduh Semua
+                  {t('converter.btn_download_all')}
                 </Button>
               )}
             </div>
@@ -339,7 +343,7 @@ const ImageConverter = () => {
                       onClick={() => downloadImage(img)}
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      Unduh
+                      {t('converter.btn_download')}
                     </Button>
                   </div>
                 </div>

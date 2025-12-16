@@ -1,4 +1,6 @@
 import { Helmet } from 'react-helmet-async';
+import { useTranslation } from 'react-i18next';
+
 
 interface SEOHeadProps {
   title: string;
@@ -39,6 +41,9 @@ export const SEOHead = ({
     }
   };
 
+  const { i18n } = useTranslation();
+  const currentLocale = i18n.language === 'id' ? 'id_ID' : 'en_US';
+
   return (
     <Helmet>
       <title>{fullTitle}</title>
@@ -55,7 +60,8 @@ export const SEOHead = ({
       <meta property="og:url" content={canonicalUrl} />
       <meta property="og:image" content={`${BASE_URL}${ogImage}`} />
       <meta property="og:site_name" content="Bantuin.online" />
-      <meta property="og:locale" content="id_ID" />
+      <meta property="og:locale" content={currentLocale} />
+
       
       {/* Twitter Card */}
       <meta name="twitter:card" content="summary_large_image" />

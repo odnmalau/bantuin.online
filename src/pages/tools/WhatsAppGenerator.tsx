@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Copy, ExternalLink, Check } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,9 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 const WhatsAppGenerator = () => {
+  const { t } = useTranslation();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
@@ -35,8 +37,8 @@ const WhatsAppGenerator = () => {
   const handleCopyLink = async () => {
     if (!whatsappLink) {
       toast({
-        title: "Nomor HP kosong",
-        description: "Masukkan nomor HP terlebih dahulu",
+        title: t('whatsapp.err_phone_empty'),
+        description: t('whatsapp.err_phone_desc'),
         variant: "destructive",
       });
       return;
@@ -46,14 +48,14 @@ const WhatsAppGenerator = () => {
       await navigator.clipboard.writeText(whatsappLink);
       setCopied(true);
       toast({
-        title: "Link berhasil disalin!",
-        description: "Link WhatsApp sudah ada di clipboard kamu",
+        title: t('common.copied'),
+        description: t('whatsapp.label_result') + " " + t('common.success'),
       });
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast({
-        title: "Gagal menyalin",
-        description: "Coba salin secara manual",
+        title: t('whatsapp.err_copy_fail'),
+        description: t('whatsapp.err_manual_copy'),
         variant: "destructive",
       });
     }
@@ -62,8 +64,8 @@ const WhatsAppGenerator = () => {
   const handleTestLink = () => {
     if (!whatsappLink) {
       toast({
-        title: "Nomor HP kosong",
-        description: "Masukkan nomor HP terlebih dahulu",
+        title: t('whatsapp.err_phone_empty'),
+        description: t('whatsapp.err_phone_desc'),
         variant: "destructive",
       });
       return;
@@ -71,54 +73,52 @@ const WhatsAppGenerator = () => {
     window.open(whatsappLink, "_blank", "noopener,noreferrer");
   };
 
-  const meta = toolsMetadata.whatsapp;
-
   return (
     <ToolPageLayout
       toolNumber="01"
-      title="WhatsApp Link"
+      title={t('tool_items.whatsapp.title')}
       subtitle="Generator"
-      description="Buat link chat WhatsApp dengan pesan siap pakai — Generate wa.me links instantly"
+      description={t('tool_items.whatsapp.desc')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('whatsapp.meta.title')}
+        description={t('whatsapp.meta.description')}
+        path="/tools/whatsapp"
+        keywords={t('whatsapp.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-8">
         <Card className="animate-fade-in-up stagger-1 rounded-sm border-border bg-card">
           <CardHeader>
-            <CardTitle className="font-display text-xl">Buat Link WhatsApp</CardTitle>
+            <CardTitle className="font-display text-xl">{t('whatsapp.title')}</CardTitle>
             <CardDescription>
-              Masukkan nomor HP dan pesan, link akan dibuat otomatis
+              {t('whatsapp.desc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Phone Number Input */}
             <div className="space-y-2">
-              <Label htmlFor="phone" className="font-medium">Nomor HP</Label>
+              <Label htmlFor="phone" className="font-medium">{t('whatsapp.label_phone')}</Label>
               <Input
                 id="phone"
                 type="tel"
-                placeholder="08123456789"
+                placeholder={t('whatsapp.placeholder_phone')}
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 className="rounded-sm border-border bg-background"
               />
               {formattedPhone && (
                 <p className="text-sm text-muted-foreground">
-                  Format internasional: <span className="font-medium text-primary">+{formattedPhone}</span>
+                  {t('whatsapp.hint_phone')} <span className="font-medium text-primary">+{formattedPhone}</span>
                 </p>
               )}
             </div>
 
             {/* Message Textarea */}
             <div className="space-y-2">
-              <Label htmlFor="message" className="font-medium">Pesan (Opsional)</Label>
+              <Label htmlFor="message" className="font-medium">{t('whatsapp.label_message')}</Label>
               <Textarea
                 id="message"
-                placeholder="Halo, saya tertarik dengan produk Anda..."
+                placeholder={t('whatsapp.placeholder_message')}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 rows={4}
@@ -129,7 +129,7 @@ const WhatsAppGenerator = () => {
             {/* Generated Link Preview */}
             {whatsappLink && (
               <div className="space-y-2">
-                <Label className="font-medium">Link WhatsApp</Label>
+                <Label className="font-medium">{t('whatsapp.label_result')}</Label>
                 <div className="rounded-sm border border-border bg-muted/50 p-3">
                   <p className="break-all font-mono text-sm text-muted-foreground">
                     {whatsappLink}
@@ -150,7 +150,7 @@ const WhatsAppGenerator = () => {
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
-                {copied ? "Tersalin!" : "Copy Link"}
+                {copied ? t('whatsapp.btn_copied') : t('whatsapp.btn_copy')}
               </Button>
               <Button
                 onClick={handleTestLink}
@@ -159,7 +159,7 @@ const WhatsAppGenerator = () => {
                 disabled={!formattedPhone}
               >
                 <ExternalLink className="h-4 w-4" />
-                Test Link
+                {t('whatsapp.btn_test')}
               </Button>
             </div>
           </CardContent>
@@ -167,11 +167,11 @@ const WhatsAppGenerator = () => {
 
         {/* Tips Section */}
         <div className="animate-fade-in-up stagger-2 border-l-2 border-primary bg-muted/30 p-4 pl-6">
-          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-foreground">Tips</h3>
+          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-foreground">{t('whatsapp.tips_title')}</h3>
           <ul className="space-y-1 text-sm text-muted-foreground">
-            <li>• Nomor yang diawali 0 akan otomatis diubah ke kode +62 (Indonesia)</li>
-            <li>• Link bisa langsung dibagikan ke sosial media atau website</li>
-            <li>• Pesan bersifat opsional, bisa dikosongkan</li>
+            <li>{t('whatsapp.tips_1')}</li>
+            <li>{t('whatsapp.tips_2')}</li>
+            <li>{t('whatsapp.tips_3')}</li>
           </ul>
         </div>
       </div>

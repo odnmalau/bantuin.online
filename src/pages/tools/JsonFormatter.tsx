@@ -1,13 +1,14 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Braces, Copy, Check, RotateCcw, AlertCircle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 const JsonFormatter = () => {
+  const { t } = useTranslation();
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const [error, setError] = useState("");
@@ -18,8 +19,8 @@ const JsonFormatter = () => {
   const formatJson = (indent: number = 2) => {
     if (!input.trim()) {
       toast({
-        title: "Input kosong",
-        description: "Masukkan JSON terlebih dahulu",
+        title: t('json_formatter.toast_input_empty'),
+        description: t('json_formatter.toast_input_empty_desc'),
         variant: "destructive",
       });
       return;
@@ -42,8 +43,8 @@ const JsonFormatter = () => {
   const minifyJson = () => {
     if (!input.trim()) {
       toast({
-        title: "Input kosong",
-        description: "Masukkan JSON terlebih dahulu",
+        title: t('json_formatter.toast_input_empty'),
+        description: t('json_formatter.toast_input_empty_desc'),
         variant: "destructive",
       });
       return;
@@ -66,8 +67,8 @@ const JsonFormatter = () => {
   const validateJson = () => {
     if (!input.trim()) {
       toast({
-        title: "Input kosong",
-        description: "Masukkan JSON terlebih dahulu",
+        title: t('json_formatter.toast_input_empty'),
+        description: t('json_formatter.toast_input_empty_desc'),
         variant: "destructive",
       });
       return;
@@ -78,8 +79,8 @@ const JsonFormatter = () => {
       setIsValid(true);
       setError("");
       toast({
-        title: "JSON Valid ✓",
-        description: "Struktur JSON sudah benar",
+        title: t('json_formatter.toast_valid_title'),
+        description: t('json_formatter.toast_valid_desc'),
       });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "Invalid JSON";
@@ -94,8 +95,8 @@ const JsonFormatter = () => {
     await navigator.clipboard.writeText(output);
     setCopied(true);
     toast({
-      title: "Tersalin!",
-      description: "JSON berhasil disalin ke clipboard",
+      title: t('json_formatter.toast_copied'),
+      description: t('json_formatter.toast_copied_desc'),
     });
     setTimeout(() => setCopied(false), 2000);
   };
@@ -107,26 +108,24 @@ const JsonFormatter = () => {
     setIsValid(null);
   };
 
-  const meta = toolsMetadata.json;
-
   return (
     <ToolPageLayout
       toolNumber="09"
-      title="JSON Formatter"
-      subtitle="Format & Validasi JSON"
-      description="Format, minify, dan validasi JSON dengan mudah. Cocok untuk developer."
+      title={t('json_formatter.title')}
+      subtitle={t('json_formatter.subtitle')}
+      description={t('json_formatter.desc_page')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('json_formatter.meta.title')}
+        description={t('json_formatter.meta.description')}
+        path="/tools/json"
+        keywords={t('json_formatter.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Input Area */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Input JSON
+            {t('json_formatter.label_input')}
           </label>
           <Textarea
             value={input}
@@ -135,7 +134,7 @@ const JsonFormatter = () => {
               setIsValid(null);
               setError("");
             }}
-            placeholder='{"name": "John", "age": 30}'
+            placeholder={t('json_formatter.placeholder_input')}
             className="min-h-[150px] resize-none font-mono text-sm"
           />
         </div>
@@ -143,16 +142,16 @@ const JsonFormatter = () => {
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => formatJson(2)} variant="outline" size="sm">
-            Format (2 space)
+            {t('json_formatter.btn_format_2')}
           </Button>
           <Button onClick={() => formatJson(4)} variant="outline" size="sm">
-            Format (4 space)
+            {t('json_formatter.btn_format_4')}
           </Button>
           <Button onClick={minifyJson} variant="outline" size="sm">
-            Minify
+            {t('json_formatter.btn_minify')}
           </Button>
           <Button onClick={validateJson} variant="outline" size="sm">
-            Validasi
+            {t('json_formatter.btn_validate')}
           </Button>
         </div>
 
@@ -168,7 +167,7 @@ const JsonFormatter = () => {
             {isValid ? (
               <>
                 <CheckCircle className="h-4 w-4" />
-                <span className="text-sm font-medium">JSON Valid</span>
+                <span className="text-sm font-medium">{t('json_formatter.status_valid')}</span>
               </>
             ) : (
               <>
@@ -183,7 +182,7 @@ const JsonFormatter = () => {
         {output && (
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">
-              Output
+              {t('json_formatter.label_output')}
             </label>
             <Textarea
               value={output}
@@ -205,7 +204,7 @@ const JsonFormatter = () => {
             ) : (
               <Copy className="mr-2 h-4 w-4" />
             )}
-            {copied ? "Tersalin!" : "Salin Output"}
+            {copied ? t('json_formatter.toast_copied') : t('json_formatter.btn_copy_output')}
           </Button>
           <Button
             variant="outline"
@@ -213,7 +212,7 @@ const JsonFormatter = () => {
             disabled={!input.trim() && !output.trim()}
           >
             <RotateCcw className="mr-2 h-4 w-4" />
-            Reset
+            {t('json_formatter.btn_reset')}
           </Button>
         </div>
       </div>

@@ -1,7 +1,9 @@
 import { Github } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
+import LanguageSwitcher from "./LanguageSwitcher";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 interface HeaderProps {
   navLeft?: ReactNode;
@@ -9,6 +11,7 @@ interface HeaderProps {
 }
 
 const Header = ({ navLeft, actionRight }: HeaderProps) => {
+  const { t } = useTranslation();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -63,14 +66,19 @@ const Header = ({ navLeft, actionRight }: HeaderProps) => {
           {actionRight ? (
               // Custom Action (e.g. Share)
               <>
+                <LanguageSwitcher />
                 <ThemeToggle />
+
                 <div className="h-6 w-px bg-border/50 mx-1 hidden md:block" />
                 {actionRight}
               </>
           ) : (
               // Default Actions
               <>
+                <LanguageSwitcher />
                 <ThemeToggle />
+
+
                 <div className="h-6 w-px bg-border/50 mx-1 hidden md:block" />
                 <a
                     href="https://github.com/odnmalau/bantuin.online"
@@ -79,7 +87,7 @@ const Header = ({ navLeft, actionRight }: HeaderProps) => {
                     className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-muted md:hover:bg-primary/10 md:hover:text-primary"
                 >
                     <Github className="h-4 w-4" />
-                    <span className="hidden sm:inline">GitHub</span>
+                    <span className="hidden sm:inline">{t('header.github')}</span>
                 </a>
               </>
           )}

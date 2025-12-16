@@ -5,6 +5,7 @@ import { ReactNode, forwardRef } from "react";
 import ShareButton from "./ShareButton";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import { useTranslation } from "react-i18next";
 
 export interface ToolPageLayoutProps {
   children: ReactNode;
@@ -17,6 +18,8 @@ export interface ToolPageLayoutProps {
 const ToolPageLayout = forwardRef<HTMLDivElement, ToolPageLayoutProps>(
   ({ children, toolNumber, title, subtitle, description }, ref) => {
     
+    const { t } = useTranslation();
+    
     // Custom Left Nav: Back Button
     const backButton = (
         <Link
@@ -26,7 +29,7 @@ const ToolPageLayout = forwardRef<HTMLDivElement, ToolPageLayoutProps>(
             <div className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background transition-transform group-hover:-translate-x-1">
                 <ArrowLeft className="h-4 w-4" />
             </div>
-            <span className="hidden sm:inline">Kembali</span>
+            <span className="hidden sm:inline">{t('common.back')}</span>
         </Link>
     );
 

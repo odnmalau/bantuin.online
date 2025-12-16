@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,6 @@ import { Plus, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 interface InvoiceItem {
   id: string;
@@ -19,6 +19,7 @@ interface InvoiceItem {
 }
 
 const InvoiceGenerator = () => {
+  const { t, i18n } = useTranslation();
   const [shopName, setShopName] = useState("");
   const [shopAddress, setShopAddress] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -48,18 +49,18 @@ const InvoiceGenerator = () => {
   const total = subtotal - discountAmount;
 
   const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
+    new Intl.NumberFormat(t('invoice.currency_locale'), { style: "currency", currency: t('invoice.currency_code'), minimumFractionDigits: 0 }).format(amount);
 
   const formatCurrencyShort = (amount: number) =>
-    new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0 }).format(amount);
+    new Intl.NumberFormat(t('invoice.currency_locale'), { minimumFractionDigits: 0 }).format(amount);
 
   const generatePDF = async () => {
     if (!shopName.trim()) {
-      toast.error("Nama toko harus diisi");
+      toast.error(t('invoice.toast_shop_name_required'));
       return;
     }
     if (items.some(item => !item.name.trim())) {
-      toast.error("Nama item harus diisi");
+      toast.error(t('invoice.toast_item_name_required'));
       return;
     }
 
@@ -90,21 +91,21 @@ const InvoiceGenerator = () => {
       y -= 20;
 
       // Invoice Info
-      page.drawText("NOTA", { x: leftMargin, y, font: fontBold, size: 12, color: black });
+      page.drawText(t('invoice.pdf.title'), { x: leftMargin, y, font: fontBold, size: 12, color: black });
       y -= 16;
-      page.drawText("Tanggal: " + new Date(invoiceDate).toLocaleDateString("id-ID"), { x: leftMargin, y, font, size: 9, color: gray });
+      page.drawText(t('invoice.pdf.date') + new Date(invoiceDate).toLocaleDateString(t('invoice.currency_locale')), { x: leftMargin, y, font, size: 9, color: gray });
       y -= 12;
       if (customerName) {
-        page.drawText("Pelanggan: " + customerName, { x: leftMargin, y, font, size: 9, color: gray });
+        page.drawText(t('invoice.pdf.customer') + customerName, { x: leftMargin, y, font, size: 9, color: gray });
         y -= 12;
       }
       y -= 10;
 
       // Table Header
-      page.drawText("Item", { x: leftMargin, y, font: fontBold, size: 9, color: black });
-      page.drawText("Qty", { x: 220, y, font: fontBold, size: 9, color: black });
-      page.drawText("Harga", { x: 260, y, font: fontBold, size: 9, color: black });
-      page.drawText("Total", { x: 320, y, font: fontBold, size: 9, color: black });
+      page.drawText(t('invoice.pdf.header_item'), { x: leftMargin, y, font: fontBold, size: 9, color: black });
+      page.drawText(t('invoice.pdf.header_qty'), { x: 220, y, font: fontBold, size: 9, color: black });
+      page.drawText(t('invoice.pdf.header_price'), { x: 260, y, font: fontBold, size: 9, color: black });
+      page.drawText(t('invoice.pdf.header_total'), { x: 320, y, font: fontBold, size: 9, color: black });
       y -= 6;
       page.drawLine({ start: { x: leftMargin, y }, end: { x: rightMargin, y }, thickness: 0.5, color: gray });
       y -= 14;
@@ -126,13 +127,13 @@ const InvoiceGenerator = () => {
       y -= 16;
 
       // Subtotal
-      page.drawText("Subtotal:", { x: 250, y, font, size: 9, color: gray });
+      page.drawText(t('invoice.pdf.subtotal'), { x: 250, y, font, size: 9, color: gray });
       page.drawText(formatCurrencyShort(subtotal), { x: 320, y, font, size: 9, color: black });
       y -= 14;
 
       // Discount
       if (discount > 0) {
-        page.drawText("Diskon (" + discount + "%):", { x: 250, y, font, size: 9, color: gray });
+        page.drawText(`${t('invoice.pdf.discount')} (${discount}%):`, { x: 250, y, font, size: 9, color: gray });
         page.drawText("-" + formatCurrencyShort(discountAmount), { x: 320, y, font, size: 9, color: black });
         y -= 14;
       }
@@ -140,14 +141,14 @@ const InvoiceGenerator = () => {
       // Total
       page.drawLine({ start: { x: 250, y: y + 4 }, end: { x: rightMargin, y: y + 4 }, thickness: 1, color: black });
       y -= 4;
-      page.drawText("TOTAL:", { x: 250, y, font: fontBold, size: 11, color: black });
+      page.drawText(t('invoice.pdf.total'), { x: 250, y, font: fontBold, size: 11, color: black });
       page.drawText(formatCurrencyShort(total), { x: 320, y, font: fontBold, size: 11, color: black });
 
       // Footer
       y = 40;
-      page.drawText("Terima kasih atas kunjungan Anda!", { x: leftMargin, y, font, size: 8, color: gray });
+      page.drawText(t('invoice.pdf.footer_thanks'), { x: leftMargin, y, font, size: 8, color: gray });
       y -= 12;
-      page.drawText("Dibuat dengan Bantuin.online", { x: leftMargin, y, font, size: 7, color: gray });
+      page.drawText(t('invoice.pdf.footer_credit'), { x: leftMargin, y, font, size: 7, color: gray });
 
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
@@ -158,58 +159,61 @@ const InvoiceGenerator = () => {
       a.click();
       URL.revokeObjectURL(url);
 
-      toast.success("Nota berhasil diunduh!");
+      toast.success(t('invoice.toast_pdf_success'));
     } catch (error) {
-      toast.error("Gagal membuat PDF");
+      toast.error(t('invoice.toast_pdf_error'));
     }
   };
-
-  const meta = toolsMetadata.invoice;
 
   return (
     <ToolPageLayout
       toolNumber="16"
-      title="Invoice Generator"
-      subtitle="Nota Penjualan"
-      description="Buat nota atau struk penjualan sederhana dan ekspor ke PDF"
+      title={t('invoice.title')}
+      subtitle={t('invoice.subtitle')}
+      description={t('invoice.desc_page')}
     >
-      <SEOHead title={meta.title} description={meta.description} path={meta.path} keywords={meta.keywords} />
+      <SEOHead 
+        title={t('invoice.meta.title')} 
+        description={t('invoice.meta.description')} 
+        path="/tools/invoice-generator" 
+        keywords={t('invoice.meta.keywords', { returnObjects: true }) as string[]} 
+      />
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Shop Info */}
         <Card className="p-6 space-y-4">
-          <h3 className="font-semibold text-foreground">Informasi Toko</h3>
+          <h3 className="font-semibold text-foreground">{t('invoice.card_shop_info')}</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="shopName">Nama Toko *</Label>
+              <Label htmlFor="shopName">{t('invoice.label_shop_name')}</Label>
               <Input
                 id="shopName"
                 value={shopName}
                 onChange={(e) => setShopName(e.target.value)}
-                placeholder="Toko Serba Ada"
+                placeholder={t('invoice.placeholder_shop_name')}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="shopAddress">Alamat</Label>
+              <Label htmlFor="shopAddress">{t('invoice.label_address')}</Label>
               <Input
                 id="shopAddress"
                 value={shopAddress}
                 onChange={(e) => setShopAddress(e.target.value)}
-                placeholder="Jl. Contoh No. 123"
+                placeholder={t('invoice.placeholder_address')}
               />
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="customerName">Nama Pelanggan</Label>
+              <Label htmlFor="customerName">{t('invoice.label_customer_name')}</Label>
               <Input
                 id="customerName"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="(Opsional)"
+                placeholder={t('invoice.placeholder_customer_name')}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="invoiceDate">Tanggal</Label>
+              <Label htmlFor="invoiceDate">{t('invoice.label_date')}</Label>
               <Input
                 id="invoiceDate"
                 type="date"
@@ -223,25 +227,25 @@ const InvoiceGenerator = () => {
         {/* Items */}
         <Card className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground">Daftar Item</h3>
+            <h3 className="font-semibold text-foreground">{t('invoice.card_items')}</h3>
             <Button variant="outline" size="sm" onClick={addItem}>
               <Plus className="mr-2 h-4 w-4" />
-              Tambah
+              {t('invoice.btn_add_item')}
             </Button>
           </div>
           <div className="space-y-3">
             {items.map((item) => (
               <div key={item.id} className="flex gap-2 items-end">
                 <div className="flex-1 space-y-1">
-                  <Label className="text-xs text-muted-foreground">Nama Item</Label>
+                  <Label className="text-xs text-muted-foreground">{t('invoice.label_item_name')}</Label>
                   <Input
                     value={item.name}
                     onChange={(e) => updateItem(item.id, "name", e.target.value)}
-                    placeholder="Nama barang"
+                    placeholder={t('invoice.placeholder_item_name')}
                   />
                 </div>
                 <div className="w-20 space-y-1">
-                  <Label className="text-xs text-muted-foreground">Qty</Label>
+                  <Label className="text-xs text-muted-foreground">{t('invoice.label_qty')}</Label>
                   <Input
                     type="number"
                     min={1}
@@ -250,7 +254,7 @@ const InvoiceGenerator = () => {
                   />
                 </div>
                 <div className="w-28 space-y-1">
-                  <Label className="text-xs text-muted-foreground">Harga</Label>
+                  <Label className="text-xs text-muted-foreground">{t('invoice.label_price')}</Label>
                   <Input
                     type="number"
                     min={0}
@@ -274,14 +278,14 @@ const InvoiceGenerator = () => {
 
         {/* Summary */}
         <Card className="p-6 space-y-4">
-          <h3 className="font-semibold text-foreground">Ringkasan</h3>
+          <h3 className="font-semibold text-foreground">{t('invoice.card_summary')}</h3>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal</span>
+              <span className="text-muted-foreground">{t('invoice.label_subtotal')}</span>
               <span className="text-foreground">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <span className="text-sm text-muted-foreground">Diskon (%)</span>
+              <span className="text-sm text-muted-foreground">{t('invoice.label_discount')}</span>
               <Input
                 type="number"
                 min={0}
@@ -293,13 +297,13 @@ const InvoiceGenerator = () => {
             </div>
             {discount > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Potongan</span>
+                <span className="text-muted-foreground">{t('invoice.label_discount_amount')}</span>
                 <span className="text-destructive">-{formatCurrency(discountAmount)}</span>
               </div>
             )}
             <Separator />
             <div className="flex justify-between text-lg font-bold">
-              <span className="text-foreground">Total</span>
+              <span className="text-foreground">{t('invoice.label_total')}</span>
               <span className="text-primary">{formatCurrency(total)}</span>
             </div>
           </div>
@@ -307,7 +311,7 @@ const InvoiceGenerator = () => {
           <div className="flex gap-3 pt-2">
             <Button onClick={generatePDF} className="flex-1" size="lg">
               <Download className="mr-2 h-4 w-4" />
-              Download PDF
+              {t('invoice.btn_download_pdf')}
             </Button>
           </div>
         </Card>

@@ -1,11 +1,11 @@
 import { useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Images, Upload, Download, Trash2, GripVertical, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { PDFDocument } from "pdf-lib";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 interface ImageFile {
   id: string;
@@ -14,6 +14,7 @@ interface ImageFile {
 }
 
 const ScreenshotToPdf = () => {
+  const { t } = useTranslation();
   const [images, setImages] = useState<ImageFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -28,8 +29,8 @@ const ScreenshotToPdf = () => {
     Array.from(files).forEach((file) => {
       if (!file.type.startsWith("image/")) {
         toast({
-          title: "File tidak valid",
-          description: `${file.name} bukan file gambar`,
+          title: t('screenshot_to_pdf.toast_invalid_file'),
+          description: t('screenshot_to_pdf.toast_invalid_file_desc', { name: file.name }),
           variant: "destructive",
         });
         return;
@@ -37,8 +38,8 @@ const ScreenshotToPdf = () => {
 
       if (file.size > 10 * 1024 * 1024) {
         toast({
-          title: "File terlalu besar",
-          description: `${file.name} melebihi 10MB`,
+          title: t('screenshot_to_pdf.toast_file_too_large'),
+          description: t('screenshot_to_pdf.toast_file_too_large_desc', { name: file.name }),
           variant: "destructive",
         });
         return;
@@ -77,8 +78,8 @@ const ScreenshotToPdf = () => {
   const generatePdf = async () => {
     if (images.length === 0) {
       toast({
-        title: "Tidak ada gambar",
-        description: "Tambahkan gambar terlebih dahulu",
+        title: t('screenshot_to_pdf.toast_no_images'),
+        description: t('screenshot_to_pdf.toast_no_images_desc'),
         variant: "destructive",
       });
       return;
@@ -135,14 +136,23 @@ const ScreenshotToPdf = () => {
       const url = URL.createObjectURL(blob);
 
       toast({
-        title: "PDF Berhasil Dibuat!",
-        description: `${images.length} gambar berhasil digabung menjadi PDF`,
+        title: t('screenshot_to_pdf.toast_success'),
+        description: t('screenshot_to_pdf.toast_success_desc', { count: images.length }),
       });
+      
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `screenshot-to-pdf-${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast({
-        title: "Gagal membuat PDF",
-        description: "Terjadi kesalahan saat memproses gambar",
+        title: t('screenshot_to_pdf.toast_error'),
+        description: t('screenshot_to_pdf.toast_error_desc'),
         variant: "destructive",
       });
     } finally {
@@ -155,20 +165,20 @@ const ScreenshotToPdf = () => {
     setImages([]);
   };
 
-  const meta = toolsMetadata.screenshot;
+
 
   return (
     <ToolPageLayout
       toolNumber="11"
-      title="Screenshot to PDF"
-      subtitle="Gabung Gambar ke PDF"
-      description="Gabungkan beberapa screenshot atau gambar menjadi satu file PDF."
+      title={t('screenshot_to_pdf.title')}
+      subtitle={t('screenshot_to_pdf.subtitle')}
+      description={t('screenshot_to_pdf.desc_page')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('screenshot_to_pdf.meta.title')}
+        description={t('screenshot_to_pdf.meta.description')}
+        path="/tools/screenshot-to-pdf"
+        keywords={t('screenshot_to_pdf.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Upload Area */}
@@ -186,10 +196,10 @@ const ScreenshotToPdf = () => {
           />
           <Upload className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-sm font-medium text-foreground">
-            Klik untuk upload gambar
+            {t('screenshot_to_pdf.upload_hint')}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            JPG, PNG, WebP (Maks. 10MB per file)
+            {t('screenshot_to_pdf.upload_subhint')}
           </p>
         </div>
 
@@ -198,11 +208,11 @@ const ScreenshotToPdf = () => {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-display text-sm font-semibold text-foreground">
-                Gambar ({images.length})
+                {t('screenshot_to_pdf.list_title', { count: images.length })}
               </h3>
               <Button variant="ghost" size="sm" onClick={clearAll}>
                 <Trash2 className="mr-1 h-4 w-4" />
-                Hapus Semua
+                {t('screenshot_to_pdf.btn_clear_all')}
               </Button>
             </div>
 
@@ -260,7 +270,7 @@ const ScreenshotToPdf = () => {
               onClick={() => fileInputRef.current?.click()}
             >
               <Plus className="mr-2 h-4 w-4" />
-              Tambah Gambar Lagi
+              {t('screenshot_to_pdf.btn_add_more')}
             </Button>
           </div>
         )}
@@ -275,12 +285,12 @@ const ScreenshotToPdf = () => {
           {isProcessing ? (
             <>
               <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-              Memproses...
+              {t('screenshot_to_pdf.btn_processing')}
             </>
           ) : (
             <>
               <Download className="mr-2 h-4 w-4" />
-              Buat PDF ({images.length} gambar)
+              {t('screenshot_to_pdf.btn_create_pdf', { count: images.length })}
             </>
           )}
         </Button>
@@ -289,13 +299,13 @@ const ScreenshotToPdf = () => {
         {images.length === 0 && (
           <div className="rounded-lg border border-border bg-secondary/20 p-6">
             <h3 className="mb-2 font-display text-sm font-semibold text-foreground">
-              Tips:
+              {t('screenshot_to_pdf.tips_title')}
             </h3>
             <ul className="space-y-1 text-sm text-muted-foreground">
-              <li>• Upload beberapa screenshot sekaligus</li>
-              <li>• Atur urutan gambar dengan tombol panah</li>
-              <li>• Setiap gambar = 1 halaman PDF</li>
-              <li>• Ukuran halaman menyesuaikan gambar</li>
+              <li>• {t('screenshot_to_pdf.tips_list_1')}</li>
+              <li>• {t('screenshot_to_pdf.tips_list_2')}</li>
+              <li>• {t('screenshot_to_pdf.tips_list_3')}</li>
+              <li>• {t('screenshot_to_pdf.tips_list_4')}</li>
             </ul>
           </div>
         )}

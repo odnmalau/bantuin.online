@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Copy, Check, Receipt, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
+
 
 type CaseFormat = "title" | "upper" | "lower";
 
@@ -76,6 +78,7 @@ const formatNumber = (value: string): string => {
 };
 
 const Terbilang = () => {
+  const { t } = useTranslation();
   const [inputValue, setInputValue] = useState("");
   const [addRupiah, setAddRupiah] = useState(true);
   const [caseFormat, setCaseFormat] = useState<CaseFormat>("title");
@@ -105,7 +108,7 @@ const Terbilang = () => {
     if (!result) return;
     await navigator.clipboard.writeText(result);
     setCopied(true);
-    toast.success("Berhasil disalin!");
+    toast.success(t('terbilang.toast_copy'));
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -116,24 +119,24 @@ const Terbilang = () => {
   return (
     <ToolPageLayout
       toolNumber="18"
-      title="Terbilang"
-      subtitle="Angka ke Huruf"
-      description="Konversi angka menjadi teks terbilang dalam Bahasa Indonesia. Cocok untuk kuitansi, invoice, dan dokumen resmi."
+      title={t('tool_items.terbilang.title')}
+      subtitle={t('terbilang.subtitle')}
+      description={t('tool_items.terbilang.desc')}
     >
       <SEOHead
-        title={toolsMetadata.terbilang.title}
-        description={toolsMetadata.terbilang.description}
-        path={toolsMetadata.terbilang.path}
-        keywords={toolsMetadata.terbilang.keywords}
+        title={t('terbilang.meta.title')}
+        description={t('terbilang.meta.description')}
+        path="/tools/terbilang"
+        keywords={t('terbilang.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Input Section */}
         <div className="space-y-4 rounded-lg border border-border bg-card p-6">
           <div className="flex items-center justify-between">
-            <Label htmlFor="amount" className="text-base font-medium">Masukkan Angka</Label>
+            <Label htmlFor="amount" className="text-base font-medium">{t('terbilang.label_input')}</Label>
             {inputValue && (
               <Button variant="ghost" size="sm" onClick={handleClear}>
-                Hapus
+                {t('terbilang.btn_clear')}
               </Button>
             )}
           </div>
@@ -152,14 +155,14 @@ const Terbilang = () => {
             />
           </div>
           <p className="text-sm text-muted-foreground">
-            Nilai: <span className="font-semibold text-foreground">{numericValue.toLocaleString("id-ID")}</span>
+            {t('terbilang.label_value')} <span className="font-semibold text-foreground">{numericValue.toLocaleString("id-ID")}</span>
           </p>
         </div>
 
         {/* Options */}
         <div className="grid gap-4 rounded-lg border border-border bg-card p-6 sm:grid-cols-2">
           <div className="flex items-center justify-between rounded-lg border border-border p-4">
-            <Label htmlFor="addRupiah" className="cursor-pointer">Tambah "Rupiah"</Label>
+            <Label htmlFor="addRupiah" className="cursor-pointer">{t('terbilang.label_rupiah')}</Label>
             <Switch
               id="addRupiah"
               checked={addRupiah}
@@ -167,7 +170,7 @@ const Terbilang = () => {
             />
           </div>
           <div className="space-y-3">
-            <Label>Format Huruf</Label>
+            <Label>{t('terbilang.label_format')}</Label>
             <RadioGroup
               value={caseFormat}
               onValueChange={(v) => setCaseFormat(v as CaseFormat)}
@@ -175,15 +178,15 @@ const Terbilang = () => {
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="title" id="title" />
-                <Label htmlFor="title" className="cursor-pointer font-normal">Title Case</Label>
+                <Label htmlFor="title" className="cursor-pointer font-normal">{t('terbilang.format_title')}</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="upper" id="upper" />
-                <Label htmlFor="upper" className="cursor-pointer font-normal">HURUF BESAR</Label>
+                <Label htmlFor="upper" className="cursor-pointer font-normal">{t('terbilang.format_upper')}</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="lower" id="lower" />
-                <Label htmlFor="lower" className="cursor-pointer font-normal">huruf kecil</Label>
+                <Label htmlFor="lower" className="cursor-pointer font-normal">{t('terbilang.format_lower')}</Label>
               </div>
             </RadioGroup>
           </div>
@@ -192,7 +195,7 @@ const Terbilang = () => {
         {/* Result */}
         <div className="rounded-lg border border-border bg-card p-6">
           <div className="mb-4 flex items-center justify-between">
-            <Label className="text-base font-medium">Hasil Terbilang</Label>
+            <Label className="text-base font-medium">{t('terbilang.label_result')}</Label>
             <Button
               variant="outline"
               size="sm"
@@ -202,12 +205,12 @@ const Terbilang = () => {
               {copied ? (
                 <>
                   <Check className="mr-2 h-4 w-4" />
-                  Disalin!
+                  {t('terbilang.copied')}
                 </>
               ) : (
                 <>
                   <Copy className="mr-2 h-4 w-4" />
-                  Salin
+                  {t('terbilang.btn_copy')}
                 </>
               )}
             </Button>
@@ -216,14 +219,14 @@ const Terbilang = () => {
             {result ? (
               <p className="text-lg font-medium leading-relaxed text-foreground">{result}</p>
             ) : (
-              <p className="text-muted-foreground">Ketik angka untuk melihat hasil terbilang...</p>
+              <p className="text-muted-foreground">{t('terbilang.placeholder_result')}</p>
             )}
           </div>
         </div>
 
         {/* Quick Examples */}
         <div className="rounded-lg border border-border bg-card p-6">
-          <Label className="mb-4 block text-base font-medium">Contoh Cepat</Label>
+          <Label className="mb-4 block text-base font-medium">{t('terbilang.label_examples')}</Label>
           <div className="flex flex-wrap gap-2">
             {["100.000", "500.000", "1.000.000", "2.500.000", "10.000.000"].map((val) => (
               <Button
@@ -246,8 +249,8 @@ const Terbilang = () => {
           <div className="flex items-center gap-3">
             <Receipt className="h-5 w-5 text-primary" />
             <div>
-              <p className="font-medium">Invoice Generator</p>
-              <p className="text-sm text-muted-foreground">Buat nota penjualan dengan terbilang otomatis</p>
+              <p className="font-medium">{t('terbilang.link_invoice_title')}</p>
+              <p className="text-sm text-muted-foreground">{t('terbilang.link_invoice_desc')}</p>
             </div>
           </div>
           <ArrowRight className="h-5 w-5 text-muted-foreground" />

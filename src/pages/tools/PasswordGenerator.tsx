@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +10,9 @@ import { Card } from "@/components/ui/card";
 import { Copy, RefreshCw, Check, Shield, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 const PasswordGenerator = () => {
+  const { t } = useTranslation();
   const [length, setLength] = useState(16);
   const [uppercase, setUppercase] = useState(true);
   const [lowercase, setLowercase] = useState(true);
@@ -36,7 +37,7 @@ const PasswordGenerator = () => {
     }
     
     if (!chars) {
-      toast.error("Pilih minimal satu jenis karakter");
+      toast.error(t('password.toast_select_char'));
       return;
     }
     
@@ -53,12 +54,12 @@ const PasswordGenerator = () => {
     
     setPasswords(newPasswords);
     setCopiedIndex(null);
-  }, [length, uppercase, lowercase, numbers, symbols, excludeAmbiguous, count]);
+  }, [length, uppercase, lowercase, numbers, symbols, excludeAmbiguous, count, t]);
 
   const copyToClipboard = async (password: string, index: number) => {
     await navigator.clipboard.writeText(password);
     setCopiedIndex(index);
-    toast.success("Password disalin!");
+    toast.success(t('password.toast_copied'));
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
@@ -71,26 +72,26 @@ const PasswordGenerator = () => {
     if (/[0-9]/.test(password)) score++;
     if (/[^A-Za-z0-9]/.test(password)) score++;
     
-    if (score <= 2) return { label: "Lemah", color: "text-red-500", bg: "bg-red-500", icon: ShieldX };
-    if (score <= 4) return { label: "Sedang", color: "text-yellow-500", bg: "bg-yellow-500", icon: ShieldAlert };
-    if (score <= 5) return { label: "Kuat", color: "text-green-500", bg: "bg-green-500", icon: ShieldCheck };
-    return { label: "Sangat Kuat", color: "text-emerald-500", bg: "bg-emerald-500", icon: Shield };
+    if (score <= 2) return { label: t('password.strength_weak'), color: "text-red-500", bg: "bg-red-500", icon: ShieldX };
+    if (score <= 4) return { label: t('password.strength_medium'), color: "text-yellow-500", bg: "bg-yellow-500", icon: ShieldAlert };
+    if (score <= 5) return { label: t('password.strength_strong'), color: "text-green-500", bg: "bg-green-500", icon: ShieldCheck };
+    return { label: t('password.strength_very_strong'), color: "text-emerald-500", bg: "bg-emerald-500", icon: Shield };
   };
 
-  const meta = toolsMetadata.password;
+
 
   return (
     <ToolPageLayout
       toolNumber="12"
-      title="Password Generator"
-      subtitle="Keamanan Akun"
-      description="Buat password acak yang kuat dan aman dengan berbagai opsi karakter"
+      title={t('password.title')}
+      subtitle={t('password.subtitle')}
+      description={t('password.desc_page')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('password.meta.title')}
+        description={t('password.meta.description')}
+        path="/tools/password-generator"
+        keywords={t('password.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Settings */}
@@ -98,8 +99,8 @@ const PasswordGenerator = () => {
           {/* Length Slider */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Panjang Password</Label>
-              <span className="font-mono text-sm font-medium text-primary">{length} karakter</span>
+              <Label>{t('password.label_length')}</Label>
+              <span className="font-mono text-sm font-medium text-primary">{length}</span>
             </div>
             <Slider
               value={[length]}
@@ -114,19 +115,19 @@ const PasswordGenerator = () => {
           {/* Character Options */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <Label htmlFor="uppercase" className="cursor-pointer">Huruf Besar (A-Z)</Label>
+              <Label htmlFor="uppercase" className="cursor-pointer">{t('password.label_uppercase')}</Label>
               <Switch id="uppercase" checked={uppercase} onCheckedChange={setUppercase} />
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <Label htmlFor="lowercase" className="cursor-pointer">Huruf Kecil (a-z)</Label>
+              <Label htmlFor="lowercase" className="cursor-pointer">{t('password.label_lowercase')}</Label>
               <Switch id="lowercase" checked={lowercase} onCheckedChange={setLowercase} />
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <Label htmlFor="numbers" className="cursor-pointer">Angka (0-9)</Label>
+              <Label htmlFor="numbers" className="cursor-pointer">{t('password.label_numbers')}</Label>
               <Switch id="numbers" checked={numbers} onCheckedChange={setNumbers} />
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <Label htmlFor="symbols" className="cursor-pointer">Simbol (!@#$...)</Label>
+              <Label htmlFor="symbols" className="cursor-pointer">{t('password.label_symbols')}</Label>
               <Switch id="symbols" checked={symbols} onCheckedChange={setSymbols} />
             </div>
           </div>
@@ -134,15 +135,15 @@ const PasswordGenerator = () => {
           {/* Exclude Ambiguous */}
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div>
-              <Label htmlFor="ambiguous" className="cursor-pointer">Hindari Karakter Mirip</Label>
-              <p className="text-xs text-muted-foreground mt-1">Mengecualikan 0, O, 1, l, I</p>
+              <Label htmlFor="ambiguous" className="cursor-pointer">{t('password.label_ambiguous')}</Label>
+              <p className="text-xs text-muted-foreground mt-1">{t('password.hint_ambiguous')}</p>
             </div>
             <Switch id="ambiguous" checked={excludeAmbiguous} onCheckedChange={setExcludeAmbiguous} />
           </div>
 
           {/* Count */}
           <div className="flex items-center gap-4">
-            <Label htmlFor="count">Jumlah Password</Label>
+            <Label htmlFor="count">{t('password.label_count')}</Label>
             <Input
               id="count"
               type="number"
@@ -157,14 +158,14 @@ const PasswordGenerator = () => {
           {/* Generate Button */}
           <Button onClick={generatePassword} className="w-full" size="lg">
             <RefreshCw className="mr-2 h-4 w-4" />
-            Generate Password
+            {t('password.btn_generate')}
           </Button>
         </Card>
 
         {/* Results */}
         {passwords.length > 0 && (
           <div className="space-y-3">
-            <h3 className="font-semibold text-foreground">Hasil Generate</h3>
+            <h3 className="font-semibold text-foreground">{t('password.card_result')}</h3>
             {passwords.map((password, index) => {
               const strength = getStrength(password);
               const StrengthIcon = strength.icon;
@@ -194,7 +195,7 @@ const PasswordGenerator = () => {
                     <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div 
                         className={`h-full ${strength.bg} transition-all`} 
-                        style={{ width: strength.label === "Lemah" ? "25%" : strength.label === "Sedang" ? "50%" : strength.label === "Kuat" ? "75%" : "100%" }}
+                        style={{ width: strength.label === t('password.strength_weak') ? "25%" : strength.label === t('password.strength_medium') ? "50%" : strength.label === t('password.strength_strong') ? "75%" : "100%" }}
                       />
                     </div>
                   </div>

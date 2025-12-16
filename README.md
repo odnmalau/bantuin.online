@@ -2,16 +2,16 @@
 
 ![Bantuin.online Preview](public/og_image.png)
 
-**Kumpulan tools gratis untuk kebutuhan harianmu.**
-Kompres foto, buat pas foto, gabung PDF, dan berbagai alat bantu lainnya dalam satu aplikasi web yang ringan dan cepat.
+**A collection of free tools for your daily needs.**
+Compress photos, create passport photos, merge PDFs, and various other utilities in one lightweight and fast web application.
 
-## Fitur
+## Features
 
-- **Image Tools**: Kompres gambar, resize, dan konversi format.
-- **PDF Tools**: Gabungkan file PDF (Merge PDF).
-- **Utility Tools**: QR Code Generator, dan lainnya.
-- **PWA Support**: Bisa diinstall sebagai aplikasi di HP/Desktop dan berjalan offline.
-- **Privacy First**: Proses file dilakukan di browser (client-side), file Anda tidak dikirim ke server.
+- **Image Tools**: Compress images, resize, and convert formats.
+- **PDF Tools**: Merge PDF files.
+- **Utility Tools**: QR Code Generator, and more.
+- **PWA Support**: Can be installed as an app on Mobile/Desktop and works offline.
+- **Privacy First**: File processing is done in the browser (client-side), your files are not sent to the server.
 
 ## Tech Stack
 
@@ -21,15 +21,15 @@ Kompres foto, buat pas foto, gabung PDF, dan berbagai alat bantu lainnya dalam s
 - [Shadcn UI](https://ui.shadcn.com/)
 - [Vite PWA](https://vite-pwa-org.netlify.app/)
 
-## Instalasi
+## Installation
 
-1.  Clone repository ini:
+1.  Clone this repository:
 
     ```bash
     git clone https://github.com/odnmalau/bantuin.online.git
     ```
 
-2.  Masuk ke direktori project:
+2.  Enter the project directory:
 
     ```bash
     cd bantuin.online
@@ -41,11 +41,11 @@ Kompres foto, buat pas foto, gabung PDF, dan berbagai alat bantu lainnya dalam s
     bun i
     ```
 
-4.  Jalankan development server:
+4.  Run the development server:
     ```bash
     bun run dev
     ```
 
-## Lisensi
+## License
 
-Project ini dilisensikan di bawah lisensi [MIT](LICENSE).
+This project is licensed under the [MIT](LICENSE) license.

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import ToolPageLayout from "@/components/ToolPageLayout";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Upload, Download, Type, ImageIcon, RotateCcw, Grid3X3 } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 type Position = "top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right";
 type WatermarkType = "text" | "image";
@@ -28,6 +29,7 @@ const positionMap: Record<Position, { x: number; y: number }> = {
 };
 
 const Watermark = () => {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mainImage, setMainImage] = useState<HTMLImageElement | null>(null);
   const [mainImageUrl, setMainImageUrl] = useState<string>("");
@@ -135,13 +137,13 @@ const Watermark = () => {
     const img = new window.Image();
     img.onload = () => setWatermarkImage(img);
     img.src = URL.createObjectURL(file);
-    toast.success("Logo watermark berhasil dimuat");
+    toast.success(t('watermark.toast_logo_success'));
   };
 
   const handleDownload = (format: "png" | "jpeg") => {
     const canvas = canvasRef.current;
     if (!canvas || !mainImage) {
-      toast.error("Upload gambar terlebih dahulu");
+      toast.error(t('watermark.toast_upload_first'));
       return;
     }
 
@@ -149,7 +151,7 @@ const Watermark = () => {
     link.download = `watermarked-${Date.now()}.${format === "jpeg" ? "jpg" : "png"}`;
     link.href = canvas.toDataURL(`image/${format}`, 0.9);
     link.click();
-    toast.success("Gambar berhasil diunduh!");
+    toast.success(t('watermark.toast_download_success'));
   };
 
   const resetSettings = () => {
@@ -166,21 +168,21 @@ const Watermark = () => {
   return (
     <ToolPageLayout
       toolNumber="21"
-      title="Watermark Foto"
-      subtitle="Tambah Watermark"
-      description="Lindungi foto produk atau karya Anda dengan watermark teks atau logo. Semua proses di browser, privasi terjamin."
+      title={t('tool_items.watermark.title')}
+      subtitle={t('watermark.subtitle')}
+      description={t('tool_items.watermark.desc')}
     >
       <SEOHead
-        title={toolsMetadata.watermark.title}
-        description={toolsMetadata.watermark.description}
-        path={toolsMetadata.watermark.path}
-        keywords={toolsMetadata.watermark.keywords}
+        title={t('watermark.meta.title')}
+        description={t('watermark.meta.description')}
+        path="/tools/watermark"
+        keywords={t('watermark.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Preview */}
           <div className="space-y-4">
-            <Label className="text-base font-medium">Preview</Label>
+            <Label className="text-base font-medium">{t('watermark.label_preview')}</Label>
             <div className="overflow-hidden rounded-lg border border-border bg-secondary/30">
               {mainImage ? (
                 <canvas
@@ -195,8 +197,8 @@ const Watermark = () => {
                 >
                   <Upload className="h-12 w-12 text-muted-foreground" />
                   <div className="text-center">
-                    <p className="font-medium">Upload Foto Utama</p>
-                    <p className="text-sm text-muted-foreground">Klik atau drop gambar di sini</p>
+                    <p className="font-medium">{t('watermark.label_upload_main')}</p>
+                    <p className="text-sm text-muted-foreground">{t('watermark.text_upload_main_hint')}</p>
                   </div>
                   <input
                     type="file"
@@ -214,7 +216,7 @@ const Watermark = () => {
                   <Button variant="outline" className="w-full" asChild>
                     <span>
                       <Upload className="mr-2 h-4 w-4" />
-                      Ganti Foto
+                      {t('watermark.btn_change_photo')}
                     </span>
                   </Button>
                   <input
@@ -226,7 +228,7 @@ const Watermark = () => {
                 </label>
                 <Button variant="outline" onClick={resetSettings}>
                   <RotateCcw className="mr-2 h-4 w-4" />
-                  Reset
+                  {t('watermark.btn_reset')}
                 </Button>
               </div>
             )}
@@ -238,26 +240,26 @@ const Watermark = () => {
               <TabsList className="w-full">
                 <TabsTrigger value="text" className="flex-1">
                   <Type className="mr-2 h-4 w-4" />
-                  Teks
+                  {t('watermark.tab_text')}
                 </TabsTrigger>
                 <TabsTrigger value="image" className="flex-1">
                   <ImageIcon className="mr-2 h-4 w-4" />
-                  Logo
+                  {t('watermark.tab_logo')}
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="text" className="mt-4 space-y-4">
                 <div className="space-y-2">
-                  <Label>Teks Watermark</Label>
+                  <Label>{t('watermark.label_watermark_text')}</Label>
                   <Input
                     value={watermarkText}
                     onChange={(e) => setWatermarkText(e.target.value)}
-                    placeholder="Masukkan teks..."
+                    placeholder={t('watermark.placeholder_watermark_text')}
                   />
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Ukuran Font</Label>
+                    <Label>{t('watermark.label_font_size')}</Label>
                     <Slider
                       value={[fontSize]}
                       onValueChange={(v) => setFontSize(v[0])}
@@ -267,7 +269,7 @@ const Watermark = () => {
                     <p className="text-xs text-muted-foreground">{fontSize}px</p>
                   </div>
                   <div className="space-y-2">
-                    <Label>Warna</Label>
+                    <Label>{t('watermark.label_color')}</Label>
                     <div className="flex gap-2">
                       <Input
                         type="color"
@@ -287,7 +289,7 @@ const Watermark = () => {
 
               <TabsContent value="image" className="mt-4 space-y-4">
                 <div className="space-y-2">
-                  <Label>Upload Logo / Gambar</Label>
+                  <Label>{t('watermark.label_upload_logo')}</Label>
                   <label className="flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-border p-4 transition-colors hover:border-primary/50">
                     {watermarkImage ? (
                       <div className="flex items-center gap-3">
@@ -296,12 +298,12 @@ const Watermark = () => {
                           alt="Logo"
                           className="h-12 w-12 object-contain"
                         />
-                        <span className="text-sm text-muted-foreground">Klik untuk ganti</span>
+                        <span className="text-sm text-muted-foreground">{t('watermark.text_click_change')}</span>
                       </div>
                     ) : (
                       <div className="text-center">
                         <ImageIcon className="mx-auto h-8 w-8 text-muted-foreground" />
-                        <p className="mt-2 text-sm">Upload logo PNG/SVG</p>
+                        <p className="mt-2 text-sm">{t('watermark.text_upload_logo_hint')}</p>
                       </div>
                     )}
                     <input
@@ -313,42 +315,42 @@ const Watermark = () => {
                   </label>
                 </div>
                 <div className="space-y-2">
-                  <Label>Ukuran Logo</Label>
+                  <Label>{t('watermark.label_logo_size')}</Label>
                   <Slider
                     value={[watermarkScale]}
                     onValueChange={(v) => setWatermarkScale(v[0])}
                     min={5}
                     max={50}
                   />
-                  <p className="text-xs text-muted-foreground">{watermarkScale}% dari gambar</p>
+                  <p className="text-xs text-muted-foreground">{watermarkScale}%</p>
                 </div>
               </TabsContent>
             </Tabs>
 
             <div className="space-y-4 border-t border-border pt-4">
               <div className="space-y-2">
-                <Label>Posisi</Label>
+                <Label>{t('watermark.label_position')}</Label>
                 <Select value={position} onValueChange={(v) => setPosition(v as Position)} disabled={tileMode}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="top-left">Kiri Atas</SelectItem>
-                    <SelectItem value="top-center">Tengah Atas</SelectItem>
-                    <SelectItem value="top-right">Kanan Atas</SelectItem>
-                    <SelectItem value="center-left">Kiri Tengah</SelectItem>
-                    <SelectItem value="center">Tengah</SelectItem>
-                    <SelectItem value="center-right">Kanan Tengah</SelectItem>
-                    <SelectItem value="bottom-left">Kiri Bawah</SelectItem>
-                    <SelectItem value="bottom-center">Tengah Bawah</SelectItem>
-                    <SelectItem value="bottom-right">Kanan Bawah</SelectItem>
+                    <SelectItem value="top-left">{t('watermark.pos_top_left')}</SelectItem>
+                    <SelectItem value="top-center">{t('watermark.pos_top_center')}</SelectItem>
+                    <SelectItem value="top-right">{t('watermark.pos_top_right')}</SelectItem>
+                    <SelectItem value="center-left">{t('watermark.pos_center_left')}</SelectItem>
+                    <SelectItem value="center">{t('watermark.pos_center')}</SelectItem>
+                    <SelectItem value="center-right">{t('watermark.pos_center_right')}</SelectItem>
+                    <SelectItem value="bottom-left">{t('watermark.pos_bottom_left')}</SelectItem>
+                    <SelectItem value="bottom-center">{t('watermark.pos_bottom_center')}</SelectItem>
+                    <SelectItem value="bottom-right">{t('watermark.pos_bottom_right')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Transparansi</Label>
+                  <Label>{t('watermark.label_opacity')}</Label>
                   <span className="text-sm text-muted-foreground">{opacity}%</span>
                 </div>
                 <Slider
@@ -361,7 +363,7 @@ const Watermark = () => {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Rotasi</Label>
+                  <Label>{t('watermark.label_rotation')}</Label>
                   <span className="text-sm text-muted-foreground">{rotation}°</span>
                 </div>
                 <Slider
@@ -375,7 +377,7 @@ const Watermark = () => {
               <div className="flex items-center justify-between rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
                   <Grid3X3 className="h-4 w-4 text-muted-foreground" />
-                  <Label htmlFor="tile-mode" className="cursor-pointer">Mode Tile</Label>
+                  <Label htmlFor="tile-mode" className="cursor-pointer">{t('watermark.label_tile_mode')}</Label>
                 </div>
                 <Switch
                   id="tile-mode"
@@ -392,11 +394,11 @@ const Watermark = () => {
           <div className="flex gap-3">
             <Button onClick={() => handleDownload("jpeg")} className="flex-1">
               <Download className="mr-2 h-4 w-4" />
-              Download JPG
+              {t('watermark.btn_download_jpg')}
             </Button>
             <Button onClick={() => handleDownload("png")} variant="outline" className="flex-1">
               <Download className="mr-2 h-4 w-4" />
-              Download PNG
+              {t('watermark.btn_download_png')}
             </Button>
           </div>
         )}

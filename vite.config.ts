@@ -17,9 +17,9 @@ export default defineConfig(({ mode }) => ({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "robots.txt"],
       manifest: {
-        name: "Bantuin.online - Tools Gratis Indonesia",
+        name: "Bantuin.online - Free Online Tools",
         short_name: "Bantuin",
-        description: "Kumpulan tools gratis untuk kebutuhan harianmu. Kompres foto, buat pas foto, gabung PDF, dan lainnya.",
+        description: "A collection of free tools for your daily needs. Compress photos, create passport photos, merge PDFs, and more.",
         theme_color: "#2563EB",
         background_color: "#FAF8F5",
         display: "standalone",

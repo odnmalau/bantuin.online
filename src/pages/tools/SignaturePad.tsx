@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import ToolPageLayout from "@/components/ToolPageLayout";
+
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -7,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Download, Trash2, Undo2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 type InkColor = "black" | "blue" | "red";
 type LineWidth = "thin" | "medium" | "thick";
@@ -43,6 +44,7 @@ const sizeMap: Record<OutputSize, number> = {
 };
 
 const SignaturePad = () => {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [inkColor, setInkColor] = useState<InkColor>("black");
@@ -158,12 +160,12 @@ const SignaturePad = () => {
     setStrokes([]);
     setCurrentStroke([]);
     setHasSignature(false);
-    toast.success("Kanvas dibersihkan");
+    toast.success(t('signature.toast_clear'));
   };
 
   const handleDownload = () => {
     if (!hasSignature) {
-      toast.error("Buat tanda tangan terlebih dahulu!");
+      toast.error(t('signature.toast_empty'));
       return;
     }
 
@@ -206,32 +208,32 @@ const SignaturePad = () => {
     link.download = `tanda-tangan-${Date.now()}.png`;
     link.href = exportCanvas.toDataURL("image/png");
     link.click();
-    toast.success("Tanda tangan berhasil diunduh!");
+    toast.success(t('signature.toast_download'));
   };
 
   return (
     <ToolPageLayout
       toolNumber="19"
-      title="Tanda Tangan Digital"
-      subtitle="Signature Pad"
-      description="Buat tanda tangan digital dengan latar transparan untuk dokumen Word, PDF, atau formulir online."
+      title={t('tool_items.signature.title')}
+      subtitle={t('signature.subtitle')}
+      description={t('tool_items.signature.desc')}
     >
       <SEOHead
-        title={toolsMetadata.signature.title}
-        description={toolsMetadata.signature.description}
-        path={toolsMetadata.signature.path}
-        keywords={toolsMetadata.signature.keywords}
+        title={t('signature.meta.title')}
+        description={t('signature.meta.description')}
+        path="/tools/signature"
+        keywords={t('signature.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Instructions */}
         <div className="flex items-start gap-3 rounded-lg border border-border bg-secondary/30 p-4">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
           <div className="text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Cara Penggunaan:</p>
+            <p className="font-medium text-foreground">{t('signature.how_to_title')}</p>
             <ol className="mt-1 list-inside list-decimal space-y-1">
-              <li>Gambar tanda tangan di area kanvas menggunakan mouse atau jari</li>
-              <li>Pilih warna dan ketebalan sesuai keinginan</li>
-              <li>Klik "Unduh PNG" untuk menyimpan dengan latar transparan</li>
+              <li>{t('signature.how_to_1')}</li>
+              <li>{t('signature.how_to_2')}</li>
+              <li>{t('signature.how_to_3')}</li>
             </ol>
           </div>
         </div>
@@ -239,7 +241,7 @@ const SignaturePad = () => {
         {/* Canvas */}
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="border-b border-border bg-secondary/30 px-4 py-2">
-            <p className="text-sm text-muted-foreground">Gambar tanda tangan di bawah ini</p>
+            <p className="text-sm text-muted-foreground">{t('signature.canvas_placeholder')}</p>
           </div>
           <div 
             className="relative"
@@ -271,11 +273,11 @@ const SignaturePad = () => {
           <div className="flex gap-2 border-t border-border bg-secondary/30 p-3">
             <Button variant="outline" size="sm" onClick={handleUndo} disabled={strokes.length === 0}>
               <Undo2 className="mr-2 h-4 w-4" />
-              Undo
+              {t('signature.btn_undo')}
             </Button>
             <Button variant="outline" size="sm" onClick={handleClear} disabled={!hasSignature}>
               <Trash2 className="mr-2 h-4 w-4" />
-              Hapus Semua
+              {t('signature.btn_clear')}
             </Button>
           </div>
         </div>
@@ -283,7 +285,7 @@ const SignaturePad = () => {
         {/* Options */}
         <div className="grid gap-4 rounded-lg border border-border bg-card p-6 sm:grid-cols-3">
           <div className="space-y-3">
-            <Label>Warna Tinta</Label>
+            <Label>{t('signature.label_ink')}</Label>
             <RadioGroup
               value={inkColor}
               onValueChange={(v) => setInkColor(v as InkColor)}
@@ -293,50 +295,50 @@ const SignaturePad = () => {
                 <RadioGroupItem value="black" id="black" />
                 <Label htmlFor="black" className="flex cursor-pointer items-center gap-2 font-normal">
                   <span className="h-4 w-4 rounded-full bg-gray-900" />
-                  Hitam
+                  {t('signature.color_black')}
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="blue" id="blue" />
                 <Label htmlFor="blue" className="flex cursor-pointer items-center gap-2 font-normal">
                   <span className="h-4 w-4 rounded-full bg-blue-900" />
-                  Biru
+                  {t('signature.color_blue')}
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="red" id="red" />
                 <Label htmlFor="red" className="flex cursor-pointer items-center gap-2 font-normal">
                   <span className="h-4 w-4 rounded-full bg-red-700" />
-                  Merah
+                  {t('signature.color_red')}
                 </Label>
               </div>
             </RadioGroup>
           </div>
 
           <div className="space-y-3">
-            <Label>Ketebalan Garis</Label>
+            <Label>{t('signature.label_width')}</Label>
             <Select value={lineWidth} onValueChange={(v) => setLineWidth(v as LineWidth)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="thin">Tipis</SelectItem>
-                <SelectItem value="medium">Sedang</SelectItem>
-                <SelectItem value="thick">Tebal</SelectItem>
+                <SelectItem value="thin">{t('signature.width_thin')}</SelectItem>
+                <SelectItem value="medium">{t('signature.width_medium')}</SelectItem>
+                <SelectItem value="thick">{t('signature.width_thick')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-3">
-            <Label>Ukuran Output</Label>
+            <Label>{t('signature.label_size')}</Label>
             <Select value={outputSize} onValueChange={(v) => setOutputSize(v as OutputSize)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="small">Kecil (200px)</SelectItem>
-                <SelectItem value="medium">Sedang (400px)</SelectItem>
-                <SelectItem value="large">Besar (600px)</SelectItem>
+                <SelectItem value="small">{t('signature.size_small')}</SelectItem>
+                <SelectItem value="medium">{t('signature.size_medium')}</SelectItem>
+                <SelectItem value="large">{t('signature.size_large')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -345,7 +347,7 @@ const SignaturePad = () => {
         {/* Download Button */}
         <Button onClick={handleDownload} size="lg" className="w-full" disabled={!hasSignature}>
           <Download className="mr-2 h-5 w-5" />
-          Unduh PNG Transparan
+          {t('signature.btn_download')}
         </Button>
       </div>
     </ToolPageLayout>

@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import ToolPageLayout from "@/components/ToolPageLayout";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -8,7 +10,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ArrowLeftRight, GitCompare, Plus, Minus, Equal, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 type DiffMode = "line" | "word" | "char";
 type DiffType = "added" | "removed" | "unchanged";
@@ -162,6 +163,7 @@ const diffChars = (oldText: string, newText: string, ignoreCase: boolean): DiffP
 };
 
 const DiffChecker = () => {
+  const { t } = useTranslation();
   const [oldText, setOldText] = useState("");
   const [newText, setNewText] = useState("");
   const [diffMode, setDiffMode] = useState<DiffMode>("line");
@@ -209,41 +211,41 @@ const DiffChecker = () => {
 
     await navigator.clipboard.writeText(text);
     setCopied(true);
-    toast.success("Hasil diff disalin!");
+    toast.success(t('diff.toast_copy'));
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
     <ToolPageLayout
       toolNumber="22"
-      title="Diff Checker"
-      subtitle="Bandingkan Teks"
-      description="Bandingkan dua teks dan lihat perbedaannya secara visual. Cocok untuk mengecek revisi dokumen atau kode."
+      title={t('tool_items.diff_checker.title')}
+      subtitle={t('diff.subtitle')}
+      description={t('tool_items.diff_checker.desc')}
     >
       <SEOHead
-        title={toolsMetadata.diff.title}
-        description={toolsMetadata.diff.description}
-        path={toolsMetadata.diff.path}
-        keywords={toolsMetadata.diff.keywords}
+        title={t('diff.meta.title')}
+        description={t('diff.meta.description')}
+        path="/tools/diff-checker"
+        keywords={t('diff.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="mx-auto max-w-5xl space-y-6">
         {/* Input Section */}
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label className="text-base font-medium">Teks Lama</Label>
+            <Label className="text-base font-medium">{t('diff.label_old')}</Label>
             <Textarea
               value={oldText}
               onChange={(e) => setOldText(e.target.value)}
-              placeholder="Paste teks versi lama di sini..."
+              placeholder={t('diff.placeholder_old')}
               className="min-h-[200px] font-mono text-sm"
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-base font-medium">Teks Baru</Label>
+            <Label className="text-base font-medium">{t('diff.label_new')}</Label>
             <Textarea
               value={newText}
               onChange={(e) => setNewText(e.target.value)}
-              placeholder="Paste teks versi baru di sini..."
+              placeholder={t('diff.placeholder_new')}
               className="min-h-[200px] font-mono text-sm"
             />
           </div>
@@ -254,10 +256,10 @@ const DiffChecker = () => {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={handleSwap}>
               <ArrowLeftRight className="mr-2 h-4 w-4" />
-              Tukar
+              {t('diff.btn_swap')}
             </Button>
             <Button variant="outline" size="sm" onClick={handleClear}>
-              Hapus Semua
+              {t('diff.btn_clear')}
             </Button>
           </div>
 
@@ -269,15 +271,15 @@ const DiffChecker = () => {
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="line" id="line" />
-                <Label htmlFor="line" className="cursor-pointer font-normal">Baris</Label>
+                <Label htmlFor="line" className="cursor-pointer font-normal">{t('diff.mode_line')}</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="word" id="word" />
-                <Label htmlFor="word" className="cursor-pointer font-normal">Kata</Label>
+                <Label htmlFor="word" className="cursor-pointer font-normal">{t('diff.mode_word')}</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="char" id="char" />
-                <Label htmlFor="char" className="cursor-pointer font-normal">Karakter</Label>
+                <Label htmlFor="char" className="cursor-pointer font-normal">{t('diff.mode_char')}</Label>
               </div>
             </RadioGroup>
           </div>
@@ -291,7 +293,7 @@ const DiffChecker = () => {
               checked={ignoreWhitespace}
               onCheckedChange={setIgnoreWhitespace}
             />
-            <Label htmlFor="ignore-whitespace" className="cursor-pointer">Abaikan spasi ekstra</Label>
+            <Label htmlFor="ignore-whitespace" className="cursor-pointer">{t('diff.opt_space')}</Label>
           </div>
           <div className="flex items-center space-x-2">
             <Switch
@@ -299,7 +301,7 @@ const DiffChecker = () => {
               checked={ignoreCase}
               onCheckedChange={setIgnoreCase}
             />
-            <Label htmlFor="ignore-case" className="cursor-pointer">Abaikan huruf besar/kecil</Label>
+            <Label htmlFor="ignore-case" className="cursor-pointer">{t('diff.opt_case')}</Label>
           </div>
         </div>
 
@@ -308,15 +310,15 @@ const DiffChecker = () => {
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-green-600 dark:text-green-400">
               <Plus className="h-4 w-4" />
-              <span className="text-sm font-medium">{stats.added} ditambah</span>
+              <span className="text-sm font-medium">{stats.added} {t('diff.stat_added')}</span>
             </div>
             <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-red-600 dark:text-red-400">
               <Minus className="h-4 w-4" />
-              <span className="text-sm font-medium">{stats.removed} dihapus</span>
+              <span className="text-sm font-medium">{stats.removed} {t('diff.stat_removed')}</span>
             </div>
             <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-muted-foreground">
               <Equal className="h-4 w-4" />
-              <span className="text-sm font-medium">{stats.unchanged} tidak berubah</span>
+              <span className="text-sm font-medium">{stats.unchanged} {t('diff.stat_unchanged')}</span>
             </div>
           </div>
         )}
@@ -327,18 +329,18 @@ const DiffChecker = () => {
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <GitCompare className="h-5 w-5 text-primary" />
-                <Label className="text-base font-medium">Hasil Perbandingan</Label>
+                <Label className="text-base font-medium">{t('diff.res_title')}</Label>
               </div>
               <Button variant="outline" size="sm" onClick={handleCopyResult}>
                 {copied ? (
                   <>
                     <Check className="mr-2 h-4 w-4" />
-                    Disalin!
+                    {t('diff.btn_copied')}
                   </>
                 ) : (
                   <>
                     <Copy className="mr-2 h-4 w-4" />
-                    Salin
+                    {t('diff.btn_copy')}
                   </>
                 )}
               </Button>
@@ -382,9 +384,9 @@ const DiffChecker = () => {
         {!oldText && !newText && (
           <div className="rounded-lg border border-dashed border-border p-12 text-center">
             <GitCompare className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h3 className="text-lg font-medium">Mulai Membandingkan</h3>
+            <h3 className="text-lg font-medium">{t('diff.empty_title')}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Masukkan teks di kedua kolom untuk melihat perbedaannya
+              {t('diff.empty_desc')}
             </p>
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import ReactCrop, { type Crop, type PixelCrop, centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { Upload, Download, RotateCcw, Check } from "lucide-react";
@@ -10,9 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 import { getCroppedImg, getAspectRatio, PAS_FOTO_SIZES } from "@/utils/cropImage";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
+
 
 const PasFoto = () => {
+  const { t } = useTranslation();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imgSrc, setImgSrc] = useState<string>("");
   const [crop, setCrop] = useState<Crop>();
@@ -95,8 +97,8 @@ const PasFoto = () => {
   const handleGeneratePreview = async () => {
     if (!imgRef.current || !completedCrop) {
       toast({
-        title: "Pilih area crop terlebih dahulu",
-        description: "Sesuaikan area crop pada gambar",
+        title: t('pasfoto.toast_select_crop'),
+        description: t('pasfoto.toast_select_crop_desc'),
         variant: "destructive",
       });
       return;
@@ -109,13 +111,13 @@ const PasFoto = () => {
       setPreviewUrl(url);
       
       toast({
-        title: "Preview siap!",
-        description: "Klik tombol unduh untuk menyimpan hasil",
+        title: t('pasfoto.toast_preview_ready'),
+        description: t('pasfoto.toast_preview_desc'),
       });
     } catch (error) {
       toast({
-        title: "Gagal memproses gambar",
-        description: "Silakan coba lagi",
+        title: t('pasfoto.toast_error'),
+        description: t('pasfoto.toast_error_desc'),
         variant: "destructive",
       });
     } finally {
@@ -141,13 +143,13 @@ const PasFoto = () => {
       URL.revokeObjectURL(url);
       
       toast({
-        title: "Berhasil diunduh!",
-        description: `Pas foto ${PAS_FOTO_SIZES[selectedSize].label} tersimpan`,
+        title: t('pasfoto.toast_download_success'),
+        description: t('pasfoto.toast_download_desc', { size: PAS_FOTO_SIZES[selectedSize].label }),
       });
     } catch (error) {
       toast({
-        title: "Gagal mengunduh",
-        description: "Silakan coba lagi",
+        title: t('pasfoto.toast_download_error'),
+        description: t('pasfoto.toast_download_error_desc'),
         variant: "destructive",
       });
     } finally {
@@ -186,47 +188,47 @@ const PasFoto = () => {
     e.preventDefault();
   };
 
-  const meta = toolsMetadata.pasfoto;
+
 
   return (
     <ToolPageLayout
       toolNumber="03"
-      title="Pas Foto"
-      subtitle="Photo Resize Tool"
-      description="Upload foto dan pilih ukuran pas foto standar Indonesia — Create passport photos"
+      title={t('pasfoto.title')}
+      subtitle={t('pasfoto.subtitle')}
+      description={t('pasfoto.desc_page')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('pasfoto.meta.title')}
+        description={t('pasfoto.meta.description')}
+        path="/tools/pas-foto"
+        keywords={t('pasfoto.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Main Card */}
         <Card className="animate-fade-in-up stagger-1 rounded-sm border-border bg-card">
           <CardHeader>
-            <CardTitle className="font-display text-xl text-foreground">Buat Pas Foto</CardTitle>
+            <CardTitle className="font-display text-xl text-foreground">{t('pasfoto.card_title')}</CardTitle>
             <CardDescription>
-              Pilih ukuran lalu upload foto untuk di-crop sesuai rasio
+              {t('pasfoto.card_desc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Size Selector */}
             <div className="space-y-3">
-              <Label className="font-medium text-foreground">Pilih Ukuran — Select Size</Label>
+              <Label className="font-medium text-foreground">{t('pasfoto.label_size')}</Label>
               <RadioGroup
                 value={selectedSize}
                 onValueChange={handleSizeChange}
                 className="flex flex-wrap gap-4"
               >
-                {Object.entries(PAS_FOTO_SIZES).map(([key, config]) => (
+                {Object.entries(PAS_FOTO_SIZES).map(([key]) => (
                   <div key={key} className="flex items-center space-x-2">
                     <RadioGroupItem value={key} id={key} className="border-border" />
                     <Label
                       htmlFor={key}
                       className="cursor-pointer text-sm font-medium text-foreground"
                     >
-                      {config.label}
+                      {t(`pasfoto.sizes.${key}`)}
                     </Label>
                   </div>
                 ))}
@@ -242,10 +244,10 @@ const PasFoto = () => {
               >
                 <Upload className="mb-4 h-12 w-12 text-muted-foreground" />
                 <p className="mb-2 text-center font-medium text-foreground">
-                  Klik atau drag & drop foto di sini
+                  {t('pasfoto.upload_hint')}
                 </p>
                 <p className="text-center text-sm text-muted-foreground">
-                  Supports JPG, PNG, WEBP
+                  {t('pasfoto.upload_subhint')}
                 </p>
                 <input
                   type="file"
@@ -260,10 +262,10 @@ const PasFoto = () => {
             {imgSrc && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <Label className="font-medium text-foreground">Sesuaikan Area Crop — Adjust Crop Area</Label>
+                  <Label className="font-medium text-foreground">{t('pasfoto.label_crop')}</Label>
                   <Button variant="outline" size="sm" onClick={handleReset} className="rounded-sm">
                     <RotateCcw className="mr-2 h-4 w-4" />
-                    Reset
+                    {t('pasfoto.btn_reset')}
                   </Button>
                 </div>
                 
@@ -294,7 +296,7 @@ const PasFoto = () => {
                     variant="outline"
                   >
                     <Check className="mr-2 h-4 w-4" />
-                    Lihat Preview
+                    {t('pasfoto.btn_preview')}
                   </Button>
                   <Button
                     onClick={handleDownload}
@@ -302,7 +304,7 @@ const PasFoto = () => {
                     className="flex-1 rounded-sm"
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    {isProcessing ? "Memproses..." : "Unduh Hasil"}
+                    {isProcessing ? t('pasfoto.btn_processing') : t('pasfoto.btn_download')}
                   </Button>
                 </div>
               </div>
@@ -311,7 +313,7 @@ const PasFoto = () => {
             {/* Preview Result */}
             {previewUrl && (
               <div className="space-y-3">
-                <Label className="font-medium text-foreground">Preview Hasil — Result Preview</Label>
+                <Label className="font-medium text-foreground">{t('pasfoto.label_preview')}</Label>
                 <div className="flex justify-center rounded-sm border border-border bg-muted/30 p-4">
                   <img
                     src={previewUrl}
@@ -320,7 +322,7 @@ const PasFoto = () => {
                   />
                 </div>
                 <p className="text-center text-sm text-muted-foreground">
-                  Ukuran: {PAS_FOTO_SIZES[selectedSize].label} • Kualitas tinggi (95%)
+                  {t('pasfoto.preview_info', { size: t(`pasfoto.sizes.${selectedSize}`) })}
                 </p>
               </div>
             )}
@@ -329,12 +331,12 @@ const PasFoto = () => {
 
         {/* Tips Section */}
         <div className="animate-fade-in-up stagger-2 border-l-2 border-primary bg-muted/30 p-4 pl-6">
-          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-foreground">Tips Pas Foto</h3>
+          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-foreground">{t('pasfoto.tips_title')}</h3>
           <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>• Gunakan foto dengan pencahayaan yang baik dan wajah terlihat jelas</li>
-            <li>• Pastikan background foto polos (putih, biru, atau merah)</li>
-            <li>• Ukuran 2x3 untuk lamaran kerja, 3x4 untuk KTP/kartu pelajar, 4x6 untuk visa/paspor</li>
-            <li>• Semua proses dilakukan di browser — foto kamu 100% aman dan privat</li>
+            <li>• {t('pasfoto.tips_list_1')}</li>
+            <li>• {t('pasfoto.tips_list_2')}</li>
+            <li>• {t('pasfoto.tips_list_3')}</li>
+            <li>• {t('pasfoto.tips_list_4')}</li>
           </ul>
         </div>
       </div>

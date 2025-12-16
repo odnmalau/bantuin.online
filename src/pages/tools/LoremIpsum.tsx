@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Copy, Check, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
+
 
 const LOREM_WORDS = [
   "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
@@ -32,6 +33,7 @@ const INDO_WORDS = [
 ];
 
 const LoremIpsum = () => {
+  const { t } = useTranslation();
   const [type, setType] = useState<"paragraphs" | "sentences" | "words">("paragraphs");
   const [count, setCount] = useState(3);
   const [language, setLanguage] = useState<"latin" | "indo">("latin");
@@ -77,21 +79,23 @@ const LoremIpsum = () => {
     let output = "";
 
     switch (type) {
-      case "paragraphs":
+      case "paragraphs": {
         const paragraphs: string[] = [];
         for (let i = 0; i < count; i++) {
           paragraphs.push(generateParagraph(words, i === 0));
         }
         output = paragraphs.join("\n\n");
         break;
-      case "sentences":
+      }
+      case "sentences": {
         const sentences: string[] = [];
         for (let i = 0; i < count; i++) {
           sentences.push(generateSentence(words, 8, 15, i === 0));
         }
         output = sentences.join(" ");
         break;
-      case "words":
+      }
+      case "words": {
         const wordList: string[] = [];
         if (startWithLorem && language === "latin") {
           wordList.push("Lorem", "ipsum");
@@ -105,6 +109,7 @@ const LoremIpsum = () => {
         }
         output = capitalizeFirst(wordList.join(" ")) + ".";
         break;
+      }
     }
 
     setResult(output);
@@ -115,7 +120,7 @@ const LoremIpsum = () => {
     if (!result) return;
     await navigator.clipboard.writeText(result);
     setCopied(true);
-    toast.success("Teks disalin!");
+    toast.success(t('lorem.toast_copied'));
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -129,37 +134,42 @@ const LoremIpsum = () => {
 
   const getTypeLabel = () => {
     switch (type) {
-      case "paragraphs": return "Paragraf";
-      case "sentences": return "Kalimat";
-      case "words": return "Kata";
+      case "paragraphs": return t('lorem.type_paragraphs');
+      case "sentences": return t('lorem.type_sentences');
+      case "words": return t('lorem.type_words');
     }
   };
 
-  const meta = toolsMetadata.lorem;
+
 
   return (
     <ToolPageLayout
       toolNumber="14"
-      title="Lorem Ipsum"
-      subtitle="Teks Placeholder"
-      description="Generate teks dummy untuk desain dalam bahasa Latin atau Indonesia"
+      title={t('lorem.title')}
+      subtitle={t('lorem.subtitle')}
+      description={t('lorem.desc_page')}
     >
-      <SEOHead title={meta.title} description={meta.description} path={meta.path} keywords={meta.keywords} />
+      <SEOHead 
+        title={t('lorem.meta.title')} 
+        description={t('lorem.meta.description')} 
+        path="/tools/lorem-ipsum-generator" 
+        keywords={t('lorem.meta.keywords', { returnObjects: true }) as string[]} 
+      />
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Settings */}
         <Card className="p-6 space-y-6">
           {/* Type Selection */}
           <Tabs value={type} onValueChange={(v) => setType(v as typeof type)}>
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="paragraphs">Paragraf</TabsTrigger>
-              <TabsTrigger value="sentences">Kalimat</TabsTrigger>
-              <TabsTrigger value="words">Kata</TabsTrigger>
+              <TabsTrigger value="paragraphs">{t('lorem.tab_paragraphs')}</TabsTrigger>
+              <TabsTrigger value="sentences">{t('lorem.tab_sentences')}</TabsTrigger>
+              <TabsTrigger value="words">{t('lorem.tab_words')}</TabsTrigger>
             </TabsList>
           </Tabs>
 
           {/* Count */}
           <div className="flex items-center gap-4">
-            <Label htmlFor="count" className="whitespace-nowrap">Jumlah {getTypeLabel()}</Label>
+            <Label htmlFor="count" className="whitespace-nowrap">{t('lorem.label_count', { type: getTypeLabel() })}</Label>
             <Input
               id="count"
               type="number"
@@ -173,21 +183,21 @@ const LoremIpsum = () => {
 
           {/* Language */}
           <div className="space-y-3">
-            <Label>Bahasa</Label>
+            <Label>{t('lorem.label_language')}</Label>
             <div className="flex gap-2">
               <Button
                 variant={language === "latin" ? "default" : "outline"}
                 onClick={() => setLanguage("latin")}
                 className="flex-1"
               >
-                Latin Klasik
+                {t('lorem.btn_latin')}
               </Button>
               <Button
                 variant={language === "indo" ? "default" : "outline"}
                 onClick={() => setLanguage("indo")}
                 className="flex-1"
               >
-                Indonesia
+                {t('lorem.btn_indo')}
               </Button>
             </div>
           </div>
@@ -196,7 +206,7 @@ const LoremIpsum = () => {
           {language === "latin" && (
             <div className="flex items-center justify-between rounded-lg border border-border p-3">
               <Label htmlFor="startLorem" className="cursor-pointer">
-                Mulai dengan "Lorem ipsum..."
+                {t('lorem.label_start_lorem')}
               </Label>
               <Switch
                 id="startLorem"
@@ -209,7 +219,7 @@ const LoremIpsum = () => {
           {/* Generate Button */}
           <Button onClick={generate} className="w-full" size="lg">
             <RefreshCw className="mr-2 h-4 w-4" />
-            Generate Teks
+            {t('lorem.btn_generate')}
           </Button>
         </Card>
 
@@ -217,17 +227,17 @@ const LoremIpsum = () => {
         {result && (
           <Card className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Hasil</h3>
+              <h3 className="font-semibold text-foreground">{t('lorem.card_result')}</h3>
               <Button variant="outline" size="sm" onClick={copyToClipboard}>
                 {copied ? (
                   <>
                     <Check className="mr-2 h-4 w-4 text-green-500" />
-                    Disalin
+                    {t('lorem.btn_copied')}
                   </>
                 ) : (
                   <>
                     <Copy className="mr-2 h-4 w-4" />
-                    Salin
+                    {t('lorem.btn_copy')}
                   </>
                 )}
               </Button>
@@ -238,7 +248,7 @@ const LoremIpsum = () => {
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              {result.split(/\s+/).length} kata • {result.length} karakter
+              {t('lorem.stats', { words: result.split(/\s+/).length, chars: result.length })}
             </p>
           </Card>
         )}

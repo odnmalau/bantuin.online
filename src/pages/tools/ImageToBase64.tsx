@@ -1,13 +1,15 @@
 import { useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Upload, Copy, Check, RotateCcw, FileImage } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 const ImageToBase64 = () => {
+  const { t } = useTranslation();
   const [base64, setBase64] = useState("");
   const [preview, setPreview] = useState("");
   const [fileName, setFileName] = useState("");
@@ -29,8 +31,8 @@ const ImageToBase64 = () => {
 
     if (!file.type.startsWith("image/")) {
       toast({
-        title: "File tidak valid",
-        description: "Pilih file gambar (JPG, PNG, GIF, WebP, dll)",
+        title: t('base64.toast_invalid'),
+        description: t('base64.toast_invalid_desc'),
         variant: "destructive",
       });
       return;
@@ -38,8 +40,8 @@ const ImageToBase64 = () => {
 
     if (file.size > 5 * 1024 * 1024) {
       toast({
-        title: "File terlalu besar",
-        description: "Maksimal ukuran file adalah 5MB",
+        title: t('base64.toast_large'),
+        description: t('base64.toast_large_desc'),
         variant: "destructive",
       });
       return;
@@ -65,8 +67,8 @@ const ImageToBase64 = () => {
     await navigator.clipboard.writeText(base64);
     setCopied(true);
     toast({
-      title: "Tersalin!",
-      description: "Base64 string berhasil disalin",
+      title: t('base64.toast_copied'),
+      description: t('base64.toast_base64_desc'),
     });
     setTimeout(() => setCopied(false), 2000);
   };
@@ -77,8 +79,8 @@ const ImageToBase64 = () => {
     await navigator.clipboard.writeText(preview);
     setCopiedDataUrl(true);
     toast({
-      title: "Tersalin!",
-      description: "Data URL berhasil disalin",
+      title: t('base64.toast_copied'),
+      description: t('base64.toast_url_desc'),
     });
     setTimeout(() => setCopiedDataUrl(false), 2000);
   };
@@ -93,20 +95,20 @@ const ImageToBase64 = () => {
     }
   };
 
-  const meta = toolsMetadata.base64;
+
 
   return (
     <ToolPageLayout
       toolNumber="10"
-      title="Image to Base64"
-      subtitle="Konversi Gambar ke Base64"
-      description="Konversi gambar ke format Base64 string untuk digunakan di CSS, HTML, atau API."
+      title={t('tool_items.image_base64.title')}
+      subtitle={t('base64.subtitle')}
+      description={t('tool_items.image_base64.desc')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('base64.meta.title')}
+        description={t('base64.meta.description')}
+        path="/tools/base64"
+        keywords={t('base64.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Upload Area */}
@@ -123,10 +125,10 @@ const ImageToBase64 = () => {
           />
           <Upload className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-sm font-medium text-foreground">
-            Klik untuk upload gambar
+            {t('base64.click_upload')}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            JPG, PNG, GIF, WebP (Maks. 5MB)
+            {t('base64.format_info')}
           </p>
         </div>
 
@@ -157,10 +159,10 @@ const ImageToBase64 = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-foreground">
-                  Base64 String
+                  {t('base64.label_base64')}
                 </label>
                 <span className="text-xs text-muted-foreground">
-                  {base64.length.toLocaleString()} karakter
+                  {base64.length.toLocaleString()} {t('word_counter.stats_chars') || "chars"}
                 </span>
               </div>
               <Textarea
@@ -178,7 +180,7 @@ const ImageToBase64 = () => {
                 ) : (
                   <Copy className="mr-2 h-4 w-4" />
                 )}
-                {copied ? "Tersalin!" : "Salin Base64"}
+                {copied ? t('base64.toast_copied') : t('base64.btn_copy_base64')}
               </Button>
               <Button onClick={handleCopyDataUrl} variant="outline">
                 {copiedDataUrl ? (
@@ -186,14 +188,14 @@ const ImageToBase64 = () => {
                 ) : (
                   <Copy className="mr-2 h-4 w-4" />
                 )}
-                {copiedDataUrl ? "Tersalin!" : "Salin Data URL"}
+                {copiedDataUrl ? t('base64.toast_copied') : t('base64.btn_copy_url')}
               </Button>
             </div>
 
             {/* Reset Button */}
             <Button variant="outline" onClick={handleReset} className="w-full">
               <RotateCcw className="mr-2 h-4 w-4" />
-              Upload Gambar Lain
+              {t('base64.btn_reset')}
             </Button>
           </div>
         )}
@@ -202,13 +204,13 @@ const ImageToBase64 = () => {
         {!preview && (
           <div className="rounded-lg border border-border bg-secondary/20 p-6">
             <h3 className="mb-2 font-display text-sm font-semibold text-foreground">
-              Kegunaan Base64:
+              {t('base64.use_title')}
             </h3>
             <ul className="space-y-1 text-sm text-muted-foreground">
-              <li>• Embed gambar langsung di CSS/HTML</li>
-              <li>• Kirim gambar via JSON API</li>
-              <li>• Simpan gambar di localStorage</li>
-              <li>• Hindari request HTTP tambahan</li>
+              <li>{t('base64.use_1')}</li>
+              <li>{t('base64.use_2')}</li>
+              <li>{t('base64.use_3')}</li>
+              <li>{t('base64.use_4')}</li>
             </ul>
           </div>
         )}

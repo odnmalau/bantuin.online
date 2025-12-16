@@ -1,13 +1,15 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FileText, Copy, RotateCcw, Check } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 const WordCounter = () => {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -34,8 +36,8 @@ const WordCounter = () => {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     toast({
-      title: "Tersalin!",
-      description: "Teks berhasil disalin ke clipboard",
+      title: t('common.copied'),
+      description: t('common.success'),
     });
     setTimeout(() => setCopied(false), 2000);
   };
@@ -45,38 +47,36 @@ const WordCounter = () => {
   };
 
   const stats = [
-    { label: "Karakter", value: charCount },
-    { label: "Karakter (tanpa spasi)", value: charNoSpaces },
-    { label: "Kata", value: wordCount },
-    { label: "Kalimat", value: sentenceCount },
-    { label: "Paragraf", value: paragraphCount },
+    { label: t('word_counter.stat_char'), value: charCount },
+    { label: t('word_counter.stat_char_no_space'), value: charNoSpaces },
+    { label: t('word_counter.stat_word'), value: wordCount },
+    { label: t('word_counter.stat_sentence'), value: sentenceCount },
+    { label: t('word_counter.stat_paragraph'), value: paragraphCount },
   ];
-
-  const meta = toolsMetadata.wordcounter;
 
   return (
     <ToolPageLayout
       toolNumber="07"
-      title="Word Counter"
-      subtitle="Hitung Kata & Karakter"
-      description="Hitung jumlah kata, karakter, kalimat, dan estimasi waktu baca teks Anda."
+      title={t('tool_items.word_counter.title')}
+      subtitle={t('word_counter.title')}
+      description={t('tool_items.word_counter.desc')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('word_counter.meta.title')}
+        description={t('word_counter.meta.description')}
+        path="/tools/word-counter"
+        keywords={t('word_counter.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Input Area */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Masukkan Teks
+            {t('word_counter.label_input')}
           </label>
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Ketik atau tempel teks di sini..."
+            placeholder={t('word_counter.placeholder_input')}
             className="min-h-[200px] resize-none font-body"
           />
         </div>
@@ -99,19 +99,19 @@ const WordCounter = () => {
         {/* Reading Time */}
         <div className="rounded-lg border border-border bg-secondary/30 p-4">
           <h3 className="mb-2 font-display text-sm font-semibold text-foreground">
-            Estimasi Waktu
+            {t('word_counter.est_time')}
           </h3>
           <div className="flex gap-6 text-sm">
             <div>
-              <span className="text-muted-foreground">Baca: </span>
+              <span className="text-muted-foreground">{t('word_counter.read')}: </span>
               <span className="font-medium text-foreground">
-                {readingTime} menit
+                {readingTime} {t('word_counter.min')}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground">Bicara: </span>
+              <span className="text-muted-foreground">{t('word_counter.speak')}: </span>
               <span className="font-medium text-foreground">
-                {speakingTime} menit
+                {speakingTime} {t('word_counter.min')}
               </span>
             </div>
           </div>
@@ -129,7 +129,7 @@ const WordCounter = () => {
             ) : (
               <Copy className="mr-2 h-4 w-4" />
             )}
-            {copied ? "Tersalin!" : "Salin Teks"}
+            {copied ? t('word_counter.btn_copied') : t('word_counter.btn_copy')}
           </Button>
           <Button
             variant="outline"
@@ -137,7 +137,7 @@ const WordCounter = () => {
             disabled={!text.trim()}
           >
             <RotateCcw className="mr-2 h-4 w-4" />
-            Reset
+            {t('word_counter.btn_reset')}
           </Button>
         </div>
       </div>

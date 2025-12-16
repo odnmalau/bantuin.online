@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+
 import { 
   MessageCircle, ImageDown, Camera, Files, QrCode, Type, FileText, Cake, 
   Braces, Image, Images, ArrowRight, KeyRound, Palette, Text, ArrowLeftRight, 
@@ -13,8 +15,9 @@ import { ToolGridSkeleton } from "@/components/ToolCardSkeleton";
 type Category = "all" | "media" | "document" | "text" | "utility" | "developer" | "fun";
 
 interface Tool {
-  title: string;
-  description: string;
+  id: string; // key for translation
+  title: string; // fallback
+  description: string; // fallback
   icon: React.ElementType;
   href: string;
   category: Category;
@@ -22,6 +25,7 @@ interface Tool {
 
 const tools: Tool[] = [
   {
+    id: "whatsapp",
     title: "WhatsApp Link",
     description: "Buat link WhatsApp chat dengan pesan siap pakai",
     icon: MessageCircle,
@@ -29,6 +33,7 @@ const tools: Tool[] = [
     category: "utility",
   },
   {
+    id: "compress",
     title: "Kompres Foto",
     description: "Kompres ukuran foto tanpa kehilangan kualitas",
     icon: ImageDown,
@@ -36,6 +41,7 @@ const tools: Tool[] = [
     category: "media",
   },
   {
+    id: "pas_foto",
     title: "Pas Foto",
     description: "Buat pas foto ukuran standar (2x3, 3x4, 4x6)",
     icon: Camera,
@@ -43,6 +49,7 @@ const tools: Tool[] = [
     category: "media",
   },
   {
+    id: "pdf_merge",
     title: "Gabung PDF",
     description: "Gabungkan beberapa PDF jadi satu file",
     icon: Files,
@@ -50,6 +57,7 @@ const tools: Tool[] = [
     category: "document",
   },
   {
+    id: "qr_code",
     title: "QR Code",
     description: "Buat QR code dari teks atau URL secara instan",
     icon: QrCode,
@@ -57,6 +65,7 @@ const tools: Tool[] = [
     category: "utility",
   },
   {
+    id: "text_case",
     title: "Text Case",
     description: "Ubah huruf besar/kecil, title case, dan lainnya",
     icon: Type,
@@ -64,6 +73,7 @@ const tools: Tool[] = [
     category: "text",
   },
   {
+    id: "word_counter",
     title: "Hitung Kata",
     description: "Hitung kata, karakter, dan estimasi waktu baca",
     icon: FileText,
@@ -71,6 +81,7 @@ const tools: Tool[] = [
     category: "text",
   },
   {
+    id: "age_calculator",
     title: "Kalkulator Usia",
     description: "Hitung usia lengkap dari tanggal lahir",
     icon: Cake,
@@ -78,6 +89,7 @@ const tools: Tool[] = [
     category: "utility",
   },
   {
+    id: "json_formatter",
     title: "JSON Formatter",
     description: "Format, minify, dan validasi JSON dengan mudah",
     icon: Braces,
@@ -85,6 +97,7 @@ const tools: Tool[] = [
     category: "developer",
   },
   {
+    id: "image_to_base64",
     title: "Image to Base64",
     description: "Konversi gambar ke Base64 string",
     icon: Image,
@@ -92,6 +105,7 @@ const tools: Tool[] = [
     category: "developer",
   },
   {
+    id: "screenshot_to_pdf",
     title: "Screenshot to PDF",
     description: "Gabung beberapa screenshot menjadi satu PDF",
     icon: Images,
@@ -99,6 +113,7 @@ const tools: Tool[] = [
     category: "document",
   },
   {
+    id: "password_generator",
     title: "Password Generator",
     description: "Buat password acak yang kuat dan aman",
     icon: KeyRound,
@@ -106,6 +121,7 @@ const tools: Tool[] = [
     category: "utility",
   },
   {
+    id: "color_picker",
     title: "Color Picker",
     description: "Pilih warna dan konversi ke berbagai format",
     icon: Palette,
@@ -113,6 +129,7 @@ const tools: Tool[] = [
     category: "developer",
   },
   {
+    id: "lorem_ipsum",
     title: "Lorem Ipsum",
     description: "Generate teks placeholder untuk desain",
     icon: Text,
@@ -120,6 +137,7 @@ const tools: Tool[] = [
     category: "text",
   },
   {
+    id: "unit_converter",
     title: "Unit Converter",
     description: "Konversi satuan panjang, berat, suhu, dan lainnya",
     icon: ArrowLeftRight,
@@ -127,6 +145,7 @@ const tools: Tool[] = [
     category: "utility",
   },
   {
+    id: "invoice_generator",
     title: "Invoice Generator",
     description: "Buat nota penjualan sederhana dan ekspor ke PDF",
     icon: Receipt,
@@ -134,6 +153,7 @@ const tools: Tool[] = [
     category: "document",
   },
   {
+    id: "random_picker",
     title: "Kocok Arisan",
     description: "Pilih pemenang arisan atau doorprize secara acak",
     icon: Shuffle,
@@ -141,6 +161,7 @@ const tools: Tool[] = [
     category: "fun",
   },
   {
+    id: "terbilang",
     title: "Terbilang",
     description: "Konversi angka menjadi teks terbilang Indonesia",
     icon: Hash,
@@ -148,6 +169,7 @@ const tools: Tool[] = [
     category: "utility",
   },
   {
+    id: "signature_pad",
     title: "Tanda Tangan Digital",
     description: "Buat tanda tangan PNG transparan untuk dokumen",
     icon: PenTool,
@@ -155,6 +177,7 @@ const tools: Tool[] = [
     category: "document",
   },
   {
+    id: "image_converter",
     title: "Image Converter",
     description: "Konversi format gambar WebP, PNG, JPG",
     icon: FileImage,
@@ -162,6 +185,7 @@ const tools: Tool[] = [
     category: "media",
   },
   {
+    id: "watermark",
     title: "Watermark Foto",
     description: "Tambahkan watermark teks atau logo ke foto",
     icon: Stamp,
@@ -169,6 +193,7 @@ const tools: Tool[] = [
     category: "media",
   },
   {
+    id: "diff_checker",
     title: "Diff Checker",
     description: "Bandingkan dua teks dan lihat perbedaannya",
     icon: GitCompare,
@@ -177,17 +202,18 @@ const tools: Tool[] = [
   },
 ];
 
-const categories: { value: Category; label: string }[] = [
-  { value: "all", label: "Semua" },
-  { value: "fun", label: "🎲 Fun" },
-  { value: "media", label: "📸 Media" },
-  { value: "document", label: "📄 Dokumen" },
-  { value: "text", label: "🔤 Teks" },
-  { value: "utility", label: "🧮 Utilitas" },
-  { value: "developer", label: "💻 Developer" },
+const categories: { value: Category }[] = [
+  { value: "all" },
+  { value: "fun" },
+  { value: "media" },
+  { value: "document" },
+  { value: "text" },
+  { value: "utility" },
+  { value: "developer" },
 ];
 
 const ToolsGrid = () => {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
 
   const [activeCategory, setActiveCategory] = useState<Category>("all");
@@ -229,7 +255,7 @@ const ToolsGrid = () => {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Cari tools..."
+              placeholder={t('tools.search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 pr-10"
@@ -256,7 +282,7 @@ const ToolsGrid = () => {
                     : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                 }`}
               >
-                {cat.label}
+                {t(`categories.${cat.value}`)}
               </button>
             ))}
           </div>
@@ -267,7 +293,7 @@ const ToolsGrid = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  <span>Terakhir digunakan</span>
+                  <span>{t('tools.recent')}</span>
                 </div>
                 <Button
                   variant="ghost"
@@ -276,7 +302,7 @@ const ToolsGrid = () => {
                   className="h-8 text-xs text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="mr-1 h-3 w-3" />
-                  Hapus
+                  {t('tools.clear')}
                 </Button>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -288,7 +314,7 @@ const ToolsGrid = () => {
                     className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-secondary/50"
                   >
                     <tool.icon className="h-4 w-4 text-primary" />
-                    <span className="text-foreground">{tool.title}</span>
+                    <span className="text-foreground">{t(`tool_items.${tool.id}.title`)}</span>
                   </Link>
                 ))}
               </div>
@@ -312,11 +338,11 @@ const ToolsGrid = () => {
                       <div className="mb-2 flex items-center gap-3">
                         <tool.icon className="h-5 w-5 text-primary" />
                         <h3 className="font-display text-lg font-semibold text-foreground md:text-xl">
-                          {tool.title}
+                          {t(`tool_items.${tool.id}.title`)}
                         </h3>
                       </div>
                       <p className="font-body text-sm leading-relaxed text-muted-foreground">
-                        {tool.description}
+                        {t(`tool_items.${tool.id}.desc`)}
                       </p>
                     </div>
                     <ArrowRight className="h-5 w-5 text-muted-foreground transition-all duration-200 group-hover:translate-x-1 group-hover:text-primary" />
@@ -327,9 +353,9 @@ const ToolsGrid = () => {
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
-              <h3 className="text-lg font-semibold text-foreground">Tidak ada hasil</h3>
+              <h3 className="text-lg font-semibold text-foreground">{t('tools.no_result')}</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Coba kata kunci lain atau reset filter
+                {t('tools.try_other')}
               </p>
               <Button
                 variant="outline"
@@ -340,7 +366,7 @@ const ToolsGrid = () => {
                 }}
                 className="mt-4"
               >
-                Reset Filter
+                {t('tools.reset_filter')}
               </Button>
             </div>
           )}

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
+
 import { Download, Copy, QrCode } from "lucide-react";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { Input } from "@/components/ui/input";
@@ -7,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 const sizes = [
   { label: "Kecil", value: 128 },
@@ -16,6 +17,7 @@ const sizes = [
 ] as const;
 
 const QRCodeGenerator = () => {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [size, setSize] = useState<128 | 256 | 512>(256);
   const [fgColor, setFgColor] = useState("#000000");
@@ -25,7 +27,7 @@ const QRCodeGenerator = () => {
 
   useEffect(() => {
     if (!text.trim()) {
-      setQrDataUrl("");
+      if (qrDataUrl) setQrDataUrl("");
       return;
     }
 
@@ -53,8 +55,8 @@ const QRCodeGenerator = () => {
     link.href = qrDataUrl;
     link.click();
     toast({
-      title: "Berhasil!",
-      description: "QR Code berhasil diunduh",
+      title: t('qrcode.toast_success'),
+      description: t('qrcode.toast_download_desc'),
     });
   };
 
@@ -66,41 +68,39 @@ const QRCodeGenerator = () => {
         new ClipboardItem({ "image/png": blob }),
       ]);
       toast({
-        title: "Berhasil!",
-        description: "QR Code disalin ke clipboard",
+        title: t('qrcode.toast_success'),
+        description: t('qrcode.toast_copy_desc'),
       });
     } catch {
       toast({
-        title: "Gagal menyalin",
-        description: "Browser tidak mendukung fitur ini",
+        title: t('qrcode.toast_copy_fail'),
+        description: t('qrcode.toast_copy_fail_desc'),
         variant: "destructive",
       });
     }
   };
 
-  const meta = toolsMetadata.qrcode;
-
   return (
     <ToolPageLayout
       toolNumber="05"
-      title="QR Code"
-      subtitle="Generator"
-      description="Buat QR code dari teks atau URL secara instan. 100% diproses di browser, data kamu aman."
+      title={t('tool_items.qr_code.title')}
+      subtitle={t('qrcode.subtitle')}
+      description={t('tool_items.qr_code.desc')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('qrcode.meta.title')}
+        description={t('qrcode.meta.description')}
+        path="/tools/qrcode"
+        keywords={t('qrcode.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Input Text/URL */}
         <div className="space-y-2">
-          <Label htmlFor="qr-text">Teks atau URL</Label>
+          <Label htmlFor="qr-text">{t('qrcode.label_text')}</Label>
           <Input
             id="qr-text"
             type="text"
-            placeholder="Masukkan teks atau URL..."
+            placeholder={t('qrcode.placeholder_text')}
             value={text}
             onChange={(e) => setText(e.target.value)}
             className="text-base"
@@ -109,7 +109,7 @@ const QRCodeGenerator = () => {
 
         {/* Size Options */}
         <div className="space-y-2">
-          <Label>Ukuran</Label>
+          <Label>{t('qrcode.label_size')}</Label>
           <div className="flex gap-2">
             {sizes.map((s) => (
               <Button
@@ -118,7 +118,7 @@ const QRCodeGenerator = () => {
                 size="sm"
                 onClick={() => setSize(s.value)}
               >
-                {s.label}
+                {t(s.label === "Kecil" ? 'qrcode.size_small' : s.label === "Sedang" ? 'qrcode.size_medium' : 'qrcode.size_large')}
               </Button>
             ))}
           </div>
@@ -127,7 +127,7 @@ const QRCodeGenerator = () => {
         {/* Color Options */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="fg-color">Warna QR</Label>
+            <Label htmlFor="fg-color">{t('qrcode.label_color_qr')}</Label>
             <div className="flex items-center gap-2">
               <input
                 id="fg-color"
@@ -142,7 +142,7 @@ const QRCodeGenerator = () => {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="bg-color">Warna Background</Label>
+            <Label htmlFor="bg-color">{t('qrcode.label_color_bg')}</Label>
             <div className="flex items-center gap-2">
               <input
                 id="bg-color"
@@ -174,7 +174,7 @@ const QRCodeGenerator = () => {
             >
               <div className="text-center text-muted-foreground">
                 <QrCode className="mx-auto mb-2 h-12 w-12 opacity-50" />
-                <p className="text-sm">Masukkan teks untuk generate QR</p>
+                <p className="text-sm">{t('qrcode.empty_state')}</p>
               </div>
             </div>
           )}
@@ -188,7 +188,7 @@ const QRCodeGenerator = () => {
             className="flex-1"
           >
             <Download className="mr-2 h-4 w-4" />
-            Download PNG
+            {t('qrcode.btn_download')}
           </Button>
           <Button
             onClick={handleCopy}
@@ -197,7 +197,7 @@ const QRCodeGenerator = () => {
             className="flex-1"
           >
             <Copy className="mr-2 h-4 w-4" />
-            Salin
+            {t('qrcode.btn_copy')}
           </Button>
         </div>
       </div>

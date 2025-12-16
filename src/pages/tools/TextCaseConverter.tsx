@@ -1,13 +1,14 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Type, Copy, RotateCcw, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import ToolPageLayout from "@/components/ToolPageLayout";
 import { SEOHead } from "@/components/SEOHead";
-import { toolsMetadata } from "@/data/toolsMetadata";
 
 const TextCaseConverter = () => {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -15,8 +16,8 @@ const TextCaseConverter = () => {
   const convertCase = (type: string) => {
     if (!text.trim()) {
       toast({
-        title: "Teks kosong",
-        description: "Masukkan teks terlebih dahulu",
+        title: t('text_case.toast_empty'),
+        description: t('text_case.toast_empty_desc'),
         variant: "destructive",
       });
       return;
@@ -71,8 +72,8 @@ const TextCaseConverter = () => {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     toast({
-      title: "Tersalin!",
-      description: "Teks berhasil disalin ke clipboard",
+      title: t('text_case.toast_copied'),
+      description: t('text_case.toast_copied_desc'),
     });
     setTimeout(() => setCopied(false), 2000);
   };
@@ -91,42 +92,40 @@ const TextCaseConverter = () => {
     { type: "kebab", label: "kebab-case" },
   ];
 
-  const meta = toolsMetadata.textcase;
-
   return (
     <ToolPageLayout
       toolNumber="06"
-      title="Text Case Converter"
-      subtitle="Ubah Format Huruf"
-      description="Ubah teks ke berbagai format huruf: UPPERCASE, lowercase, Title Case, dan lainnya."
+      title={t('text_case.title')}
+      subtitle={t('text_case.subtitle')}
+      description={t('text_case.desc_page')}
     >
       <SEOHead 
-        title={meta.title}
-        description={meta.description}
-        path={meta.path}
-        keywords={meta.keywords}
+        title={t('text_case.meta.title')}
+        description={t('text_case.meta.description')}
+        path="/tools/text-case"
+        keywords={t('text_case.meta.keywords', { returnObjects: true }) as string[]}
       />
       <div className="space-y-6">
         {/* Input Area */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Masukkan Teks
+            {t('text_case.label_input')}
           </label>
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Ketik atau tempel teks di sini..."
+            placeholder={t('text_case.placeholder_input')}
             className="min-h-[200px] resize-none font-body"
           />
           <p className="text-xs text-muted-foreground">
-            {text.length} karakter
+            {text.length} {t('text_case.text_chars')}
           </p>
         </div>
 
         {/* Case Buttons */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Pilih Format
+            {t('text_case.label_select')}
           </label>
           <div className="flex flex-wrap gap-2">
             {caseButtons.map((btn) => (
@@ -155,7 +154,7 @@ const TextCaseConverter = () => {
             ) : (
               <Copy className="mr-2 h-4 w-4" />
             )}
-            {copied ? "Tersalin!" : "Salin Teks"}
+            {copied ? t('text_case.btn_copied') : t('text_case.btn_copy')}
           </Button>
           <Button
             variant="outline"
@@ -163,7 +162,7 @@ const TextCaseConverter = () => {
             disabled={!text.trim()}
           >
             <RotateCcw className="mr-2 h-4 w-4" />
-            Reset
+            {t('text_case.btn_reset')}
           </Button>
         </div>
       </div>
