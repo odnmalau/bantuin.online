@@ -1,7 +1,7 @@
 {
 	"name": "bantuin.online",
 	"private": true,
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "A collection of free tools for your daily needs. Compress photos, create passport photos, merge PDFs, and more.",
 	"homepage": "https://bantuin.online",
 	"repository": {
