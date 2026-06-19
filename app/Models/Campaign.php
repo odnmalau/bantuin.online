@@ -1,0 +1,153 @@
+<?php
+
+namespace App\Models;
+
+use App\CampaignStatus;
+use Database\Factories\CampaignFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+#[Fillable([
+    'created_by',
+    'title',
+    'role_title',
+    'seniority',
+    'job_description',
+    'required_skills',
+    'nice_to_have_skills',
+    'language',
+    'threshold_score',
+    'ranking_weights',
+    'status',
+    'ai_generation_notes',
+    'ai_generation_audit',
+    'activated_at',
+])]
+class Campaign extends Model
+{
+    /** @use HasFactory<CampaignFactory> */
+    use HasFactory;
+
+    /**
+     * Get the admin that created the campaign.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Get the campaign sections.
+     *
+     * @return HasMany<CampaignSection, $this>
+     */
+    public function sections(): HasMany
+    {
+        return $this->hasMany(CampaignSection::class);
+    }
+
+    /**
+     * Get the campaign questions.
+     *
+     * @return HasMany<CampaignQuestion, $this>
+     */
+    public function questions(): HasMany
+    {
+        return $this->hasMany(CampaignQuestion::class);
+    }
+
+    /**
+     * Get assessments submitted for the campaign.
+     *
+     * @return HasMany<Assessment, $this>
+     */
+    public function assessments(): HasMany
+    {
+        return $this->hasMany(Assessment::class);
+    }
+
+    /**
+     * Get exam invitations for this campaign.
+     *
+     * @return HasMany<CampaignInvitation, $this>
+     */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(CampaignInvitation::class);
+    }
+
+    /**
+     * @return array{resume_score: int, essay_score: int, mcq_score: int}
+     */
+    public static function defaultRankingWeights(): array
+    {
+        return self::normalizeRankingWeights(config('assessment.ranking.weights', []));
+    }
+
+    /**
+     * @return array{resume_score: int, essay_score: int, mcq_score: int}
+     */
+    public function resolvedRankingWeights(): array
+    {
+        if ($this->hasConfiguredRankingWeights()) {
+            return self::normalizeRankingWeights($this->ranking_weights ?? []);
+        }
+
+        return self::defaultRankingWeights();
+    }
+
+    public function hasConfiguredRankingWeights(): bool
+    {
+        if (! is_array($this->ranking_weights)) {
+            return false;
+        }
+
+        return self::rankingWeightsTotal($this->ranking_weights) === 100;
+    }
+
+    /**
+     * @param  array<string, mixed>  $weights
+     */
+    public static function rankingWeightsTotal(array $weights): int
+    {
+        return max(0, (int) ($weights['resume_score'] ?? 0))
+            + max(0, (int) ($weights['essay_score'] ?? 0))
+            + max(0, (int) ($weights['mcq_score'] ?? 0));
+    }
+
+    /**
+     * @param  array<string, mixed>  $weights
+     * @return array{resume_score: int, essay_score: int, mcq_score: int}
+     */
+    public static function normalizeRankingWeights(array $weights): array
+    {
+        return [
+            'resume_score' => max(0, (int) ($weights['resume_score'] ?? 35)),
+            'essay_score' => max(0, (int) ($weights['essay_score'] ?? 50)),
+            'mcq_score' => max(0, (int) ($weights['mcq_score'] ?? 15)),
+        ];
+    }
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'required_skills' => 'array',
+            'nice_to_have_skills' => 'array',
+            'threshold_score' => 'integer',
+            'ranking_weights' => 'array',
+            'ai_generation_audit' => 'array',
+            'status' => CampaignStatus::class,
+            'activated_at' => 'datetime',
+        ];
+    }
+}
