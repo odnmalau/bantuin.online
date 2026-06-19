@@ -41,7 +41,19 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
-            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'sidebarOpen' => $this->sidebarOpen($request),
+            'authFeatures' => [
+                'google' => filled(config('services.google.client_id')),
+            ],
         ];
+    }
+
+    private function sidebarOpen(Request $request): bool
+    {
+        if (! $request->hasCookie('sidebar_state')) {
+            return true;
+        }
+
+        return $request->cookie('sidebar_state') === 'true';
     }
 }
