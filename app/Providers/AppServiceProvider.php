@@ -2,28 +2,37 @@
 
 namespace App\Providers;
 
+use App\Ai\Providers\QwenProvider;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Ai\Ai;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
-    public function register(): void
-    {
-        //
-    }
-
     /**
      * Bootstrap any application services.
      */
     public function boot(): void
     {
+        $this->configureAi();
         $this->configureDefaults();
+    }
+
+    /**
+     * Configure application AI providers.
+     */
+    protected function configureAi(): void
+    {
+        Ai::extend('qwen', fn ($app, array $config): QwenProvider => new QwenProvider(
+            $config,
+            $app->make(Dispatcher::class),
+            $app->make(HttpFactory::class),
+        ));
     }
 
     /**
@@ -31,20 +40,25 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureDefaults(): void
     {
+        $isProduction = app()->isProduction();
+
         Date::use(CarbonImmutable::class);
 
         DB::prohibitDestructiveCommands(
-            app()->isProduction(),
+            $isProduction,
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
+        Password::defaults(function () use ($isProduction): ?Password {
+            if (! $isProduction) {
+                return null;
+            }
+
+            return Password::min(12)
                 ->mixedCase()
                 ->letters()
                 ->numbers()
                 ->symbols()
-                ->uncompromised()
-            : null,
-        );
+                ->uncompromised();
+        });
     }
 }
