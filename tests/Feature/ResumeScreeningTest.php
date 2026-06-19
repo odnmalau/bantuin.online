@@ -1,0 +1,240 @@
+<?php
+
+use App\Ai\Agents\ResumeScreeningAgent;
+use App\AssessmentStatus;
+use App\Jobs\ScreenResumeWithAi;
+use App\Models\Assessment;
+use App\Models\Campaign;
+use App\Models\CampaignQuestion;
+use App\Models\CampaignSection;
+use App\Models\User;
+use App\Services\Ai\QwenResumeScreener;
+use App\Services\Ai\ResumeScreeningException;
+use App\Services\ResumeTextExtractor;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+
+beforeEach(function () {
+    $this->withoutVite();
+    config()->set('ai.providers.qwen.key', 'test-qwen-key');
+    config()->set('ai.providers.qwen.url', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1');
+    config()->set('assessment.qwen.model', 'qwen3.7-plus');
+});
+
+test('resume text extractor reads literal text from stored pdf', function () {
+    Storage::fake('local');
+    Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Laravel PostgreSQL queues experience'));
+
+    $text = app(ResumeTextExtractor::class)->extract('resumes/resume.pdf');
+
+    expect($text)->toContain('Laravel PostgreSQL queues experience');
+});
+
+test('resume screening job stores extracted text and qwen result', function () {
+    Storage::fake('local');
+    Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Laravel PostgreSQL queues experience'));
+
+    ResumeScreeningAgent::fake([
+        resumeScreeningOutput(),
+    ]);
+
+    $candidate = User::factory()->candidate()->create();
+    $campaign = Campaign::factory()->create([
+        'role_title' => 'Backend Engineer',
+        'required_skills' => ['Laravel', 'PostgreSQL', 'Queues'],
+    ]);
+    $assessment = Assessment::factory()
+        ->for($candidate)
+        ->for($campaign)
+        ->create([
+            'resume_path' => 'resumes/resume.pdf',
+            'resume_original_name' => 'resume.pdf',
+            'resume_text' => null,
+            'resume_score' => null,
+            'resume_payload' => null,
+            'status' => AssessmentStatus::Submitted,
+        ]);
+
+    app()->call([(new ScreenResumeWithAi($assessment)), 'handle']);
+
+    $assessment->refresh();
+
+    expect($assessment)
+        ->status->toBe(AssessmentStatus::Submitted)
+        ->resume_text->toContain('Laravel PostgreSQL queues experience')
+        ->resume_score->toBe(84)
+        ->resume_justification->toContain('Laravel')
+        ->needs_manual_review->toBeFalse()
+        ->and($assessment->resume_payload)
+        ->toMatchArray([
+            'summary' => 'Candidate shows practical Laravel backend experience.',
+            'matched_skills' => ['Laravel', 'PostgreSQL', 'Queues'],
+            'missing_skills' => ['Kubernetes'],
+            'risk_flags' => [],
+            'interview_probes' => ['Ask about queue failure handling.'],
+            'confidence' => 82,
+        ]);
+
+    ResumeScreeningAgent::assertPrompted(fn ($prompt): bool => str_contains($prompt->prompt, 'Backend Engineer')
+        && str_contains($prompt->prompt, 'Laravel PostgreSQL queues experience')
+        && str_contains($prompt->prompt, 'protected_attributes'));
+});
+
+test('resume screening job marks low confidence for manual review', function () {
+    Storage::fake('local');
+    Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Sparse resume text only'));
+
+    ResumeScreeningAgent::fake([
+        array_merge(resumeScreeningOutput(), [
+            'resume_score' => 62,
+            'confidence' => 42,
+            'summary' => 'Resume evidence is thin for the target role.',
+            'justification' => 'Limited technical detail reduces screening confidence.',
+        ]),
+    ]);
+
+    $assessment = Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for(Campaign::factory())
+        ->create([
+            'resume_path' => 'resumes/resume.pdf',
+            'resume_original_name' => 'resume.pdf',
+            'status' => AssessmentStatus::Submitted,
+        ]);
+
+    app()->call([(new ScreenResumeWithAi($assessment)), 'handle']);
+
+    expect($assessment->refresh())
+        ->needs_manual_review->toBeTrue()
+        ->and($assessment->resume_payload['confidence'])->toBe(42);
+});
+
+test('qwen resume screener requires configured api key', function () {
+    config()->set('ai.providers.qwen.key', null);
+
+    $assessment = Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for(Campaign::factory())
+        ->create([
+            'resume_original_name' => 'resume.pdf',
+            'resume_text' => 'Laravel PostgreSQL backend engineer.',
+        ]);
+
+    expect(fn () => app(QwenResumeScreener::class)->screen($assessment))
+        ->toThrow(ResumeScreeningException::class, 'Qwen API key is not configured.');
+});
+
+test('qwen resume screener uses json object mode through qwen provider', function () {
+    Http::fake([
+        'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions' => Http::response([
+            'choices' => [
+                [
+                    'message' => [
+                        'content' => json_encode(resumeScreeningOutput()),
+                    ],
+                ],
+            ],
+            'usage' => [
+                'prompt_tokens' => 180,
+                'completion_tokens' => 120,
+            ],
+        ]),
+    ]);
+
+    $campaign = Campaign::factory()->create([
+        'role_title' => 'Backend Engineer',
+        'required_skills' => ['Laravel', 'PostgreSQL'],
+    ]);
+    $assessment = Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for($campaign)
+        ->create([
+            'resume_original_name' => 'resume.pdf',
+            'resume_text' => 'Laravel PostgreSQL backend engineer.',
+        ]);
+
+    $result = app(QwenResumeScreener::class)->screen($assessment);
+
+    expect($result)
+        ->score->toBe(84)
+        ->summary->toContain('Laravel backend');
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions'
+        && $request['model'] === 'qwen3.7-plus'
+        && $request->hasHeader('Authorization', 'Bearer test-qwen-key')
+        && data_get($request->data(), 'response_format.type') === 'json_object'
+        && data_get($request->data(), 'enable_thinking') === false
+        && ! array_key_exists('max_tokens', $request->data())
+        && str_contains(data_get($request->data(), 'messages.0.content'), 'JSON')
+        && str_contains(data_get($request->data(), 'messages.1.content'), 'Laravel PostgreSQL backend engineer.')
+        && str_contains(data_get($request->data(), 'messages.1.content'), 'protected_attributes'));
+});
+
+test('candidate resume upload must be a pdf', function () {
+    Bus::fake();
+    Storage::fake('local');
+
+    $candidate = User::factory()->candidate()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $question = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create();
+
+    $this->actingAs($candidate)
+        ->from(route('candidate.campaigns.exam', $campaign))
+        ->post(route('candidate.campaigns.assessments.store', $campaign), [
+            'resume' => UploadedFile::fake()->createWithContent('resume.txt', 'plain text resume'),
+            'answers' => [
+                $question->id => 'Answered.',
+            ],
+        ])
+        ->assertSessionHasErrors('resume')
+        ->assertRedirect(route('candidate.campaigns.exam', $campaign));
+
+    expect(Assessment::query()->whereBelongsTo($candidate)->exists())->toBeFalse();
+    Bus::assertNothingDispatched();
+});
+
+test('candidate assessment response does not expose resume path or qwen key', function () {
+    config()->set('ai.providers.qwen.key', 'secret-qwen-token');
+
+    $candidate = User::factory()->candidate()->create();
+    $assessment = Assessment::factory()
+        ->for($candidate)
+        ->create([
+            'resume_path' => 'resumes/private-resume.pdf',
+            'resume_original_name' => 'resume.pdf',
+            'resume_text' => 'Private resume text.',
+            'resume_score' => 84,
+            'status' => AssessmentStatus::Submitted,
+        ]);
+
+    $this->actingAs($candidate)
+        ->get(route('candidate.assessments.show', $assessment))
+        ->assertOk()
+        ->assertSee('resume.pdf')
+        ->assertDontSee('resumes/private-resume.pdf', false)
+        ->assertDontSee('secret-qwen-token', false);
+});
+
+/**
+ * @return array<string, mixed>
+ */
+function resumeScreeningOutput(): array
+{
+    return [
+        'resume_score' => 84,
+        'summary' => 'Candidate shows practical Laravel backend experience.',
+        'matched_skills' => ['Laravel', 'PostgreSQL', 'Queues'],
+        'missing_skills' => ['Kubernetes'],
+        'risk_flags' => [],
+        'interview_probes' => ['Ask about queue failure handling.'],
+        'confidence' => 82,
+        'justification' => 'Resume evidence aligns with Laravel, PostgreSQL, and queue experience.',
+    ];
+}
