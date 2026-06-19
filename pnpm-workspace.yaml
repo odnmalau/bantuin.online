@@ -4,5 +4,8 @@ packages:
 allowBuilds:
   unrs-resolver: true
 
+minimumReleaseAgeExclude:
+  - concurrently@9.2.3
+
 publicHoistPattern:
   - '@inertiajs/core'
