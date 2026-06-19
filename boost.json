@@ -10,8 +10,9 @@
     "nightwatch": false,
     "sail": false,
     "skills": [
-        "fortify-development",
+        "ai-sdk-development",
         "laravel-best-practices",
+        "socialite-development",
         "wayfinder-development",
         "pest-testing",
         "inertia-react-development",
