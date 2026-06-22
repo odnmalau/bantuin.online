@@ -44,8 +44,10 @@ expect()->extend('toBeOne', function () {
 |
 */
 
+use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignInvitation;
+use App\Models\ExamSession;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Laravel\Socialite\Contracts\Provider as SocialiteProvider;
@@ -105,6 +107,53 @@ function assignCandidateToCampaignExam(User $candidate, Campaign $campaign, ?Use
         ->create([
             'invited_by' => $admin->id,
         ]);
+}
+
+function startCandidateExamSession(User $candidate, Campaign $campaign): ExamSession
+{
+    test()
+        ->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.store', $campaign))
+        ->assertRedirect(route('candidate.campaigns.exam', $campaign));
+
+    return ExamSession::query()
+        ->where('user_id', $candidate->id)
+        ->where('campaign_id', $campaign->id)
+        ->firstOrFail();
+}
+
+/**
+ * @param  array<int|string, string>  $answers
+ */
+function submitCandidateAssessmentViaExamSession(
+    User $candidate,
+    Campaign $campaign,
+    array $answers,
+    ?UploadedFile $resume = null,
+): Assessment {
+    $resume ??= resumePdfUpload();
+    $session = startCandidateExamSession($candidate, $campaign);
+
+    test()->actingAs($candidate)
+        ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session]), [
+            'answers' => $answers,
+        ])
+        ->assertRedirect();
+
+    test()->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.advance', [$campaign, $session->fresh()]))
+        ->assertRedirect();
+
+    test()->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]), [
+            'resume' => $resume,
+        ])
+        ->assertRedirect();
+
+    return Assessment::query()
+        ->where('user_id', $candidate->id)
+        ->where('campaign_id', $campaign->id)
+        ->sole();
 }
 
 function fakeGoogleAuthConfig(): void

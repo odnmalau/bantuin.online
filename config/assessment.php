@@ -29,4 +29,12 @@ return [
             'mcq_score' => (int) env('ASSESSMENT_RANKING_MCQ_WEIGHT', 15),
         ],
     ],
+
+    'secure_exam' => [
+        'require_fullscreen' => (bool) env('ASSESSMENT_EXAM_REQUIRE_FULLSCREEN', true),
+        'max_integrity_warnings' => (int) env('ASSESSMENT_EXAM_MAX_INTEGRITY_WARNINGS', 3),
+        'auto_submit_on_max_warnings' => (bool) env('ASSESSMENT_EXAM_AUTO_SUBMIT_ON_MAX_WARNINGS', true),
+        'block_copy_paste' => (bool) env('ASSESSMENT_EXAM_BLOCK_COPY_PASTE', true),
+        'enforce_section_timers' => (bool) env('ASSESSMENT_EXAM_ENFORCE_SECTION_TIMERS', true),
+    ],
 ];

@@ -227,14 +227,9 @@ test('candidate submission and resume screening record timeline events', functio
             'type' => QuestionType::LongText,
         ]);
 
-    $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.assessments.store', $campaign), [
-            'resume' => resumePdfUpload(),
-            'answers' => [
-                $question->id => 'Answer with enough detail for the rubric.',
-            ],
-        ])
-        ->assertRedirect();
+    submitCandidateAssessmentViaExamSession($candidate, $campaign, [
+        $question->id => 'Answer with enough detail for the rubric.',
+    ]);
 
     $assessment = Assessment::query()->whereBelongsTo($candidate)->sole();
 

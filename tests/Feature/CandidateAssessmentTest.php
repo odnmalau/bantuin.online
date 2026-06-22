@@ -66,10 +66,9 @@ test('candidate can view active campaign questions when assigned', function () {
             ->where('sections.0.description', 'Answer all questions in order before submitting.')
             ->where('sections.0.duration_minutes', 30)
             ->where('sections.0.question_count', 1)
-            ->has('questions', 1)
-            ->where('questions.0.id', $activeQuestion->id)
-            ->where('questions.0.content', 'Active campaign question')
-            ->where('questions.0.type', QuestionType::LongText->value)
+            ->where('examSession', null)
+            ->where('currentSection', null)
+            ->has('questions', 0)
             ->where('assessment', null),
         );
 });
@@ -93,6 +92,8 @@ test('candidate exam exposes sanitized matching pairs prompts and choices', func
             'expected_rubric' => null,
             'status' => QuestionStatus::Approved,
         ]);
+
+    startCandidateExamSession($candidate, $campaign);
 
     $this->actingAs($candidate)
         ->get(route('candidate.campaigns.exam', $campaign))
@@ -196,13 +197,24 @@ test('candidate can submit an assessment for an active campaign', function () {
             'status' => QuestionStatus::Draft,
         ]);
 
-    $response = $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.assessments.store', $campaign), [
-            'resume' => resumePdfUpload(),
+    $session = startCandidateExamSession($candidate, $campaign);
+
+    $this->actingAs($candidate)
+        ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session]), [
             'answers' => [
                 $firstQuestion->id => 'PostgreSQL',
                 $secondQuestion->id => 'Dependency injection passes collaborators from the outside.',
             ],
+        ])
+        ->assertRedirect();
+
+    $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.advance', [$campaign, $session->fresh()]))
+        ->assertRedirect();
+
+    $response = $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]), [
+            'resume' => resumePdfUpload(),
         ]);
 
     $assessment = Assessment::query()->whereBelongsTo($candidate)->sole();
@@ -264,14 +276,20 @@ test('candidate must answer every approved campaign question', function () {
         ->for($section, 'section')
         ->create();
 
+    $session = startCandidateExamSession($candidate, $campaign);
+
     $this->actingAs($candidate)
         ->from(route('candidate.campaigns.exam', $campaign))
-        ->post(route('candidate.campaigns.assessments.store', $campaign), [
-            'resume' => resumePdfUpload(),
+        ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session]), [
             'answers' => [
                 $answeredQuestion->id => 'Answered.',
             ],
         ])
+        ->assertRedirect();
+
+    $this->actingAs($candidate)
+        ->from(route('candidate.campaigns.exam', $campaign))
+        ->post(route('candidate.campaigns.exam-sessions.advance', [$campaign, $session->fresh()]))
         ->assertSessionHasErrors("answers.{$missingQuestion->id}")
         ->assertRedirect(route('candidate.campaigns.exam', $campaign));
 
@@ -298,13 +316,8 @@ test('candidate cannot submit more than one assessment for the same campaign', f
 
     $this->actingAs($candidate)
         ->from(route('candidate.campaigns.exam', $campaign))
-        ->post(route('candidate.campaigns.assessments.store', $campaign), [
-            'resume' => resumePdfUpload(),
-            'answers' => [
-                $question->id => 'Second submission attempt.',
-            ],
-        ])
-        ->assertSessionHasErrors('assessment')
+        ->post(route('candidate.campaigns.exam-sessions.store', $campaign))
+        ->assertSessionHasErrors('session')
         ->assertRedirect(route('candidate.campaigns.exam', $campaign));
 
     Bus::assertNothingDispatched();
@@ -331,12 +344,23 @@ test('candidate can submit a different active campaign when assigned to both', f
         ->for($previousCampaign)
         ->create();
 
+    $session = startCandidateExamSession($candidate, $activeCampaign);
+
     $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.assessments.store', $activeCampaign), [
-            'resume' => resumePdfUpload(),
+        ->patch(route('candidate.campaigns.exam-sessions.update', [$activeCampaign, $session]), [
             'answers' => [
                 $question->id => 'New campaign answer.',
             ],
+        ])
+        ->assertRedirect();
+
+    $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.advance', [$activeCampaign, $session->fresh()]))
+        ->assertRedirect();
+
+    $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.finalize', [$activeCampaign, $session->fresh()]), [
+            'resume' => resumePdfUpload(),
         ])
         ->assertSessionHasNoErrors();
 
@@ -362,12 +386,7 @@ test('candidate cannot submit an inactive campaign', function () {
         ]);
 
     $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.assessments.store', $campaign), [
-            'resume' => resumePdfUpload(),
-            'answers' => [
-                $question->id => 'Inactive campaign attempt.',
-            ],
-        ])
+        ->post(route('candidate.campaigns.exam-sessions.store', $campaign))
         ->assertForbidden();
 
     expect(Assessment::query()->whereBelongsTo($candidate)->exists())->toBeFalse();

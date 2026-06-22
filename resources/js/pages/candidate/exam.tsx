@@ -1,11 +1,18 @@
-import { Form, Head, Link } from '@inertiajs/react';
-import { CheckCircle2, FileText, Upload } from 'lucide-react';
-import { useState } from 'react';
-import AssessmentController from '@/actions/App/Http/Controllers/Candidate/AssessmentController';
+import { Form, Head, Link, router } from '@inertiajs/react';
+import { AlertTriangle, CheckCircle2, FileText, Shield } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import ExamSessionController from '@/actions/App/Http/Controllers/Candidate/ExamSessionController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { useExamNavigationGuard } from '@/hooks/use-exam-navigation-guard';
+import { useExamProctoring } from '@/hooks/use-exam-proctoring';
+import {
+    formatExamTimer,
+    useExamTimer,
+    useSectionExpiryReload,
+} from '@/hooks/use-exam-timer';
 import candidate from '@/routes/candidate';
 
 type Question = {
@@ -24,14 +31,34 @@ type Question = {
     sort_order: number;
 };
 
-type Section = {
+type SectionSummary = {
     id: number;
     title: string;
     description: string | null;
     duration_minutes: number | null;
     sort_order: number;
     question_count: number;
+};
+
+type CurrentSection = SectionSummary & {
     questions: Question[];
+};
+
+type ExamSessionProps = {
+    id: number;
+    status: string;
+    current_section_id: number | null;
+    current_section_started_at: string | null;
+    current_section_expires_at: string | null;
+    completed_section_ids: number[];
+    warning_count: number;
+    max_warnings: number;
+    answer_drafts: Record<string, string>;
+    ready_to_finalize: boolean;
+    secure_exam: {
+        require_fullscreen: boolean;
+        block_copy_paste: boolean;
+    };
 };
 
 type Campaign = {
@@ -50,29 +77,26 @@ type ExistingAssessment = {
 
 type Props = {
     campaign: Campaign | null;
-    sections: Section[];
+    sections: SectionSummary[];
+    currentSection: CurrentSection | null;
     questions: Question[];
+    examSession: ExamSessionProps | null;
     assessment: ExistingAssessment | null;
 };
 
 export default function CandidateExam({
     campaign,
     sections,
+    currentSection,
     questions,
+    examSession,
     assessment,
 }: Props) {
-    const content = renderExamContent({
-        campaign,
-        sections,
-        questions,
-        assessment,
-    });
-
     return (
         <>
             <Head title="Candidate Exam" />
 
-            <div className="space-y-6 p-4">
+            <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
                 <Heading
                     title="Candidate Exam"
                     description={
@@ -82,7 +106,14 @@ export default function CandidateExam({
                     }
                 />
 
-                {content}
+                {renderExamContent({
+                    campaign,
+                    sections,
+                    currentSection,
+                    questions,
+                    examSession,
+                    assessment,
+                })}
             </div>
         </>
     );
@@ -91,18 +122,47 @@ export default function CandidateExam({
 function renderExamContent({
     campaign,
     sections,
+    currentSection,
     questions,
+    examSession,
     assessment,
 }: Props) {
     if (assessment !== null) {
         return <SubmittedState assessment={assessment} />;
     }
 
-    if (campaign === null || questions.length === 0 || sections.length === 0) {
+    if (campaign === null || sections.length === 0) {
         return <EmptyQuestionsState />;
     }
 
-    return <ExamForm campaign={campaign} sections={sections} />;
+    if (examSession === null) {
+        return (
+            <StartExamState
+                campaign={campaign}
+                sectionCount={sections.length}
+            />
+        );
+    }
+
+    if (examSession.ready_to_finalize) {
+        return (
+            <FinalizeExamState campaign={campaign} examSession={examSession} />
+        );
+    }
+
+    if (currentSection === null || questions.length === 0) {
+        return <EmptyQuestionsState />;
+    }
+
+    return (
+        <ActiveSectionExam
+            campaign={campaign}
+            sections={sections}
+            currentSection={currentSection}
+            questions={questions}
+            examSession={examSession}
+        />
+    );
 }
 
 function SubmittedState({ assessment }: { assessment: ExistingAssessment }) {
@@ -146,9 +206,7 @@ function EmptyQuestionsState() {
                     </h2>
                     <p className="max-w-2xl text-sm text-muted-foreground">
                         Open the invite link sent to your email to access an
-                        assigned campaign exam. If you were invited to multiple
-                        campaigns, use the link for the campaign you want to
-                        take.
+                        assigned campaign exam.
                     </p>
                 </div>
             </div>
@@ -156,274 +214,263 @@ function EmptyQuestionsState() {
     );
 }
 
-function ExamForm({
+function StartExamState({
     campaign,
-    sections,
+    sectionCount,
 }: {
     campaign: Campaign;
-    sections: Section[];
+    sectionCount: number;
 }) {
-    const [resumeName, setResumeName] = useState('');
-    const [answers, setAnswers] = useState<Record<number, string>>({});
-    const totalQuestions = sections.reduce(
-        (total, section) => total + section.question_count,
-        0,
+    return (
+        <div className="space-y-6 rounded-lg border border-sidebar-border/70 p-6 dark:border-sidebar-border">
+            <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <Shield className="size-5 text-muted-foreground" />
+                </div>
+                <div className="space-y-2">
+                    <h2 className="text-base font-medium">Secure exam mode</h2>
+                    <p className="max-w-2xl text-sm text-muted-foreground">
+                        This assessment runs one section at a time with server
+                        timers, fullscreen enforcement, and integrity warnings.
+                        You cannot navigate back once the attempt starts.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                        {sectionCount} section{sectionCount === 1 ? '' : 's'} to
+                        complete.
+                    </p>
+                </div>
+            </div>
+            <Form {...ExamSessionController.store.form(campaign.id)}>
+                {({ processing }) => (
+                    <Button type="submit" disabled={processing}>
+                        {processing && <Spinner />}
+                        Start secure exam
+                    </Button>
+                )}
+            </Form>
+        </div>
     );
-    const answeredQuestionCount = Object.values(answers).filter(
-        (answer) => answer.trim() !== '',
-    ).length;
-    const overallProgressPercentage =
-        totalQuestions === 0
-            ? 0
-            : Math.round((answeredQuestionCount / totalQuestions) * 100);
+}
+
+function ActiveSectionExam({
+    campaign,
+    sections,
+    currentSection,
+    questions,
+    examSession,
+}: {
+    campaign: Campaign;
+    sections: SectionSummary[];
+    currentSection: CurrentSection;
+    questions: Question[];
+    examSession: ExamSessionProps;
+}) {
+    const initialAnswers = useMemo(() => {
+        const drafts: Record<number, string> = {};
+
+        for (const question of questions) {
+            const draft = examSession.answer_drafts[String(question.id)];
+
+            if (typeof draft === 'string') {
+                drafts[question.id] = draft;
+            }
+        }
+
+        return drafts;
+    }, [examSession.answer_drafts, questions]);
+
+    const answerSeed = useMemo(
+        () => `${currentSection.id}:${JSON.stringify(initialAnswers)}`,
+        [currentSection.id, initialAnswers],
+    );
+    const [storedAnswerSeed, setStoredAnswerSeed] = useState(answerSeed);
+    const [answers, setAnswers] =
+        useState<Record<number, string>>(initialAnswers);
+
+    if (storedAnswerSeed !== answerSeed) {
+        setStoredAnswerSeed(answerSeed);
+        setAnswers(initialAnswers);
+    }
+
+    const { remainingSeconds, isExpired } = useExamTimer(
+        examSession.current_section_expires_at,
+    );
+
+    useSectionExpiryReload(isExpired);
+    useExamNavigationGuard(true);
+    useExamProctoring({
+        campaignId: campaign.id,
+        sessionId: examSession.id,
+        enabled: true,
+        secureExam: examSession.secure_exam,
+    });
+
+    const sectionIndex =
+        sections.findIndex((section) => section.id === currentSection.id) + 1;
 
     function updateAnswer(questionId: number, value: string) {
-        setAnswers((currentAnswers) => ({
-            ...currentAnswers,
+        setAnswers((current) => ({
+            ...current,
             [questionId]: value,
         }));
     }
 
+    function saveAndAdvance() {
+        router.patch(
+            ExamSessionController.update.url([campaign.id, examSession.id]),
+            { answers: stringifyAnswerKeys(answers) },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    router.post(
+                        ExamSessionController.advance.url([
+                            campaign.id,
+                            examSession.id,
+                        ]),
+                        {},
+                        { preserveScroll: true },
+                    );
+                },
+            },
+        );
+    }
+
     return (
-        <Form<{
-            answers: Record<number, string>;
-            resume: File | null;
-        }>
-            {...AssessmentController.store.form(campaign.id)}
-            className="space-y-6"
-        >
-            {({ errors, processing, progress }) => {
-                const formErrors = errors as Record<string, string | undefined>;
+        <div className="space-y-6">
+            <IntegrityBanner examSession={examSession} />
 
-                return (
-                    <>
-                        <InputError message={formErrors.assessment} />
+            <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                            Section {sectionIndex} of {sections.length}
+                        </p>
+                        <h2 className="text-lg font-medium">
+                            {currentSection.title}
+                        </h2>
+                        {currentSection.description ? (
+                            <p className="text-sm text-muted-foreground">
+                                {currentSection.description}
+                            </p>
+                        ) : null}
+                    </div>
+                    <div className="rounded-lg bg-muted px-3 py-2 text-sm font-medium">
+                        {formatExamTimer(remainingSeconds)}
+                    </div>
+                </div>
+            </section>
 
-                        <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                            <div className="space-y-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
-                                        <Upload className="size-4 text-muted-foreground" />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h2 className="text-base font-medium">
-                                            Resume PDF
-                                        </h2>
-                                        <p className="text-sm text-muted-foreground">
-                                            Upload your resume as a PDF before
-                                            submitting the assessment.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <label
-                                        htmlFor="resume"
-                                        className="text-sm font-medium"
-                                    >
-                                        Resume
-                                    </label>
-                                    <input
-                                        id="resume"
-                                        name="resume"
-                                        type="file"
-                                        accept="application/pdf,.pdf"
-                                        required
-                                        onChange={(event) =>
-                                            setResumeName(
-                                                event.currentTarget.files?.[0]
-                                                    ?.name ?? '',
-                                            )
-                                        }
-                                        className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    {resumeName ? (
-                                        <p className="text-xs text-muted-foreground">
-                                            Selected: {resumeName}
-                                        </p>
-                                    ) : null}
-                                    {progress ? (
-                                        <div className="space-y-1">
-                                            <progress
-                                                value={progress.percentage}
-                                                max="100"
-                                                className="h-2 w-full"
-                                            />
-                                            <p className="text-xs text-muted-foreground">
-                                                Uploading {progress.percentage}%
-                                            </p>
-                                        </div>
-                                    ) : null}
-                                    <InputError message={formErrors.resume} />
-                                </div>
-                            </div>
-                        </section>
-
-                        <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                            <div className="space-y-3">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div>
-                                        <h2 className="text-base font-medium">
-                                            Exam progress
-                                        </h2>
-                                        <p className="text-sm text-muted-foreground">
-                                            {answeredQuestionCount} of{' '}
-                                            {totalQuestions} questions answered
-                                        </p>
-                                    </div>
-                                    <p className="text-sm font-medium">
-                                        {overallProgressPercentage}%
-                                    </p>
-                                </div>
-                                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                                    <div
-                                        className="h-full rounded-full bg-primary transition-all"
-                                        style={{
-                                            width: `${overallProgressPercentage}%`,
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        </section>
-
+            <div className="space-y-4">
+                {questions.map((question, index) => (
+                    <section
+                        key={question.id}
+                        className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border"
+                    >
                         <div className="space-y-4">
-                            {sections.map((section, sectionIndex) => {
-                                const answeredInSection =
-                                    section.questions.filter(
-                                        (question) =>
-                                            answers[question.id]?.trim() !== '',
-                                    ).length;
-                                const sectionProgressPercentage =
-                                    section.question_count === 0
-                                        ? 0
-                                        : Math.round(
-                                              (answeredInSection /
-                                                  section.question_count) *
-                                                  100,
-                                          );
-
-                                return (
-                                    <section
-                                        key={section.id}
-                                        className="rounded-lg border border-sidebar-border/70 dark:border-sidebar-border"
-                                    >
-                                        <div className="space-y-4 border-b border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                                            <div className="flex flex-wrap items-start justify-between gap-3">
-                                                <div className="space-y-2">
-                                                    <p className="text-xs font-medium text-muted-foreground">
-                                                        Section{' '}
-                                                        {sectionIndex + 1} of{' '}
-                                                        {sections.length}
-                                                    </p>
-                                                    <div className="space-y-1">
-                                                        <h2 className="text-base font-medium">
-                                                            {section.title}
-                                                        </h2>
-                                                        {section.description ? (
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                                                                    Instruction
-                                                                </p>
-                                                                <p className="text-sm text-muted-foreground">
-                                                                    {
-                                                                        section.description
-                                                                    }
-                                                                </p>
-                                                            </div>
-                                                        ) : null}
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                                                    <span className="rounded-full bg-muted px-2.5 py-1">
-                                                        {section.question_count}{' '}
-                                                        questions
-                                                    </span>
-                                                    {section.duration_minutes ? (
-                                                        <span className="rounded-full bg-muted px-2.5 py-1">
-                                                            {
-                                                                section.duration_minutes
-                                                            }{' '}
-                                                            min
-                                                        </span>
-                                                    ) : null}
-                                                </div>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <div className="flex items-center justify-between gap-3 text-sm">
-                                                    <span className="text-muted-foreground">
-                                                        Progress
-                                                    </span>
-                                                    <span className="font-medium">
-                                                        {answeredInSection}/
-                                                        {section.question_count}{' '}
-                                                        answered
-                                                    </span>
-                                                </div>
-                                                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                                                    <div
-                                                        className="h-full rounded-full bg-primary transition-all"
-                                                        style={{
-                                                            width: `${sectionProgressPercentage}%`,
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="space-y-4 p-5">
-                                            {section.questions.map(
-                                                (question, index) => (
-                                                    <section
-                                                        key={question.id}
-                                                        className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border"
-                                                    >
-                                                        <div className="space-y-4">
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs font-medium text-muted-foreground">
-                                                                    Question{' '}
-                                                                    {index + 1}
-                                                                </p>
-                                                                <div className="space-y-2">
-                                                                    <h2 className="text-base font-medium">
-                                                                        {
-                                                                            question.content
-                                                                        }
-                                                                    </h2>
-                                                                    <p className="text-xs text-muted-foreground">
-                                                                        {
-                                                                            question.type_label
-                                                                        }{' '}
-                                                                        -{' '}
-                                                                        {
-                                                                            question.points
-                                                                        }{' '}
-                                                                        pts
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-
-                                                            <AnswerField
-                                                                question={
-                                                                    question
-                                                                }
-                                                                onAnswerChanged={
-                                                                    updateAnswer
-                                                                }
-                                                                error={
-                                                                    formErrors[
-                                                                        `answers.${question.id}`
-                                                                    ]
-                                                                }
-                                                            />
-                                                        </div>
-                                                    </section>
-                                                ),
-                                            )}
-                                        </div>
-                                    </section>
-                                );
-                            })}
+                            <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                    Question {index + 1}
+                                </p>
+                                <h3 className="text-base font-medium">
+                                    {question.content}
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
+                                    {question.type_label} - {question.points}{' '}
+                                    pts
+                                </p>
+                            </div>
+                            <AnswerField
+                                question={question}
+                                value={answers[question.id] ?? ''}
+                                onAnswerChanged={updateAnswer}
+                            />
                         </div>
+                    </section>
+                ))}
+            </div>
 
+            <Button
+                type="button"
+                onClick={saveAndAdvance}
+                data-test="exam-next-section-button"
+            >
+                {sectionIndex === sections.length
+                    ? 'Complete sections'
+                    : 'Save and continue'}
+            </Button>
+        </div>
+    );
+}
+
+function FinalizeExamState({
+    campaign,
+    examSession,
+}: {
+    campaign: Campaign;
+    examSession: ExamSessionProps;
+}) {
+    useExamNavigationGuard(true);
+
+    const [resumeName, setResumeName] = useState('');
+
+    return (
+        <div className="space-y-6">
+            <IntegrityBanner examSession={examSession} />
+
+            <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
+                <div className="space-y-2">
+                    <h2 className="text-base font-medium">
+                        Upload resume and submit
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        All sections are complete. Upload your PDF resume to
+                        finalize the assessment.
+                    </p>
+                </div>
+            </section>
+
+            <Form
+                {...ExamSessionController.finalize.form([
+                    campaign.id,
+                    examSession.id,
+                ])}
+                className="space-y-4"
+            >
+                {({ errors, processing, progress }) => (
+                    <>
+                        <div className="grid gap-2">
+                            <label
+                                htmlFor="resume"
+                                className="text-sm font-medium"
+                            >
+                                Resume PDF
+                            </label>
+                            <input
+                                id="resume"
+                                name="resume"
+                                type="file"
+                                accept="application/pdf,.pdf"
+                                required
+                                onChange={(event) =>
+                                    setResumeName(
+                                        event.currentTarget.files?.[0]?.name ??
+                                            '',
+                                    )
+                                }
+                                className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
+                            />
+                            {resumeName ? (
+                                <p className="text-xs text-muted-foreground">
+                                    Selected: {resumeName}
+                                </p>
+                            ) : null}
+                            {progress ? (
+                                <p className="text-xs text-muted-foreground">
+                                    Uploading {progress.percentage}%
+                                </p>
+                            ) : null}
+                            <InputError message={errors.resume} />
+                        </div>
                         <Button
                             type="submit"
                             disabled={processing}
@@ -433,34 +480,58 @@ function ExamForm({
                             Submit assessment
                         </Button>
                     </>
-                );
-            }}
-        </Form>
+                )}
+            </Form>
+        </div>
+    );
+}
+
+function IntegrityBanner({ examSession }: { examSession: ExamSessionProps }) {
+    return (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <div className="space-y-1">
+                <p className="font-medium">Secure exam in progress</p>
+                <p className="text-muted-foreground">
+                    Stay in fullscreen. Copy, paste, and back navigation are
+                    restricted. Integrity warnings: {examSession.warning_count}{' '}
+                    / {examSession.max_warnings}.
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function stringifyAnswerKeys(
+    answers: Record<number, string>,
+): Record<string, string> {
+    return Object.fromEntries(
+        Object.entries(answers).map(([key, value]) => [String(key), value]),
     );
 }
 
 function AnswerField({
     question,
+    value,
     onAnswerChanged,
     error,
 }: {
     question: Question;
+    value: string;
     onAnswerChanged: (questionId: number, value: string) => void;
-    error: string | undefined;
+    error?: string;
 }) {
     const inputId = `answer-${question.id}`;
-    const inputName = `answers[${question.id}]`;
 
     if (
         question.type === 'matching_pairs' &&
         question.matching_pairs !== null &&
-        question.matching_pairs.prompts.length > 0 &&
-        question.matching_pairs.choices.length > 0
+        question.matching_pairs.prompts.length > 0
     ) {
         return (
             <MatchingPairsAnswerField
-                inputName={inputName}
                 question={question}
+                value={value}
                 onAnswerChanged={onAnswerChanged}
                 error={error}
             />
@@ -484,8 +555,9 @@ function AnswerField({
                         >
                             <input
                                 type="radio"
-                                name={inputName}
+                                name={`answer-${question.id}`}
                                 value={option}
+                                checked={value === option}
                                 required
                                 onChange={(event) =>
                                     onAnswerChanged(
@@ -511,12 +583,12 @@ function AnswerField({
                 </label>
                 <input
                     id={inputId}
-                    name={inputName}
+                    value={value}
                     required
                     onChange={(event) =>
                         onAnswerChanged(question.id, event.currentTarget.value)
                     }
-                    className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                     placeholder="Write the missing term."
                 />
                 <InputError message={error} />
@@ -531,25 +603,15 @@ function AnswerField({
             </label>
             <textarea
                 id={inputId}
-                name={inputName}
                 rows={question.type === 'short_text' ? 4 : 8}
+                value={value}
                 required
                 onChange={(event) =>
                     onAnswerChanged(question.id, event.currentTarget.value)
                 }
-                className="flex min-h-40 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder={
-                    question.type === 'matching_pairs'
-                        ? 'One pair per line, for example: queue = async jobs'
-                        : 'Write your answer here.'
-                }
+                className="flex min-h-40 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                placeholder="Write your answer here."
             />
-            {question.type === 'matching_pairs' ? (
-                <p className="text-xs text-muted-foreground">
-                    Use one pair per line with `=` or `:` between the left and
-                    right values.
-                </p>
-            ) : null}
             <InputError message={error} />
         </div>
     );
@@ -557,20 +619,28 @@ function AnswerField({
 
 function MatchingPairsAnswerField({
     question,
-    inputName,
+    value,
     onAnswerChanged,
     error,
 }: {
     question: Question;
-    inputName: string;
+    value: string;
     onAnswerChanged: (questionId: number, value: string) => void;
-    error: string | undefined;
+    error?: string;
 }) {
-    const prompts = question.matching_pairs?.prompts ?? [];
+    const prompts = useMemo(
+        () => question.matching_pairs?.prompts ?? [],
+        [question.matching_pairs],
+    );
     const choices = question.matching_pairs?.choices ?? [];
-    const [selections, setSelections] = useState<Record<string, string>>({});
+    const selections = useMemo(
+        () => parseMatchingSelections(value, prompts),
+        [prompts, value],
+    );
 
-    function serializeSelection(nextSelections: Record<string, string>): string {
+    function serializeSelection(
+        nextSelections: Record<string, string>,
+    ): string {
         return prompts
             .map((prompt) => {
                 const choice = nextSelections[prompt];
@@ -581,25 +651,18 @@ function MatchingPairsAnswerField({
             .join('\n');
     }
 
-    function updateSelection(prompt: string, value: string) {
+    function updateSelection(prompt: string, choice: string) {
         const nextSelections = {
             ...selections,
-            [prompt]: value,
+            [prompt]: choice,
         };
 
-        setSelections(nextSelections);
         onAnswerChanged(question.id, serializeSelection(nextSelections));
     }
 
     return (
         <fieldset className="grid gap-4">
             <legend className="text-sm font-medium">Answer</legend>
-            <input
-                type="hidden"
-                name={inputName}
-                value={serializeSelection(selections)}
-                readOnly
-            />
             <div className="grid gap-3">
                 {prompts.map((prompt) => (
                     <div
@@ -611,43 +674,52 @@ function MatchingPairsAnswerField({
                             required
                             value={selections[prompt] ?? ''}
                             onChange={(event) =>
-                                updateSelection(prompt, event.currentTarget.value)
+                                updateSelection(
+                                    prompt,
+                                    event.currentTarget.value,
+                                )
                             }
-                            className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                         >
                             <option value="">Choose a match</option>
-                            {choices.map((choice) => {
-                                const chosenByOtherPrompt = Object.entries(
-                                    selections,
-                                ).some(
-                                    ([selectedPrompt, selectedChoice]) =>
-                                        selectedPrompt !== prompt &&
-                                        selectedChoice === choice,
-                                );
-
-                                return (
-                                    <option
-                                        key={`${prompt}-${choice}`}
-                                        value={choice}
-                                        disabled={
-                                            chosenByOtherPrompt &&
-                                            selections[prompt] !== choice
-                                        }
-                                    >
-                                        {choice}
-                                    </option>
-                                );
-                            })}
+                            {choices.map((choice) => (
+                                <option
+                                    key={`${prompt}-${choice}`}
+                                    value={choice}
+                                >
+                                    {choice}
+                                </option>
+                            ))}
                         </select>
                     </div>
                 ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-                Pick one match for each item. Each choice can only be used once.
-            </p>
             <InputError message={error} />
         </fieldset>
     );
+}
+
+function parseMatchingSelections(
+    value: string,
+    prompts: string[],
+): Record<string, string> {
+    const selections: Record<string, string> = {};
+
+    for (const line of value.split('\n')) {
+        const match = line.match(/^(.+?)\s*=\s*(.+)$/u);
+
+        if (match) {
+            selections[match[1].trim()] = match[2].trim();
+        }
+    }
+
+    for (const prompt of prompts) {
+        if (!(prompt in selections)) {
+            selections[prompt] = '';
+        }
+    }
+
+    return selections;
 }
 
 CandidateExam.layout = {

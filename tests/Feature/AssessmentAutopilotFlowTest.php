@@ -69,14 +69,9 @@ test('assessment autopilot product flow works end to end', function () {
     Bus::fake();
     Storage::fake('local');
 
-    $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.assessments.store', $campaign), [
-            'resume' => resumePdfUpload('Laravel database indexing experience'),
-            'answers' => [
-                $question->id => str_repeat('Indexes speed reads while adding write and storage tradeoffs. ', 3),
-            ],
-        ])
-        ->assertRedirect();
+    submitCandidateAssessmentViaExamSession($candidate, $campaign, [
+        $question->id => str_repeat('Indexes speed reads while adding write and storage tradeoffs. ', 3),
+    ], resumePdfUpload('Laravel database indexing experience'));
 
     $assessment = Assessment::query()->whereBelongsTo($candidate)->sole();
 

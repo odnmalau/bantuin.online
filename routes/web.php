@@ -17,6 +17,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\CampaignInviteController;
 use App\Http\Controllers\Candidate\AssessmentController;
+use App\Http\Controllers\Candidate\ExamSessionController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -86,7 +87,11 @@ Route::middleware(['auth', 'role:candidate'])
     ->group(function () {
         Route::get('exam', [AssessmentController::class, 'redirectExam'])->name('exam');
         Route::get('campaigns/{campaign}/exam', [AssessmentController::class, 'campaignExam'])->name('campaigns.exam');
-        Route::post('campaigns/{campaign}/assessments', [AssessmentController::class, 'store'])->name('campaigns.assessments.store');
+        Route::post('campaigns/{campaign}/exam-sessions', [ExamSessionController::class, 'store'])->name('campaigns.exam-sessions.store');
+        Route::patch('campaigns/{campaign}/exam-sessions/{examSession}', [ExamSessionController::class, 'update'])->name('campaigns.exam-sessions.update');
+        Route::post('campaigns/{campaign}/exam-sessions/{examSession}/advance', [ExamSessionController::class, 'advance'])->name('campaigns.exam-sessions.advance');
+        Route::post('campaigns/{campaign}/exam-sessions/{examSession}/violations', [ExamSessionController::class, 'storeViolation'])->name('campaigns.exam-sessions.violations.store');
+        Route::post('campaigns/{campaign}/exam-sessions/{examSession}/finalize', [ExamSessionController::class, 'finalize'])->name('campaigns.exam-sessions.finalize');
         Route::get('assessments/{assessment}', [AssessmentController::class, 'show'])->name('assessments.show');
     });
 
