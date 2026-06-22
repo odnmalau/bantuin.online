@@ -177,8 +177,12 @@ class CampaignController extends Controller
     {
         $validated = $request->validated();
 
-        if ($validated['status'] === CampaignStatus::Active->value && $campaign->activated_at === null) {
-            $validated['activated_at'] = now();
+        if ($validated['status'] === CampaignStatus::Active->value) {
+            if ($campaign->activated_at === null) {
+                $validated['activated_at'] = now();
+            }
+        } else {
+            $validated['activated_at'] = null;
         }
 
         $campaign->update($validated);

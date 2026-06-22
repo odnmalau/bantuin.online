@@ -97,6 +97,35 @@ test('admin can update a campaign', function () {
         ->activated_at->not->toBeNull();
 });
 
+test('admin clears activated_at when moving a campaign from active back to draft', function () {
+    $admin = User::factory()->admin()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create([
+        'status' => CampaignStatus::Active,
+        'activated_at' => now()->subDay(),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.edit', $campaign))
+        ->patch(route('admin.campaigns.update', $campaign), [
+            'title' => $campaign->title,
+            'role_title' => $campaign->role_title,
+            'seniority' => $campaign->seniority,
+            'job_description' => $campaign->job_description,
+            'required_skills' => implode("\n", $campaign->required_skills ?? []),
+            'nice_to_have_skills' => implode("\n", $campaign->nice_to_have_skills ?? []),
+            'language' => $campaign->language ?? 'English',
+            'threshold_score' => $campaign->threshold_score,
+            'status' => CampaignStatus::Draft->value,
+            'ai_generation_notes' => $campaign->ai_generation_notes,
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    expect($campaign->refresh())
+        ->status->toBe(CampaignStatus::Draft)
+        ->activated_at->toBeNull();
+});
+
 test('admin can approve a generated draft campaign question', function () {
     $admin = User::factory()->admin()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
