@@ -74,6 +74,39 @@ test('candidate can view active campaign questions when assigned', function () {
         );
 });
 
+test('candidate exam exposes sanitized matching pairs prompts and choices', function () {
+    $candidate = User::factory()->candidate()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $question = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create([
+            'type' => QuestionType::MatchingPairs,
+            'grading_mode' => QuestionGradingMode::Deterministic,
+            'prompt' => 'Match each concept to its purpose.',
+            'correct_answer' => [
+                'Queue = async jobs',
+                'Index = read speed',
+            ],
+            'expected_rubric' => null,
+            'status' => QuestionStatus::Approved,
+        ]);
+
+    $this->actingAs($candidate)
+        ->get(route('candidate.campaigns.exam', $campaign))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('candidate/exam')
+            ->where('questions.0.id', $question->id)
+            ->where('questions.0.type', QuestionType::MatchingPairs->value)
+            ->where('questions.0.matching_pairs.prompts', ['Queue', 'Index'])
+            ->where('questions.0.matching_pairs.choices', fn ($choices): bool => collect($choices)->sort()->values()->all() === ['async jobs', 'read speed'])
+            ->missing('questions.0.correct_answer'),
+        );
+});
+
 test('candidate exam entry redirects when only one assigned campaign is accessible', function () {
     $candidate = User::factory()->candidate()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -344,7 +377,18 @@ test('candidate cannot submit an inactive campaign', function () {
 test('candidate can view their own assessment', function () {
     $candidate = User::factory()->candidate()->create();
     $campaign = Campaign::factory()->active()->create();
-    $assessment = Assessment::factory()->for($candidate)->for($campaign)->create();
+    $assessment = Assessment::factory()->for($candidate)->for($campaign)->create([
+        'answers_payload' => [
+            [
+                'question_id' => 7,
+                'question' => 'Which datastore supports relational constraints?',
+                'rubric' => 'Should not be exposed to candidates.',
+                'options' => ['PostgreSQL', 'Redis'],
+                'correct_answer' => ['PostgreSQL'],
+                'answer' => 'PostgreSQL',
+            ],
+        ],
+    ]);
 
     $this->actingAs($candidate)
         ->get(route('candidate.assessments.show', $assessment))
@@ -353,7 +397,13 @@ test('candidate can view their own assessment', function () {
             ->component('candidate/assessments/show')
             ->where('assessment.id', $assessment->id)
             ->where('assessment.campaign.title', $campaign->title)
-            ->where('assessment.status', AssessmentStatus::Submitted->value),
+            ->where('assessment.status', AssessmentStatus::Submitted->value)
+            ->where('assessment.answers_payload.0.question_id', 7)
+            ->where('assessment.answers_payload.0.question', 'Which datastore supports relational constraints?')
+            ->where('assessment.answers_payload.0.answer', 'PostgreSQL')
+            ->missing('assessment.answers_payload.0.rubric')
+            ->missing('assessment.answers_payload.0.options')
+            ->missing('assessment.answers_payload.0.correct_answer'),
         );
 });
 

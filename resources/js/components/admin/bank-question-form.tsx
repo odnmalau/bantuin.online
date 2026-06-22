@@ -221,7 +221,7 @@ export default function BankQuestionForm({
                                 )}
                                 rows={5}
                                 className={textareaClass}
-                                placeholder="One accepted answer per line."
+                                placeholder="One accepted answer per line. For matching pairs use left = right."
                             />
                             <InputError message={errors.correct_answer_text} />
                         </div>

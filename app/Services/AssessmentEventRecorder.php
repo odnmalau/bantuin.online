@@ -18,6 +18,11 @@ class AssessmentEventRecorder
         'password',
         'secret',
         'token',
+        'prompt',
+        'instructions',
+        'messages',
+        'original_context',
+        'invalid_output',
         'api_key',
         'apikey',
         'qwen_key',
@@ -100,12 +105,9 @@ class AssessmentEventRecorder
     {
         $normalizedKey = str($key)->lower()->toString();
 
-        foreach (self::SENSITIVE_KEY_FRAGMENTS as $fragment) {
-            if (str_contains($normalizedKey, $fragment)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any(
+            self::SENSITIVE_KEY_FRAGMENTS,
+            fn (string $fragment): bool => str_contains($normalizedKey, $fragment),
+        );
     }
 }

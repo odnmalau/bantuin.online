@@ -10,7 +10,6 @@ enum AssessmentStatus: string
     case ResumeScreening = 'resume_screening';
     case PendingApproval = 'pending_approval';
     case Evaluated = 'evaluated';
-    case RankingReady = 'ranking_ready';
     case NeedsManualReview = 'needs_manual_review';
     case Overridden = 'overridden';
     case Rejected = 'rejected';
@@ -21,19 +20,21 @@ enum AssessmentStatus: string
 
     public function isReviewable(): bool
     {
-        return in_array($this, [
+        return match ($this) {
             self::PendingApproval,
             self::Evaluated,
             self::NeedsManualReview,
-            self::Overridden,
-        ], true);
+            self::Overridden => true,
+            default => false,
+        };
     }
 
     public function isPromotable(): bool
     {
-        return in_array($this, [
+        return match ($this) {
             self::Evaluated,
-            self::NeedsManualReview,
-        ], true);
+            self::NeedsManualReview => true,
+            default => false,
+        };
     }
 }

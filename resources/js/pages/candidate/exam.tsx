@@ -15,6 +15,10 @@ type Question = {
     type: string;
     type_label: string;
     options: string[];
+    matching_pairs: {
+        prompts: string[];
+        choices: string[];
+    } | null;
     points: number;
     section_title: string | null;
     sort_order: number;
@@ -447,6 +451,22 @@ function AnswerField({
     const inputId = `answer-${question.id}`;
     const inputName = `answers[${question.id}]`;
 
+    if (
+        question.type === 'matching_pairs' &&
+        question.matching_pairs !== null &&
+        question.matching_pairs.prompts.length > 0 &&
+        question.matching_pairs.choices.length > 0
+    ) {
+        return (
+            <MatchingPairsAnswerField
+                inputName={inputName}
+                question={question}
+                onAnswerChanged={onAnswerChanged}
+                error={error}
+            />
+        );
+    }
+
     if (question.type === 'multiple_choice' || question.type === 'yes_no') {
         const options =
             question.type === 'yes_no' && question.options.length === 0
@@ -520,12 +540,113 @@ function AnswerField({
                 className="flex min-h-40 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder={
                     question.type === 'matching_pairs'
-                        ? 'Enter matching pairs, one per line.'
+                        ? 'One pair per line, for example: queue = async jobs'
                         : 'Write your answer here.'
                 }
             />
+            {question.type === 'matching_pairs' ? (
+                <p className="text-xs text-muted-foreground">
+                    Use one pair per line with `=` or `:` between the left and
+                    right values.
+                </p>
+            ) : null}
             <InputError message={error} />
         </div>
+    );
+}
+
+function MatchingPairsAnswerField({
+    question,
+    inputName,
+    onAnswerChanged,
+    error,
+}: {
+    question: Question;
+    inputName: string;
+    onAnswerChanged: (questionId: number, value: string) => void;
+    error: string | undefined;
+}) {
+    const prompts = question.matching_pairs?.prompts ?? [];
+    const choices = question.matching_pairs?.choices ?? [];
+    const [selections, setSelections] = useState<Record<string, string>>({});
+
+    function serializeSelection(nextSelections: Record<string, string>): string {
+        return prompts
+            .map((prompt) => {
+                const choice = nextSelections[prompt];
+
+                return choice ? `${prompt} = ${choice}` : '';
+            })
+            .filter((pair) => pair !== '')
+            .join('\n');
+    }
+
+    function updateSelection(prompt: string, value: string) {
+        const nextSelections = {
+            ...selections,
+            [prompt]: value,
+        };
+
+        setSelections(nextSelections);
+        onAnswerChanged(question.id, serializeSelection(nextSelections));
+    }
+
+    return (
+        <fieldset className="grid gap-4">
+            <legend className="text-sm font-medium">Answer</legend>
+            <input
+                type="hidden"
+                name={inputName}
+                value={serializeSelection(selections)}
+                readOnly
+            />
+            <div className="grid gap-3">
+                {prompts.map((prompt) => (
+                    <div
+                        key={prompt}
+                        className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-center"
+                    >
+                        <p className="text-sm font-medium">{prompt}</p>
+                        <select
+                            required
+                            value={selections[prompt] ?? ''}
+                            onChange={(event) =>
+                                updateSelection(prompt, event.currentTarget.value)
+                            }
+                            className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <option value="">Choose a match</option>
+                            {choices.map((choice) => {
+                                const chosenByOtherPrompt = Object.entries(
+                                    selections,
+                                ).some(
+                                    ([selectedPrompt, selectedChoice]) =>
+                                        selectedPrompt !== prompt &&
+                                        selectedChoice === choice,
+                                );
+
+                                return (
+                                    <option
+                                        key={`${prompt}-${choice}`}
+                                        value={choice}
+                                        disabled={
+                                            chosenByOtherPrompt &&
+                                            selections[prompt] !== choice
+                                        }
+                                    >
+                                        {choice}
+                                    </option>
+                                );
+                            })}
+                        </select>
+                    </div>
+                ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Pick one match for each item. Each choice can only be used once.
+            </p>
+            <InputError message={error} />
+        </fieldset>
     );
 }
 

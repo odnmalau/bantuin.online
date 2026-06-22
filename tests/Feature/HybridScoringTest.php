@@ -93,6 +93,24 @@ test('deterministic grader scores objective question snapshots', function () {
     expect(app(DeterministicAssessmentGrader::class)->grade($assessment))->toBe(75);
 });
 
+test('deterministic grader accepts matching pairs entered as textarea lines', function () {
+    $assessment = Assessment::factory()->create([
+        'answers_payload' => [
+            [
+                'type' => QuestionType::MatchingPairs->value,
+                'answer' => " Queue = Async Jobs \nINDEX: Read Speed",
+                'correct_answer' => [
+                    'index = read speed',
+                    'queue = async jobs',
+                ],
+                'points' => 2,
+            ],
+        ],
+    ]);
+
+    expect(app(DeterministicAssessmentGrader::class)->grade($assessment))->toBe(100);
+});
+
 test('ranking calculator normalizes missing component weights', function () {
     $assessment = Assessment::factory()->create([
         'resume_score' => 80,

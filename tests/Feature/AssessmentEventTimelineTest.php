@@ -55,8 +55,19 @@ test('assessment event recorder redacts sensitive payload keys', function () {
         payload: [
             'api_key' => 'secret-qwen-token',
             'score' => 82,
+            'prompt' => 'Raw AI prompt that should never be stored.',
+            'instructions' => 'System instructions for the AI provider.',
+            'messages' => [
+                ['role' => 'system', 'content' => 'Sensitive system message.'],
+            ],
             'nested' => [
                 'password' => 'candidate-password',
+                'original_context' => [
+                    'question' => 'Sensitive question payload.',
+                ],
+                'invalid_output' => [
+                    'body' => 'Sensitive invalid model output.',
+                ],
                 'safe' => 'visible',
             ],
         ],
@@ -66,8 +77,13 @@ test('assessment event recorder redacts sensitive payload keys', function () {
         ->toMatchArray([
             'api_key' => '[redacted]',
             'score' => 82,
+            'prompt' => '[redacted]',
+            'instructions' => '[redacted]',
+            'messages' => '[redacted]',
             'nested' => [
                 'password' => '[redacted]',
+                'original_context' => '[redacted]',
+                'invalid_output' => '[redacted]',
                 'safe' => 'visible',
             ],
         ]);

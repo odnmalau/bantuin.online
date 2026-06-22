@@ -1620,6 +1620,7 @@ export default function AdminCampaignsShow({
                                                 name="correct_answer_text"
                                                 rows={3}
                                                 className={textareaClass}
+                                                placeholder="One accepted answer per line. For matching pairs use left = right."
                                             />
                                             <InputError
                                                 message={
@@ -1883,6 +1884,7 @@ function EditCampaignQuestionForm({
                                     '\n',
                                 )}
                                 className={textareaClass}
+                                placeholder="One accepted answer per line. For matching pairs use left = right."
                             />
                             <InputError message={errors.correct_answer_text} />
                         </div>

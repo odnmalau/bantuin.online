@@ -6,6 +6,7 @@ use App\Models\Assessment;
 use App\QuestionGradingMode;
 use App\QuestionType;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class DeterministicAssessmentGrader
@@ -155,13 +156,14 @@ class DeterministicAssessmentGrader
         return collect($questionScores)
             ->groupBy('section_key')
             ->map(function ($scores): array {
+                $firstScore = $scores->first();
                 $earnedPoints = (float) $scores->sum('earned_points');
                 $totalPoints = (float) $scores->sum('total_points');
 
                 return [
-                    'section_id' => $scores->first()['section_id'],
-                    'title' => $scores->first()['section_title'],
-                    'weight' => $scores->first()['section_weight'],
+                    'section_id' => $firstScore['section_id'],
+                    'title' => $firstScore['section_title'],
+                    'weight' => $firstScore['section_weight'],
                     'earned_points' => $earnedPoints,
                     'total_points' => $totalPoints,
                     'score' => $totalPoints > 0.0
@@ -182,13 +184,14 @@ class DeterministicAssessmentGrader
             return $this->percentageScore($earnedPoints, $totalPoints);
         }
 
-        $totalWeight = collect($sectionScores)->sum('weight');
+        $sectionScoreCollection = collect($sectionScores);
+        $totalWeight = $sectionScoreCollection->sum('weight');
 
         if ($totalWeight <= 0) {
             return $this->percentageScore($earnedPoints, $totalPoints);
         }
 
-        $weightedScore = collect($sectionScores)
+        $weightedScore = $sectionScoreCollection
             ->filter(fn (array $section): bool => $section['score'] !== null)
             ->sum(fn (array $section): float => $section['score'] * ($section['weight'] / $totalWeight));
 
@@ -202,7 +205,7 @@ class DeterministicAssessmentGrader
             QuestionType::YesNo => $this->normalizeText($candidateAnswer) === $this->normalizeText(Arr::first(Arr::wrap($correctAnswer))),
             QuestionType::FillBlank => in_array($this->normalizeText($candidateAnswer), $this->normalizeSet($correctAnswer), true),
             QuestionType::MatchingPairs => $this->normalizePairs($candidateAnswer) === $this->normalizePairs($correctAnswer),
-            QuestionType::ShortText, QuestionType::LongText => false,
+            default => false,
         };
     }
 
@@ -222,35 +225,82 @@ class DeterministicAssessmentGrader
     }
 
     /**
-     * @return array<string, string>|array<int, string>
+     * @return array<int, string>
      */
     private function normalizePairs(mixed $value): array
     {
         if (! is_array($value)) {
-            return $this->normalizeSet($value);
+            return $this->pairEntriesFromString($value) ?: $this->normalizeSet($value);
         }
 
         if (! array_is_list($value)) {
-            return collect($value)
-                ->mapWithKeys(fn (mixed $right, string|int $left): array => [
-                    $this->normalizeText($left) => $this->normalizeText($right),
-                ])
-                ->sortKeys()
-                ->all();
+            return $this->finalizePairEntries(collect($value)
+                ->map(fn (mixed $right, string|int $left): string => $this->pairEntryFromValues($left, $right))
+            );
         }
 
-        return collect($value)
+        return $this->finalizePairEntries(collect($value)
             ->map(function (mixed $pair): string {
                 if (is_array($pair)) {
                     $left = data_get($pair, 'left', data_get($pair, 'key', Arr::first($pair)));
                     $right = data_get($pair, 'right', data_get($pair, 'value', Arr::last($pair)));
 
-                    return $this->normalizeText($left).'='.$this->normalizeText($right);
+                    return $this->pairEntryFromValues($left, $right);
                 }
 
-                return $this->normalizeText($pair);
+                return $this->pairEntryFromString($pair) ?? $this->normalizeText($pair);
             })
-            ->filter(fn (string $pair): bool => $pair !== '')
+        );
+    }
+
+    private function pairEntryFromValues(mixed $left, mixed $right): string
+    {
+        $normalizedLeft = $this->normalizeText($left);
+        $normalizedRight = $this->normalizeText($right);
+
+        if ($normalizedLeft === '' || $normalizedRight === '') {
+            return '';
+        }
+
+        return $normalizedLeft.'='.$normalizedRight;
+    }
+
+    private function pairEntryFromString(mixed $value): ?string
+    {
+        $normalizedValue = $this->normalizeText($value);
+
+        if ($normalizedValue === '') {
+            return null;
+        }
+
+        preg_match('/^(.+?)\s*(?:=>|=|:|->|→|\t)\s*(.+)$/u', (string) $value, $matches);
+
+        if ($matches === []) {
+            return null;
+        }
+
+        return $this->pairEntryFromValues($matches[1], $matches[2]);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function pairEntriesFromString(mixed $value): array
+    {
+        return $this->finalizePairEntries(
+            collect(preg_split('/[\r\n]+/', (string) $value) ?: [])
+                ->map(fn (string $line): ?string => $this->pairEntryFromString($line)),
+        );
+    }
+
+    /**
+     * @param  Collection<int, string|null>|array<int, string|null>  $entries
+     * @return array<int, string>
+     */
+    private function finalizePairEntries(Collection|array $entries): array
+    {
+        return collect($entries)
+            ->filter(fn (?string $pair): bool => $pair !== null && $pair !== '')
             ->unique()
             ->sort()
             ->values()

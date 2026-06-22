@@ -8,7 +8,6 @@ import candidate from '@/routes/candidate';
 type AnswerSnapshot = {
     question_id: number;
     question: string;
-    rubric: string | null;
     answer: string;
 };
 
