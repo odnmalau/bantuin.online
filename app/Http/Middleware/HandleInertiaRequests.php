@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -17,16 +18,6 @@ class HandleInertiaRequests extends Middleware
     protected $rootView = 'app';
 
     /**
-     * Determines the current asset version.
-     *
-     * @see https://inertiajs.com/asset-versioning
-     */
-    public function version(Request $request): ?string
-    {
-        return parent::version($request);
-    }
-
-    /**
      * Define the props that are shared by default.
      *
      * @see https://inertiajs.com/shared-data
@@ -39,12 +30,29 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $this->sharedUser($request),
             ],
             'sidebarOpen' => $this->sidebarOpen($request),
             'authFeatures' => [
                 'google' => filled(config('services.google.client_id')),
             ],
+        ];
+    }
+
+    /**
+     * @return array{id: int, name: string, email: string, role: string}|null
+     */
+    private function sharedUser(Request $request): ?array
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        return [
+            ...$user->only(['id', 'name', 'email']),
+            'role' => $user->role->value,
         ];
     }
 

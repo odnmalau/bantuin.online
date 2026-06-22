@@ -4,13 +4,10 @@ export type User = {
     email: string;
     role: 'admin' | 'candidate';
     avatar?: string;
-    created_at: string;
-    updated_at: string;
-    [key: string]: unknown;
 };
 
 export type Auth = {
-    user: User;
+    user: User | null;
 };
 
 export type AuthFeatures = {
