@@ -2,10 +2,7 @@
 
 namespace App\Services;
 
-use App\AssessmentStatus;
 use App\ExamSessionStatus;
-use App\Jobs\EvaluateAssessmentWithAi;
-use App\Jobs\ScreenResumeWithAi;
 use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
@@ -16,14 +13,12 @@ use App\QuestionStatus;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Validation\ValidationException;
 
 class ExamSessionService
 {
     public function __construct(
-        private AssessmentSubmissionBuilder $submissionBuilder,
-        private AssessmentEventRecorder $events,
+        private ExamSessionFinalizer $finalizer,
     ) {}
 
     public function findActiveSession(User $user, Campaign $campaign): ?ExamSession
@@ -177,177 +172,14 @@ class ExamSessionService
         ExamSessionStatus $status = ExamSessionStatus::Finalized,
         bool $allowIncompleteAnswers = false,
     ): Assessment {
-        if (! $session->isActive()) {
-            if ($session->assessment_id !== null) {
-                return $session->assessment()->firstOrFail();
-            }
-
-            throw ValidationException::withMessages([
-                'session' => __('This exam session is no longer active.'),
-            ]);
-        }
-        $this->syncSectionExpiry($session, $campaign);
-
-        if (! $allowIncompleteAnswers) {
-            if ($session->current_section_id !== null) {
-                $section = $this->currentSectionOrFail($session, $campaign);
-                $this->assertSectionAnswersComplete($session, $section);
-
-                throw ValidationException::withMessages([
-                    'session' => __('Advance through all sections before submitting the assessment.'),
-                ]);
-            }
-
-            $sections = $this->orderedExamSections($campaign);
-            $completedCount = count($session->completed_section_ids ?? []);
-
-            if ($completedCount < $sections->count()) {
-                throw ValidationException::withMessages([
-                    'session' => __('Complete every section before submitting the assessment.'),
-                ]);
-            }
-        }
-
-        $questions = $this->approvedCampaignQuestions($campaign);
-        $drafts = $session->answer_drafts ?? [];
-        $errors = [];
-
-        foreach ($questions as $question) {
-            $answer = $drafts[(string) $question->id] ?? null;
-
-            if (! is_string($answer) || trim($answer) === '') {
-                if ($allowIncompleteAnswers) {
-                    $drafts[(string) $question->id] = '';
-
-                    continue;
-                }
-
-                $errors["answers.{$question->id}"] = __('Please answer this question.');
-            }
-        }
-
-        if ($errors !== []) {
-            throw ValidationException::withMessages($errors);
-        }
-
-        if ($allowIncompleteAnswers) {
-            $session->update([
-                'answer_drafts' => $drafts,
-            ]);
-            $session->refresh();
-        }
-
-        if ($resume !== null) {
-            $resumePath = $resume->store('resumes', 'local');
-
-            if (! is_string($resumePath)) {
-                throw ValidationException::withMessages([
-                    'resume' => __('The resume could not be stored. Please try again.'),
-                ]);
-            }
-
-            $session->update([
-                'resume_path' => $resumePath,
-                'resume_original_name' => $resume->getClientOriginalName(),
-            ]);
-        }
-
-        $session->refresh();
-
-        if ($session->resume_path === null) {
-            throw ValidationException::withMessages([
-                'resume' => __('Upload your resume PDF before submitting.'),
-            ]);
-        }
-
-        if ($campaign->assessments()->where('user_id', $session->user_id)->exists()) {
-            throw ValidationException::withMessages([
-                'assessment' => __('You have already submitted your assessment for this campaign.'),
-            ]);
-        }
-
-        $assessment = Assessment::query()->create([
-            'user_id' => $session->user_id,
-            'campaign_id' => $campaign->id,
-            'resume_path' => $session->resume_path,
-            'resume_original_name' => $session->resume_original_name,
-            'answers_payload' => $this->submissionBuilder->buildAnswersPayload(
-                $questions,
-                $drafts,
-            ),
-            'status' => AssessmentStatus::Submitted,
-        ]);
-
-        $session->update([
-            'assessment_id' => $assessment->id,
-            'status' => $status,
-            'submission_reason' => $submissionReason ?? 'candidate_submitted',
-            'finalized_at' => now(),
-        ]);
-
-        $user = $session->user;
-
-        $this->events->record(
-            assessment: $assessment,
-            type: 'candidate_submitted',
-            title: __('Candidate submitted assessment'),
-            description: match ($submissionReason) {
-                'integrity_max_warnings' => __('Assessment was auto-submitted after exceeding integrity warnings.'),
-                'section_timer_expired' => __('Assessment was auto-submitted after a section timer expired.'),
-                default => __('Candidate completed the assessment form.'),
-            },
-            payload: [
-                'campaign_id' => $campaign->id,
-                'question_count' => $questions->count(),
-                'submission_reason' => $session->submission_reason,
-                'warning_count' => $session->warning_count,
-            ],
-            actor: $user instanceof User ? $user : null,
+        return $this->finalizer->finalize(
+            session: $session,
+            campaign: $campaign,
+            resume: $resume,
+            submissionReason: $submissionReason,
+            status: $status,
+            allowIncompleteAnswers: $allowIncompleteAnswers,
         );
-
-        $this->events->record(
-            assessment: $assessment,
-            type: 'resume_uploaded',
-            title: __('Resume uploaded'),
-            description: __('Candidate uploaded a resume PDF for screening.'),
-            payload: [
-                'original_name' => $assessment->resume_original_name,
-            ],
-            actor: $user instanceof User ? $user : null,
-        );
-
-        if ($session->warning_count > 0 || ($session->integrity_events ?? []) !== []) {
-            $this->events->record(
-                assessment: $assessment,
-                type: 'exam_integrity_summary',
-                title: __('Exam integrity summary'),
-                description: __('Integrity warnings were recorded during the secure exam session.'),
-                payload: [
-                    'warning_count' => $session->warning_count,
-                    'integrity_events' => $session->integrity_events ?? [],
-                ],
-            );
-        }
-
-        Bus::chain([
-            new ScreenResumeWithAi($assessment),
-            new EvaluateAssessmentWithAi($assessment),
-        ])->dispatch();
-
-        $this->events->record(
-            assessment: $assessment,
-            type: 'assessment_queued',
-            title: __('Assessment queued for AI processing'),
-            description: __('Resume screening and assessment evaluation jobs were queued.'),
-            payload: [
-                'jobs' => [
-                    ScreenResumeWithAi::class,
-                    EvaluateAssessmentWithAi::class,
-                ],
-            ],
-        );
-
-        return $assessment;
     }
 
     /**
