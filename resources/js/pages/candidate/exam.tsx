@@ -75,23 +75,47 @@ type ExistingAssessment = {
     created_at: string;
 };
 
-type Props = {
-    campaign: Campaign | null;
-    sections: SectionSummary[];
-    currentSection: CurrentSection | null;
-    questions: Question[];
-    examSession: ExamSessionProps | null;
-    assessment: ExistingAssessment | null;
+type NoCampaignProps = {
+    state: 'no_campaign';
+    campaign: null;
 };
 
-export default function CandidateExam({
-    campaign,
-    sections,
-    currentSection,
-    questions,
-    examSession,
-    assessment,
-}: Props) {
+type SubmittedProps = {
+    state: 'submitted';
+    campaign: Campaign;
+    assessment: ExistingAssessment;
+};
+
+type ReadyToStartProps = {
+    state: 'ready_to_start';
+    campaign: Campaign;
+    sections: SectionSummary[];
+};
+
+type ActiveSectionProps = {
+    state: 'active_section';
+    campaign: Campaign;
+    sections: SectionSummary[];
+    currentSection: CurrentSection;
+    questions: Question[];
+    examSession: ExamSessionProps;
+};
+
+type ReadyToFinalizeProps = {
+    state: 'ready_to_finalize';
+    campaign: Campaign;
+    sections: SectionSummary[];
+    examSession: ExamSessionProps;
+};
+
+type Props =
+    | NoCampaignProps
+    | SubmittedProps
+    | ReadyToStartProps
+    | ActiveSectionProps
+    | ReadyToFinalizeProps;
+
+export default function CandidateExam(props: Props) {
     return (
         <>
             <Head title="Candidate Exam" />
@@ -100,69 +124,49 @@ export default function CandidateExam({
                 <Heading
                     title="Candidate Exam"
                     description={
-                        campaign
-                            ? `${campaign.title} - ${campaign.role_title}${campaign.seniority ? `, ${campaign.seniority}` : ''}`
+                        props.campaign
+                            ? `${props.campaign.title} - ${props.campaign.role_title}${props.campaign.seniority ? `, ${props.campaign.seniority}` : ''}`
                             : 'No active campaign is available right now.'
                     }
                 />
 
-                {renderExamContent({
-                    campaign,
-                    sections,
-                    currentSection,
-                    questions,
-                    examSession,
-                    assessment,
-                })}
+                {renderExamContent(props)}
             </div>
         </>
     );
 }
 
-function renderExamContent({
-    campaign,
-    sections,
-    currentSection,
-    questions,
-    examSession,
-    assessment,
-}: Props) {
-    if (assessment !== null) {
-        return <SubmittedState assessment={assessment} />;
+function renderExamContent(props: Props) {
+    switch (props.state) {
+        case 'submitted':
+            return <SubmittedState assessment={props.assessment} />;
+        case 'no_campaign':
+            return <EmptyQuestionsState />;
+        case 'ready_to_start':
+            return (
+                <StartExamState
+                    campaign={props.campaign}
+                    sectionCount={props.sections.length}
+                />
+            );
+        case 'ready_to_finalize':
+            return (
+                <FinalizeExamState
+                    campaign={props.campaign}
+                    examSession={props.examSession}
+                />
+            );
+        case 'active_section':
+            return (
+                <ActiveSectionExam
+                    campaign={props.campaign}
+                    sections={props.sections}
+                    currentSection={props.currentSection}
+                    questions={props.questions}
+                    examSession={props.examSession}
+                />
+            );
     }
-
-    if (campaign === null || sections.length === 0) {
-        return <EmptyQuestionsState />;
-    }
-
-    if (examSession === null) {
-        return (
-            <StartExamState
-                campaign={campaign}
-                sectionCount={sections.length}
-            />
-        );
-    }
-
-    if (examSession.ready_to_finalize) {
-        return (
-            <FinalizeExamState campaign={campaign} examSession={examSession} />
-        );
-    }
-
-    if (currentSection === null || questions.length === 0) {
-        return <EmptyQuestionsState />;
-    }
-
-    return (
-        <ActiveSectionExam
-            campaign={campaign}
-            sections={sections}
-            currentSection={currentSection}
-            questions={questions}
-            examSession={examSession}
-        />
-    );
 }
 
 function SubmittedState({ assessment }: { assessment: ExistingAssessment }) {

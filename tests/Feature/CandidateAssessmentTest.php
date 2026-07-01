@@ -59,6 +59,7 @@ test('candidate can view active campaign questions when assigned', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('candidate/exam')
+            ->where('state', 'ready_to_start')
             ->where('campaign.id', $campaign->id)
             ->has('sections', 1)
             ->where('sections.0.id', $section->id)
@@ -66,10 +67,10 @@ test('candidate can view active campaign questions when assigned', function () {
             ->where('sections.0.description', 'Answer all questions in order before submitting.')
             ->where('sections.0.duration_minutes', 30)
             ->where('sections.0.question_count', 1)
-            ->where('examSession', null)
-            ->where('currentSection', null)
-            ->has('questions', 0)
-            ->where('assessment', null),
+            ->missing('examSession')
+            ->missing('currentSection')
+            ->missing('questions')
+            ->missing('assessment'),
         );
 });
 
@@ -100,6 +101,7 @@ test('candidate exam exposes sanitized matching pairs prompts and choices', func
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('candidate/exam')
+            ->where('state', 'active_section')
             ->where('questions.0.id', $question->id)
             ->where('questions.0.type', QuestionType::MatchingPairs->value)
             ->where('questions.0.matching_pairs.prompts', ['Queue', 'Index'])
@@ -150,8 +152,9 @@ test('candidate sees submitted state only for the assigned campaign', function (
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('candidate/exam')
+            ->where('state', 'ready_to_start')
             ->where('campaign.id', $activeCampaign->id)
-            ->where('assessment', null),
+            ->missing('assessment'),
         );
 });
 

@@ -5,12 +5,9 @@ namespace App\Http\Controllers\Candidate;
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
 use App\Models\Campaign;
-use App\Models\CampaignQuestion;
-use App\Models\CampaignSection;
 use App\QuestionStatus;
-use App\Services\AssessmentSubmissionBuilder;
 use App\Services\CampaignInvitationService;
-use App\Services\ExamSessionService;
+use App\Services\CandidateExamPage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,8 +17,7 @@ class AssessmentController extends Controller
 {
     public function __construct(
         private CampaignInvitationService $invitations,
-        private ExamSessionService $examSessions,
-        private AssessmentSubmissionBuilder $submissionBuilder,
+        private CandidateExamPage $examPage,
     ) {}
 
     /**
@@ -79,52 +75,7 @@ class AssessmentController extends Controller
 
     private function renderExam(Request $request, ?Campaign $campaign): Response
     {
-        $examSession = null;
-        $sectionSummaries = [];
-        $currentSection = null;
-        $questions = [];
-
-        if ($campaign !== null) {
-            $session = $this->examSessions->findActiveSession($request->user(), $campaign);
-
-            if ($session !== null) {
-                $examSession = $this->examSessions->sessionPayloadForInertia($session, $campaign);
-                $session = $session->fresh();
-            }
-
-            $orderedSections = $this->examSessions->orderedExamSections($campaign);
-
-            $sectionSummaries = $orderedSections
-                ->map(fn (CampaignSection $section): array => [
-                    'id' => $section->id,
-                    'title' => $section->title,
-                    'description' => $section->description,
-                    'duration_minutes' => $section->duration_minutes,
-                    'sort_order' => $section->sort_order,
-                    'question_count' => $section->questions->count(),
-                ])
-                ->all();
-
-            if ($session !== null && $session->current_section_id !== null) {
-                $active = $orderedSections->firstWhere('id', $session->current_section_id);
-
-                if ($active !== null) {
-                    $currentSection = $this->sectionForCandidate($active);
-                    $questions = $currentSection['questions'];
-                }
-            }
-        }
-
-        $assessment = $this->currentAssessmentForExam($request, $campaign);
-
-        return Inertia::render('candidate/exam', [
-            'campaign' => $this->campaignSummaryForExam($campaign),
-            'sections' => $sectionSummaries,
-            'currentSection' => $currentSection,
-            'questions' => $questions,
-            'examSession' => $examSession,
-            'assessment' => $this->assessmentSummaryForExam($assessment),
-        ]);
+        return Inertia::render('candidate/exam', $this->examPage->for($request->user(), $campaign));
     }
 
     private function accessibleCampaignForExam(Request $request, Campaign $campaign): Campaign
@@ -147,19 +98,6 @@ class AssessmentController extends Controller
                     ->orderBy('id'),
             ])
             ->firstOrFail();
-    }
-
-    private function currentAssessmentForExam(Request $request, ?Campaign $campaign): ?Assessment
-    {
-        if ($campaign === null) {
-            return null;
-        }
-
-        return $request->user()
-            ->assessments()
-            ->whereBelongsTo($campaign)
-            ->latest()
-            ->first();
     }
 
     /**
@@ -186,61 +124,6 @@ class AssessmentController extends Controller
         return [
             'title' => $assessment->campaign->title,
             'role_title' => $assessment->campaign->role_title,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function campaignSummaryForExam(?Campaign $campaign): ?array
-    {
-        if ($campaign === null) {
-            return null;
-        }
-
-        return [
-            'id' => $campaign->id,
-            'title' => $campaign->title,
-            'role_title' => $campaign->role_title,
-            'seniority' => $campaign->seniority,
-            'threshold_score' => $campaign->threshold_score,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function assessmentSummaryForExam(?Assessment $assessment): ?array
-    {
-        if ($assessment === null) {
-            return null;
-        }
-
-        return [
-            'id' => $assessment->id,
-            'status' => $assessment->status->value,
-            'created_at' => $assessment->created_at,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function sectionForCandidate(CampaignSection $section): array
-    {
-        $questions = $section->questions
-            ->map(fn (CampaignQuestion $question): array => $this->submissionBuilder->questionForCandidate($question))
-            ->values()
-            ->all();
-
-        return [
-            'id' => $section->id,
-            'title' => $section->title,
-            'description' => $section->description,
-            'duration_minutes' => $section->duration_minutes,
-            'sort_order' => $section->sort_order,
-            'question_count' => count($questions),
-            'questions' => $questions,
         ];
     }
 }

@@ -36,9 +36,10 @@ test('candidate must start a secure exam session before seeing section questions
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('candidate/exam')
-            ->where('examSession', null)
-            ->where('currentSection', null)
-            ->has('questions', 0)
+            ->where('state', 'ready_to_start')
+            ->missing('examSession')
+            ->missing('currentSection')
+            ->missing('questions')
             ->has('sections', 1),
         );
 });
@@ -70,6 +71,7 @@ test('candidate can start an exam session and receive the first section timer', 
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('candidate/exam')
+            ->where('state', 'active_section')
             ->where('examSession.id', $session->id)
             ->where('currentSection.id', $section->id)
             ->where('questions.0.id', $question->id)
