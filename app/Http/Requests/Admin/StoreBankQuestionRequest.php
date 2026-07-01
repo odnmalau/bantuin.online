@@ -4,6 +4,8 @@ namespace App\Http\Requests\Admin;
 
 use App\QuestionGradingMode;
 use App\QuestionType;
+use App\Services\AuthoredQuestion;
+use App\Services\AuthoredQuestionValidationException;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -11,6 +13,8 @@ use Illuminate\Validation\Validator;
 
 class StoreBankQuestionRequest extends FormRequest
 {
+    private ?AuthoredQuestion $authoredQuestion = null;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -20,26 +24,11 @@ class StoreBankQuestionRequest extends FormRequest
     }
 
     /**
-     * Prepare the data for validation.
+     * Prepare adapter-local fields for validation.
      */
     protected function prepareForValidation(): void
     {
-        $type = (string) $this->input('type');
-        $questionType = QuestionType::tryFrom($type);
-        $options = $this->stringList('options_text');
-
-        if ($type === QuestionType::YesNo->value && $options === null) {
-            $options = ['Yes', 'No'];
-        }
-
         $this->merge([
-            'grading_mode' => $this->input(
-                'grading_mode',
-                $questionType === null ? null : QuestionGradingMode::forQuestionType($questionType)->value,
-            ),
-            'options' => $options,
-            'correct_answer' => $this->stringList('correct_answer_text'),
-            'skill_tags' => $this->stringList('skill_tags_text'),
             'ai_generated' => $this->boolean('ai_generated'),
         ]);
     }
@@ -53,17 +42,14 @@ class StoreBankQuestionRequest extends FormRequest
     {
         return [
             'type' => ['required', Rule::enum(QuestionType::class)],
-            'grading_mode' => ['required', Rule::enum(QuestionGradingMode::class)],
+            'grading_mode' => ['nullable', Rule::enum(QuestionGradingMode::class)],
             'prompt' => ['required', 'string'],
-            'options' => ['nullable', 'array'],
-            'options.*' => ['string', 'max:500'],
-            'correct_answer' => ['nullable', 'array'],
-            'correct_answer.*' => ['string', 'max:500'],
+            'options_text' => ['nullable'],
+            'correct_answer_text' => ['nullable'],
             'expected_rubric' => ['nullable', 'string'],
             'points' => ['required', 'integer', 'min:1', 'max:1000'],
             'difficulty' => ['required', 'string', 'in:easy,medium,hard'],
-            'skill_tags' => ['nullable', 'array'],
-            'skill_tags.*' => ['string', 'max:100'],
+            'skill_tags_text' => ['nullable'],
             'ai_generated' => ['required', 'boolean'],
             'sort_order' => ['required', 'integer', 'min:0'],
         ];
@@ -78,47 +64,56 @@ class StoreBankQuestionRequest extends FormRequest
     {
         return [
             function (Validator $validator): void {
-                $type = QuestionType::tryFrom((string) $this->input('type'));
-
-                if ($type === null) {
-                    return;
-                }
-
-                if ($type->usesDeterministicGrading() && $this->input('correct_answer') === null) {
-                    $validator->errors()->add('correct_answer_text', __('A correct answer is required for auto-graded question types.'));
-                }
-
-                if ($type === QuestionType::MultipleChoice && count($this->input('options', [])) < 2) {
-                    $validator->errors()->add('options_text', __('Multiple choice questions need at least two answer options.'));
-                }
-
-                if (! $type->usesDeterministicGrading() && blank($this->input('expected_rubric'))) {
-                    $validator->errors()->add('expected_rubric', __('A rubric is required for AI-graded text questions.'));
-                }
+                $this->appendAuthoredQuestionErrors($validator);
             },
         ];
     }
 
     /**
-     * Convert textarea input into a trimmed string list.
-     *
-     * @return array<int, string>|null
+     * @return array<string, mixed>
      */
-    private function stringList(string $key): ?array
+    public function questionAttributes(): array
     {
-        $value = $this->input($key);
+        return [
+            ...$this->authoredQuestion()->toAttributes(),
+            'ai_generated' => $this->boolean('ai_generated'),
+            'sort_order' => $this->integer('sort_order'),
+        ];
+    }
 
-        if (is_array($value)) {
-            $items = $value;
-        } else {
-            $items = preg_split('/[\r\n]+/', (string) $value) ?: [];
+    private function appendAuthoredQuestionErrors(Validator $validator): void
+    {
+        try {
+            $this->authoredQuestion = AuthoredQuestion::fromFormInput($this->authoredQuestionInput());
+        } catch (AuthoredQuestionValidationException $exception) {
+            foreach ($exception->errors() as $field => $messages) {
+                foreach ($messages as $message) {
+                    $validator->errors()->add($field, $message);
+                }
+            }
         }
+    }
 
-        $items = array_values(array_filter(
-            array_map(fn (mixed $item): string => trim((string) $item), $items),
-            fn (string $item): bool => $item !== '',
-        ));
+    private function authoredQuestion(): AuthoredQuestion
+    {
+        return $this->authoredQuestion ??= AuthoredQuestion::fromFormInput($this->authoredQuestionInput());
+    }
 
-        return $items === [] ? null : $items;
+    /**
+     * @return array<string, mixed>
+     */
+    private function authoredQuestionInput(): array
+    {
+        return $this->only([
+            'type',
+            'grading_mode',
+            'prompt',
+            'options_text',
+            'correct_answer_text',
+            'expected_rubric',
+            'points',
+            'difficulty',
+            'skill_tags_text',
+        ]);
     }
 }

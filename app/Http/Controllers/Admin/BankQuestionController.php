@@ -43,7 +43,7 @@ class BankQuestionController extends Controller
      */
     public function store(StoreBankQuestionRequest $request, QuestionBank $questionBank): RedirectResponse
     {
-        $questionBank->questions()->create($request->validated());
+        $questionBank->questions()->create($request->questionAttributes());
 
         $this->flashSuccessToast(__('Question added to library.'));
 
@@ -88,7 +88,7 @@ class BankQuestionController extends Controller
     {
         $this->ensureQuestionBelongsToBank($questionBank, $bankQuestion);
 
-        $bankQuestion->update($request->validated());
+        $bankQuestion->update($request->questionAttributes());
 
         $this->flashSuccessToast(__('Question updated.'));
 

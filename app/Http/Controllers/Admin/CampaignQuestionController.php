@@ -25,7 +25,7 @@ class CampaignQuestionController extends Controller
      */
     public function store(StoreCampaignQuestionRequest $request, Campaign $campaign): RedirectResponse
     {
-        $campaign->questions()->create($request->validated());
+        $campaign->questions()->create($request->questionAttributes());
 
         $this->flashSuccessToast(__('Question added to campaign.'));
 
@@ -39,7 +39,7 @@ class CampaignQuestionController extends Controller
     {
         $this->ensureQuestionBelongsToCampaign($campaign, $question);
 
-        $question->update($request->validated());
+        $question->update($request->questionAttributes());
 
         $this->flashSuccessToast(__('Question updated.'));
 
