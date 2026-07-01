@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Ai\AssessmentEvaluationException;
 use App\Services\Ai\AssessmentEvaluationResult;
 use App\Services\Ai\QwenAssessmentEvaluator;
+use App\Services\AssessmentEvaluationPipeline;
 use App\Services\AssessmentSettings;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -100,6 +101,55 @@ test('evaluation job marks passing score as pending approval', function () {
         ->ai_email_subject->not->toBeNull()
         ->ai_email_body->not->toBeNull()
         ->evaluated_at->not->toBeNull();
+
+    AssessmentEvaluatorAgent::assertPrompted(fn ($prompt): bool => str_contains($prompt->prompt, 'Explain indexes.'));
+});
+
+test('assessment evaluation pipeline marks passing score as pending approval', function () {
+    AssessmentEvaluatorAgent::fake([
+        [
+            'score' => 82,
+            'justification' => 'The answers are sufficiently detailed and align with the provided rubrics.',
+            'email' => [
+                'subject' => 'Interview Invitation - Candidate',
+                'body' => 'Thank you for completing the assessment. We would like to invite you to continue to the interview stage.',
+            ],
+        ],
+    ]);
+
+    $assessment = Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->create([
+            'status' => AssessmentStatus::Submitted,
+            'answers_payload' => [
+                [
+                    'question_id' => 1,
+                    'question' => 'Explain indexes.',
+                    'rubric' => 'Mentions reads, writes, and storage tradeoffs.',
+                    'answer' => str_repeat('This answer explains the tradeoffs clearly. ', 4),
+                ],
+            ],
+        ]);
+
+    $evaluated = app(AssessmentEvaluationPipeline::class)->evaluate($assessment);
+
+    expect($evaluated)
+        ->not->toBeNull()
+        ->status->toBe(AssessmentStatus::PendingApproval)
+        ->ai_score->toBe(82)
+        ->ai_justification->not->toBeNull()
+        ->ai_email_subject->not->toBeNull()
+        ->ai_email_body->not->toBeNull()
+        ->evaluated_at->not->toBeNull();
+
+    expect($evaluated->events()->pluck('type')->all())
+        ->toContain('evaluation_started')
+        ->toContain('qwen_essay_evaluation_completed')
+        ->toContain('deterministic_grading_completed')
+        ->toContain('ranking_calculated')
+        ->toContain('critic_completed')
+        ->toContain('draft_email_generated')
+        ->toContain('evaluation_completed');
 
     AssessmentEvaluatorAgent::assertPrompted(fn ($prompt): bool => str_contains($prompt->prompt, 'Explain indexes.'));
 });
