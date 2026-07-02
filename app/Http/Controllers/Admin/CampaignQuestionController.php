@@ -3,22 +3,20 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\HandlesAssessmentGenerationFailures;
-use App\Http\Controllers\Admin\Concerns\ValidatesDraftQuestionAiMutations;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCampaignQuestionRequest;
 use App\Http\Requests\Admin\UpdateCampaignQuestionRequest;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
-use App\QuestionStatus;
 use App\Services\Ai\QwenMcqOptionsRegenerator;
 use App\Services\Ai\QwenTextQuestionToMcqConverter;
+use App\Services\DraftQuestionMutation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
 
 class CampaignQuestionController extends Controller
 {
     use HandlesAssessmentGenerationFailures;
-    use ValidatesDraftQuestionAiMutations;
 
     /**
      * Store a campaign question snapshot.
@@ -53,19 +51,17 @@ class CampaignQuestionController extends Controller
         Campaign $campaign,
         CampaignQuestion $question,
         QwenMcqOptionsRegenerator $regenerator,
+        DraftQuestionMutation $mutation,
     ): RedirectResponse {
         $this->ensureQuestionBelongsToCampaign($campaign, $question);
-        $this->ensureDraftMcqRegeneration($question->type, $question->status);
 
-        $result = $this->runAssessmentGeneration(
+        $this->runAssessmentGeneration(
             'regeneration',
-            fn () => $regenerator->regenerateForCampaignQuestion($question, $campaign),
+            fn () => $mutation->regenerateMcqOptions(
+                $question,
+                fn () => $regenerator->regenerateForCampaignQuestion($question, $campaign),
+            ),
         );
-
-        $question->update([
-            'options' => $result->options,
-            'correct_answer' => $result->correctAnswer,
-        ]);
 
         $this->flashSuccessToast(__('Multiple choice options regenerated.'));
 
@@ -79,16 +75,17 @@ class CampaignQuestionController extends Controller
         Campaign $campaign,
         CampaignQuestion $question,
         QwenTextQuestionToMcqConverter $converter,
+        DraftQuestionMutation $mutation,
     ): RedirectResponse {
         $this->ensureQuestionBelongsToCampaign($campaign, $question);
-        $this->ensureDraftMcqConversion($question->type, $question->status);
 
-        $result = $this->runAssessmentGeneration(
+        $this->runAssessmentGeneration(
             'conversion',
-            fn () => $converter->convertCampaignQuestion($question, $campaign),
+            fn () => $mutation->convertToMcq(
+                $question,
+                fn () => $converter->convertCampaignQuestion($question, $campaign),
+            ),
         );
-
-        $question->update($this->attributesAfterMcqConversion($result));
 
         $this->flashSuccessToast(__('Question converted to multiple choice.'));
 
@@ -98,19 +95,11 @@ class CampaignQuestionController extends Controller
     /**
      * Approve a generated draft campaign question.
      */
-    public function approve(Campaign $campaign, CampaignQuestion $question): RedirectResponse
+    public function approve(Campaign $campaign, CampaignQuestion $question, DraftQuestionMutation $mutation): RedirectResponse
     {
         $this->ensureQuestionBelongsToCampaign($campaign, $question);
 
-        $this->ensureDraftQuestionStatus(
-            $question->status,
-            'question',
-            __('Only draft questions can be approved.'),
-        );
-
-        $question->update([
-            'status' => QuestionStatus::Approved,
-        ]);
+        $mutation->approveCampaignQuestion($question);
 
         $this->flashSuccessToast(__('Question approved.'));
 
@@ -120,13 +109,9 @@ class CampaignQuestionController extends Controller
     /**
      * Approve all generated draft questions in the campaign.
      */
-    public function approveAll(Campaign $campaign): RedirectResponse
+    public function approveAll(Campaign $campaign, DraftQuestionMutation $mutation): RedirectResponse
     {
-        $approvedQuestions = $campaign->questions()
-            ->where('status', QuestionStatus::Draft->value)
-            ->update([
-                'status' => QuestionStatus::Approved,
-            ]);
+        $approvedQuestions = $mutation->approveAllCampaignDrafts($campaign);
 
         $this->flashSuccessToast(trans_choice(
             'Approved :count draft question.|Approved :count draft questions.',

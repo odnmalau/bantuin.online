@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\HandlesAssessmentGenerationFailures;
 use App\Http\Controllers\Admin\Concerns\ProvidesQuestionDifficultyOptions;
-use App\Http\Controllers\Admin\Concerns\ValidatesDraftQuestionAiMutations;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreBankQuestionRequest;
 use App\Http\Requests\Admin\UpdateBankQuestionRequest;
@@ -14,6 +13,7 @@ use App\QuestionGradingMode;
 use App\QuestionType;
 use App\Services\Ai\QwenMcqOptionsRegenerator;
 use App\Services\Ai\QwenTextQuestionToMcqConverter;
+use App\Services\DraftQuestionMutation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -23,7 +23,6 @@ class BankQuestionController extends Controller
 {
     use HandlesAssessmentGenerationFailures;
     use ProvidesQuestionDifficultyOptions;
-    use ValidatesDraftQuestionAiMutations;
 
     /**
      * Show the form for creating a reusable question.
@@ -102,19 +101,17 @@ class BankQuestionController extends Controller
         QuestionBank $questionBank,
         BankQuestion $bankQuestion,
         QwenMcqOptionsRegenerator $regenerator,
+        DraftQuestionMutation $mutation,
     ): RedirectResponse {
         $this->ensureQuestionBelongsToBank($questionBank, $bankQuestion);
-        $this->ensureDraftMcqRegeneration($bankQuestion->type, $bankQuestion->status);
 
-        $result = $this->runAssessmentGeneration(
+        $this->runAssessmentGeneration(
             'regeneration',
-            fn () => $regenerator->regenerateForBankQuestion($bankQuestion, $questionBank),
+            fn () => $mutation->regenerateMcqOptions(
+                $bankQuestion,
+                fn () => $regenerator->regenerateForBankQuestion($bankQuestion, $questionBank),
+            ),
         );
-
-        $bankQuestion->update([
-            'options' => $result->options,
-            'correct_answer' => $result->correctAnswer,
-        ]);
 
         $this->flashSuccessToast(__('Multiple choice options regenerated.'));
 
@@ -128,16 +125,17 @@ class BankQuestionController extends Controller
         QuestionBank $questionBank,
         BankQuestion $bankQuestion,
         QwenTextQuestionToMcqConverter $converter,
+        DraftQuestionMutation $mutation,
     ): RedirectResponse {
         $this->ensureQuestionBelongsToBank($questionBank, $bankQuestion);
-        $this->ensureDraftMcqConversion($bankQuestion->type, $bankQuestion->status);
 
-        $result = $this->runAssessmentGeneration(
+        $this->runAssessmentGeneration(
             'conversion',
-            fn () => $converter->convertBankQuestion($bankQuestion, $questionBank),
+            fn () => $mutation->convertToMcq(
+                $bankQuestion,
+                fn () => $converter->convertBankQuestion($bankQuestion, $questionBank),
+            ),
         );
-
-        $bankQuestion->update($this->attributesAfterMcqConversion($result));
 
         $this->flashSuccessToast(__('Question converted to multiple choice.'));
 
