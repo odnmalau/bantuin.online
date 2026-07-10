@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Campaign;
 use App\Services\RankingOverview;
-use App\UserRole;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,14 +17,16 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        if ($user?->role === UserRole::Admin) {
+        if ($user?->can('viewAny', Campaign::class)) {
             return Inertia::render('dashboard', [
-                'overview' => Inertia::defer(fn (): array => $rankingOverview->build()),
+                'overview' => Inertia::defer(fn (): array => $rankingOverview->build($user->current_team_id)),
+                'personalLanding' => false,
             ]);
         }
 
         return Inertia::render('dashboard', [
             'overview' => null,
+            'personalLanding' => true,
         ]);
     }
 }

@@ -41,18 +41,19 @@ class RankingOverview
      *     }
      * }
      */
-    public function build(): array
+    public function build(int $teamId): array
     {
         $periodEnd = now()->endOfDay();
         $periodStart = now()->subDays(6)->startOfDay();
         $previousPeriodEnd = $periodStart->copy()->subSecond();
         $previousPeriodStart = now()->subDays(13)->startOfDay();
 
-        $currentSummary = $this->summaryForPeriod($periodStart, $periodEnd);
-        $previousSummary = $this->summaryForPeriod($previousPeriodStart, $previousPeriodEnd);
+        $currentSummary = $this->summaryForPeriod($teamId, $periodStart, $periodEnd);
+        $previousSummary = $this->summaryForPeriod($teamId, $previousPeriodStart, $previousPeriodEnd);
 
         return [
             'has_ranked_candidates' => Assessment::query()
+                ->whereHas('campaign', fn ($query) => $query->where('team_id', $teamId))
                 ->whereNotNull('ranking_score')
                 ->exists(),
             'summary' => [
@@ -78,10 +79,10 @@ class RankingOverview
                 ],
             ],
             'charts' => [
-                'ranking_activity' => $this->rankingActivity($periodStart, $periodEnd),
-                'score_distribution' => $this->scoreDistribution($periodStart, $periodEnd),
+                'ranking_activity' => $this->rankingActivity($teamId, $periodStart, $periodEnd),
+                'score_distribution' => $this->scoreDistribution($teamId, $periodStart, $periodEnd),
             ],
-            'needs_attention' => $this->needsAttention(),
+            'needs_attention' => $this->needsAttention($teamId),
         ];
     }
 
@@ -93,11 +94,11 @@ class RankingOverview
      *     average_ranking_score: int|null
      * }
      */
-    private function summaryForPeriod(CarbonInterface $start, CarbonInterface $end): array
+    private function summaryForPeriod(int $teamId, CarbonInterface $start, CarbonInterface $end): array
     {
         $pending = AssessmentStatus::PendingApproval->value;
 
-        $row = $this->rankedInPeriodQuery($start, $end)
+        $row = $this->rankedInPeriodQuery($teamId, $start, $end)
             ->toBase()
             ->selectRaw('count(*) as total_ranked')
             ->selectRaw('avg(ranking_score) as average_ranking_score')
@@ -120,9 +121,9 @@ class RankingOverview
     /**
      * @return list<array{date: string, label: string, ranked_count: int}>
      */
-    private function rankingActivity(CarbonInterface $start, CarbonInterface $end): array
+    private function rankingActivity(int $teamId, CarbonInterface $start, CarbonInterface $end): array
     {
-        $countsByDay = $this->rankedInPeriodQuery($start, $end)
+        $countsByDay = $this->rankedInPeriodQuery($teamId, $start, $end)
             ->toBase()
             ->selectRaw('date(coalesce(evaluated_at, created_at)) as day')
             ->selectRaw('count(*) as ranked_count')
@@ -147,9 +148,9 @@ class RankingOverview
     /**
      * @return list<array{bucket: string, label: string, count: int}>
      */
-    private function scoreDistribution(CarbonInterface $start, CarbonInterface $end): array
+    private function scoreDistribution(int $teamId, CarbonInterface $start, CarbonInterface $end): array
     {
-        $row = $this->rankedInPeriodQuery($start, $end)
+        $row = $this->rankedInPeriodQuery($teamId, $start, $end)
             ->toBase()
             ->selectRaw('count(case when ranking_score between 0 and 49 then 1 end) as bucket_0_49')
             ->selectRaw('count(case when ranking_score between 50 and 69 then 1 end) as bucket_50_69')
@@ -171,7 +172,7 @@ class RankingOverview
      *     items: list<array{campaign_id: int, label: string, badge: string}>
      * }
      */
-    private function needsAttention(): array
+    private function needsAttention(int $teamId): array
     {
         $empty = [
             'summary' => [
@@ -193,6 +194,7 @@ class RankingOverview
 
         /** @var Collection<int, stdClass> $rows */
         $rows = Assessment::query()
+            ->whereHas('campaign', fn ($query) => $query->where('team_id', $teamId))
             ->toBase()
             ->select('campaign_id')
             ->selectRaw("{$failuresExpression} as failures", [$evaluationFailed, $emailFailed])
@@ -252,6 +254,7 @@ class RankingOverview
         }
 
         $titles = Campaign::query()
+            ->where('team_id', $teamId)
             ->whereIn('id', $rows->pluck('campaign_id'))
             ->pluck('title', 'id');
 
@@ -274,9 +277,10 @@ class RankingOverview
         ];
     }
 
-    private function rankedInPeriodQuery(CarbonInterface $start, CarbonInterface $end)
+    private function rankedInPeriodQuery(int $teamId, CarbonInterface $start, CarbonInterface $end)
     {
         return Assessment::query()
+            ->whereHas('campaign', fn ($query) => $query->where('team_id', $teamId))
             ->whereNotNull('ranking_score')
             ->whereRaw('coalesce(evaluated_at, created_at) >= ?', [$start])
             ->whereRaw('coalesce(evaluated_at, created_at) <= ?', [$end]);

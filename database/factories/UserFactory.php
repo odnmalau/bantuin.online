@@ -37,9 +37,27 @@ class UserFactory extends Factory
      */
     public function admin(): static
     {
-        return $this->state(fn () => [
-            'role' => UserRole::Admin,
-        ]);
+        return $this
+            ->state(fn () => [
+                'role' => UserRole::Admin,
+            ])
+            ->afterCreating(function (User $user): void {
+                if ($user->current_team_id !== null) {
+                    return;
+                }
+
+                $team = Team::query()
+                    ->whereHas('ownerMembership.user', fn ($query) => $query->where('role', UserRole::Admin))
+                    ->first();
+
+                if ($team === null) {
+                    $team = Team::factory()->ownedBy($user)->create();
+                } else {
+                    TeamMembership::factory()->for($team)->for($user)->administrator()->create();
+                }
+
+                $user->selectCurrentTeam($team);
+            });
     }
 
     /**
@@ -55,6 +73,10 @@ class UserFactory extends Factory
     public function teamOwner(): static
     {
         return $this->afterCreating(function (User $user): void {
+            if ($user->current_team_id !== null) {
+                return;
+            }
+
             $team = Team::factory()->ownedBy($user)->create();
 
             $user->selectCurrentTeam($team);

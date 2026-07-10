@@ -9,6 +9,8 @@ use App\QuestionStatus;
 use App\QuestionType;
 use App\Services\Ai\McqOptionsRegenerationResult;
 use App\Services\Ai\TextQuestionToMcqConversionResult;
+use App\TeamStatus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class DraftQuestionMutation
@@ -19,13 +21,18 @@ class DraftQuestionMutation
     public function regenerateMcqOptions(CampaignQuestion $question, callable $regenerate): void
     {
         $this->ensureDraftMcqRegeneration($question);
-
+        $expectedTeamId = $question->campaign()->value('team_id');
         $result = $regenerate();
 
-        $question->update([
-            'options' => $result->options,
-            'correct_answer' => $result->correctAnswer,
-        ]);
+        $this->updateAfterAi(
+            $question,
+            $expectedTeamId,
+            [
+                'options' => $result->options,
+                'correct_answer' => $result->correctAnswer,
+            ],
+            fn (CampaignQuestion $lockedQuestion) => $this->ensureDraftMcqRegeneration($lockedQuestion),
+        );
     }
 
     /**
@@ -34,8 +41,15 @@ class DraftQuestionMutation
     public function convertToMcq(CampaignQuestion $question, callable $convert): void
     {
         $this->ensureDraftMcqConversion($question);
+        $expectedTeamId = $question->campaign()->value('team_id');
+        $attributes = $this->attributesAfterMcqConversion($convert());
 
-        $question->update($this->attributesAfterMcqConversion($convert()));
+        $this->updateAfterAi(
+            $question,
+            $expectedTeamId,
+            $attributes,
+            fn (CampaignQuestion $lockedQuestion) => $this->ensureDraftMcqConversion($lockedQuestion),
+        );
     }
 
     public function approveCampaignQuestion(CampaignQuestion $question): void
@@ -113,5 +127,38 @@ class DraftQuestionMutation
             'expected_rubric' => null,
             'ai_generated' => true,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  callable(CampaignQuestion): void  $validate
+     */
+    private function updateAfterAi(
+        CampaignQuestion $question,
+        int $expectedTeamId,
+        array $attributes,
+        callable $validate,
+    ): void {
+        DB::transaction(function () use ($question, $expectedTeamId, $attributes, $validate): void {
+            $lockedQuestion = CampaignQuestion::query()->whereKey($question->id)->lockForUpdate()->firstOrFail();
+            $campaign = Campaign::query()
+                ->whereKey($lockedQuestion->campaign_id)
+                ->where('team_id', $expectedTeamId)
+                ->lockForUpdate()
+                ->first();
+            $team = $campaign?->team()
+                ->where('status', TeamStatus::Active)
+                ->lockForUpdate()
+                ->first();
+
+            if ($campaign === null || $team === null) {
+                throw ValidationException::withMessages([
+                    'question' => __('The Campaign Team is no longer writable.'),
+                ]);
+            }
+
+            $validate($lockedQuestion);
+            $lockedQuestion->update($attributes);
+        });
     }
 }

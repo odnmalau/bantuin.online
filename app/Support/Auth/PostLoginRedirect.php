@@ -4,7 +4,6 @@ namespace App\Support\Auth;
 
 use App\Models\User;
 use App\Services\CampaignInvitationService;
-use App\UserRole;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -23,7 +22,7 @@ class PostLoginRedirect
             return $invitationRedirect;
         }
 
-        $fallback = $user->homePath();
+        $fallback = route('dashboard', absolute: false);
         $intended = $request->session()->get('url.intended');
 
         if ($intended !== null && $this->userCanAccessUrl($user, $intended)) {
@@ -44,11 +43,12 @@ class PostLoginRedirect
         }
 
         if (str_starts_with($path, '/admin')) {
-            return $user->role === UserRole::Admin;
+            return $user->current_team_id !== null
+                && $user->activeTeamMemberships()->where('team_id', $user->current_team_id)->exists();
         }
 
         if (str_starts_with($path, '/candidate')) {
-            return $user->role === UserRole::Candidate;
+            return true;
         }
 
         return true;

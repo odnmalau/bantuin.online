@@ -117,14 +117,13 @@ test('admin cannot create a campaign for a deactivated current team', function (
             'role_title' => 'Backend Engineer',
             'threshold_score' => 75,
         ])
-        ->assertSessionHasErrors('campaign')
-        ->assertRedirect(route('admin.campaigns.create'));
+        ->assertForbidden();
 
     expect(Campaign::query()->where('title', 'Blocked Campaign')->exists())->toBeFalse();
 });
 
 test('legacy admin without a current team cannot create a campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->create(['role' => 'admin']);
 
     $this->actingAs($admin)
         ->from(route('admin.campaigns.create'))
@@ -133,8 +132,7 @@ test('legacy admin without a current team cannot create a campaign', function ()
             'role_title' => 'Backend Engineer',
             'threshold_score' => 75,
         ])
-        ->assertSessionHasErrors('campaign')
-        ->assertRedirect(route('admin.campaigns.create'));
+        ->assertForbidden();
 
     expect(Campaign::query()->where('title', 'Unowned Campaign')->exists())->toBeFalse();
 });

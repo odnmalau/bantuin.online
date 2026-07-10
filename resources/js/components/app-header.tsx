@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { TeamSwitcher } from '@/components/team-switcher';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -40,7 +41,7 @@ const activeItemStyles =
 export function AppHeader({ breadcrumbs = [] }: Props) {
     const page = usePage<{ auth: Auth }>();
     const { auth } = page.props;
-    const mainNavItems = resolveMainNavItems(auth.user?.role, 'header');
+    const mainNavItems = resolveMainNavItems(auth, 'header');
     const getInitials = useInitials();
     const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
 
@@ -93,7 +94,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
 
                     <Link
-                        href={primaryMainNavHref(auth.user?.role)}
+                        href={primaryMainNavHref()}
                         prefetch
                         className="flex items-center space-x-2"
                     >
@@ -135,6 +136,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
 
                     <div className="ml-auto flex items-center space-x-2">
+                        <TeamSwitcher className="hidden max-w-52 sm:flex" />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button

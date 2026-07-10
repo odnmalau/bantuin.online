@@ -1,4 +1,11 @@
-import { Deferred, Form, Head, router, useForm } from '@inertiajs/react';
+import {
+    Deferred,
+    Form,
+    Head,
+    router,
+    useForm,
+    usePage,
+} from '@inertiajs/react';
 import { MoreHorizontal, Plus, SlidersHorizontal } from 'lucide-react';
 import type { FormEvent } from 'react';
 import type { ReactNode } from 'react';
@@ -45,6 +52,7 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import admin from '@/routes/admin';
+import type { SharedData } from '@/types';
 
 type CampaignRow = {
     id: number;
@@ -142,6 +150,7 @@ export default function AdminCampaignsIndex({
         useState<CampaignRow | null>(null);
     const [campaignPendingEdit, setCampaignPendingEdit] =
         useState<CampaignRow | null>(null);
+    const { auth } = usePage<SharedData>().props;
 
     function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -230,7 +239,9 @@ export default function AdminCampaignsIndex({
                             </DropdownMenu>
                         </form>
                         <CreateCampaignSheet>
-                            <Button>
+                            <Button
+                                disabled={!auth.capabilities.manageCampaigns}
+                            >
                                 <Plus data-icon="inline-start" />
                                 New campaign
                             </Button>
@@ -308,6 +319,10 @@ export default function AdminCampaignsIndex({
                                                         type="button"
                                                         size="icon"
                                                         variant="ghost"
+                                                        disabled={
+                                                            !auth.capabilities
+                                                                .manageCampaigns
+                                                        }
                                                         aria-label="Open campaign actions"
                                                     >
                                                         <MoreHorizontal data-icon="inline-start" />

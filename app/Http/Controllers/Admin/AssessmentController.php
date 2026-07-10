@@ -15,6 +15,7 @@ use App\Jobs\SendInterviewInvitationEmail;
 use App\Models\Assessment;
 use App\Models\User;
 use App\Services\AssessmentEventRecorder;
+use App\TeamStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -30,7 +31,8 @@ class AssessmentController extends Controller
         $assessment->loadMissing([
             'user:id,name,email',
             'approver:id,name,email',
-            'campaign:id,title,role_title,threshold_score',
+            'campaign:id,team_id,title,role_title,threshold_score',
+            'campaign.team:id,status',
         ]);
         $canReview = $this->canReview($assessment);
         $leaderboardRank = $this->leaderboardRankFor($assessment);
@@ -91,6 +93,7 @@ class AssessmentController extends Controller
         }
 
         $higherRankedCount = Assessment::query()
+            ->where('campaign_id', $assessment->campaign_id)
             ->whereNotNull('ranking_score')
             ->where(function ($query) use ($assessment): void {
                 $query
@@ -346,24 +349,31 @@ class AssessmentController extends Controller
 
     private function canReview(Assessment $assessment): bool
     {
-        return $assessment->status->isReviewable();
+        return $this->campaignTeamIsWritable($assessment) && $assessment->status->isReviewable();
     }
 
     private function canRetry(Assessment $assessment): bool
     {
-        return $assessment->status === AssessmentStatus::EvaluationFailed;
+        return $this->campaignTeamIsWritable($assessment)
+            && $assessment->status === AssessmentStatus::EvaluationFailed;
     }
 
     private function canRetryEmail(Assessment $assessment): bool
     {
-        return $assessment->status === AssessmentStatus::EmailFailed
+        return $this->campaignTeamIsWritable($assessment)
+            && $assessment->status === AssessmentStatus::EmailFailed
             && filled($assessment->approved_email_subject)
             && filled($assessment->approved_email_body);
     }
 
     private function canPromote(Assessment $assessment): bool
     {
-        return $assessment->status->isPromotable();
+        return $this->campaignTeamIsWritable($assessment) && $assessment->status->isPromotable();
+    }
+
+    private function campaignTeamIsWritable(Assessment $assessment): bool
+    {
+        return $assessment->campaign?->team?->status === TeamStatus::Active;
     }
 
     /**

@@ -6,6 +6,7 @@ use App\CampaignInvitationStatus;
 use App\Mail\CampaignExamInvitationMail;
 use App\Models\CampaignInvitation;
 use App\Services\CampaignInvitationService;
+use App\TeamStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -20,19 +21,32 @@ class SendCampaignExamInvitationEmail implements ShouldQueue
 
     public int $timeout = 30;
 
+    public int $teamId;
+
     public function __construct(
         public CampaignInvitation $invitation,
         public string $plainToken,
-    ) {}
+    ) {
+        $this->teamId = (int) $invitation->campaign()->value('team_id');
+    }
 
     /**
      * Execute the job.
      */
     public function handle(CampaignInvitationService $invitations): void
     {
-        $invitation = $this->invitation->fresh(['campaign']);
+        $invitation = $this->invitation->fresh(['campaign.team']);
 
         if ($invitation === null || $invitation->campaign === null) {
+            return;
+        }
+
+        if ($invitation->campaign->team_id !== $this->teamId || $invitation->campaign->team?->status !== TeamStatus::Active) {
+            Log::warning('Campaign exam invitation email skipped because its Team is no longer writable.', [
+                'invitation_id' => $invitation->id,
+                'team_id' => $this->teamId,
+            ]);
+
             return;
         }
 

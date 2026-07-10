@@ -11,6 +11,7 @@ use App\QuestionType;
 use App\Services\Ai\Concerns\ConfiguresQwenAssessmentAgent;
 use App\Services\Ai\Concerns\LimitsGeneratedQuestionCount;
 use App\Services\Ai\Concerns\NormalizesGeneratedQuestions;
+use App\TeamStatus;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -28,6 +29,9 @@ class QwenAssessmentGenerator
      */
     public function generate(Campaign $campaign, array $options): int
     {
+        $expectedTeamId = $campaign->team_id;
+        $this->ensureCampaignTeamIsWritable($campaign, $expectedTeamId);
+
         $campaign->loadMissing([
             'sections.questions',
         ]);
@@ -48,7 +52,12 @@ class QwenAssessmentGenerator
             max(1, (int) ($options['question_count'] ?? 6)),
         );
 
-        return DB::transaction(fn (): int => $this->persistDrafts($campaign, $sections, $options));
+        return DB::transaction(function () use ($campaign, $expectedTeamId, $sections, $options): int {
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+            $this->ensureCampaignTeamIsWritable($lockedCampaign, $expectedTeamId, true);
+
+            return $this->persistDrafts($lockedCampaign, $sections, $options);
+        });
     }
 
     /**
@@ -211,5 +220,18 @@ class QwenAssessmentGenerator
     private function generationNotes(): string
     {
         return File::get(base_path('prompt/campaign-assessment-generation.txt'));
+    }
+
+    private function ensureCampaignTeamIsWritable(Campaign $campaign, int $expectedTeamId, bool $lockTeam = false): void
+    {
+        $teamQuery = $campaign->team()->whereKey($expectedTeamId)->where('status', TeamStatus::Active);
+
+        if ($lockTeam) {
+            $teamQuery->lockForUpdate();
+        }
+
+        if ($campaign->team_id !== $expectedTeamId || $teamQuery->first() === null) {
+            throw new AssessmentGenerationException('The Campaign Team is no longer writable.');
+        }
     }
 }

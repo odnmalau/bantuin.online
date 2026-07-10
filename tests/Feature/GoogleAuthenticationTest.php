@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Team;
 use App\Models\User;
 use App\UserRole;
 
@@ -11,7 +12,7 @@ test('google redirect sends the user to the oauth provider', function () {
         ->assertRedirect('https://accounts.google.com/o/oauth2/auth');
 });
 
-test('google callback ignores intended admin url for candidates', function () {
+test('google callback sends users without a team to their personal landing', function () {
     fakeGoogleAuthConfig();
     fakeGoogleUserAuthentication(
         id: 'google-intended-test',
@@ -23,7 +24,7 @@ test('google callback ignores intended admin url for candidates', function () {
         'url.intended' => 'http://localhost/admin/campaigns',
     ])->get(route('auth.google.callback'));
 
-    $response->assertRedirect(route('candidate.exam', absolute: false));
+    $response->assertRedirect(route('dashboard', absolute: false));
 });
 
 test('google callback logs in a new candidate', function () {
@@ -46,7 +47,7 @@ test('google callback logs in a new candidate', function () {
         ->and($user->avatar)->toBe('https://lh3.googleusercontent.com/a/candidate-avatar')
         ->and($user->role)->toBe(UserRole::Candidate);
 
-    $response->assertRedirect(route('candidate.exam', absolute: false));
+    $response->assertRedirect(route('dashboard', absolute: false));
 });
 
 test('google callback links an existing admin without changing role', function () {
@@ -64,12 +65,38 @@ test('google callback links an existing admin without changing role', function (
     );
 
     $this->get(route('auth.google.callback'))
-        ->assertRedirect(route('admin.rankings.index', absolute: false));
+        ->assertRedirect(route('dashboard', absolute: false));
 
     $admin->refresh();
 
     expect($admin->google_id)->toBe('google-admin-456')
         ->and($admin->role)->toBe(UserRole::Admin);
+});
+
+test('google callback preserves current team and accepts contextual campaign urls', function () {
+    fakeGoogleAuthConfig();
+
+    $team = Team::factory()->create();
+    $user = User::factory()
+        ->teamCollaborator($team)
+        ->withCurrentTeam($team)
+        ->create([
+            'email' => 'collaborator@example.com',
+            'google_id' => null,
+        ]);
+
+    fakeGoogleUserAuthentication(
+        id: 'google-collaborator-789',
+        email: 'collaborator@example.com',
+        name: 'Campaign Collaborator',
+    );
+
+    $this->withSession([
+        'url.intended' => 'http://localhost/admin/campaigns',
+    ])->get(route('auth.google.callback'))
+        ->assertRedirect('http://localhost/admin/campaigns');
+
+    expect($user->fresh()->current_team_id)->toBe($team->id);
 });
 
 test('google callback syncs email and avatar from google for returning users', function () {

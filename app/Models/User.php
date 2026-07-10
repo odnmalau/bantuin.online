@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +68,14 @@ class User extends Authenticatable
     public function activeTeamMemberships(): HasMany
     {
         return $this->teamMemberships()->whereNull('ended_at');
+    }
+
+    /** @return HasOne<TeamMembership, $this> */
+    public function currentTeamMembership(): HasOne
+    {
+        return $this->hasOne(TeamMembership::class, 'user_id')
+            ->whereColumn('team_memberships.team_id', 'users.current_team_id')
+            ->whereNull('ended_at');
     }
 
     /** @return HasMany<PlatformOperatorAuthority, $this> */

@@ -134,3 +134,30 @@ test('draft question mutation approves campaign drafts', function () {
         ->and($approvedCount)->toBe(0)
         ->and($campaign->questions()->where('status', QuestionStatus::Draft->value)->exists())->toBeFalse();
 });
+
+test('ai question mutation rechecks the campaign team before persistence', function () {
+    $campaign = Campaign::factory()->create();
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $question = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->multipleChoice()
+        ->create([
+            'status' => QuestionStatus::Draft,
+            'options' => ['old-a', 'old-b'],
+            'correct_answer' => ['old-a'],
+        ]);
+
+    expect(fn () => app(DraftQuestionMutation::class)->regenerateMcqOptions(
+        $question,
+        function () use ($campaign): McqOptionsRegenerationResult {
+            $campaign->team->update(['status' => 'deactivated', 'deactivated_at' => now()]);
+
+            return new McqOptionsRegenerationResult(['new-a', 'new-b'], ['new-b']);
+        },
+    ))->toThrow(ValidationException::class);
+
+    expect($question->refresh())
+        ->options->toBe(['old-a', 'old-b'])
+        ->correct_answer->toBe(['old-a']);
+});

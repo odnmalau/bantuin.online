@@ -1,13 +1,8 @@
-import {
-    BriefcaseBusiness,
-    FileText,
-    LayoutGrid,
-    Trophy,
-} from 'lucide-react';
+import { BriefcaseBusiness, FileText, LayoutGrid, Trophy } from 'lucide-react';
 import { dashboard } from '@/routes';
 import admin from '@/routes/admin';
 import { exam } from '@/routes/candidate';
-import type { NavItem, User } from '@/types';
+import type { Auth, NavItem } from '@/types';
 
 type NavigationSurface = 'header' | 'sidebar';
 
@@ -55,24 +50,22 @@ const candidateNavItems: NavItem[] = [
 ];
 
 export function resolveMainNavItems(
-    role: User['role'] | undefined,
+    auth: Auth,
     surface: NavigationSurface,
 ): NavItem[] {
-    if (role === 'admin') {
+    if (auth.capabilities.viewCampaigns) {
         return surface === 'header'
             ? adminHeaderNavItems
             : adminSidebarNavItems;
     }
 
-    if (role === 'candidate') {
+    if (auth.capabilities.candidateWork) {
         return candidateNavItems;
     }
 
     return defaultNavItems;
 }
 
-export function primaryMainNavHref(
-    role: User['role'] | undefined,
-): NavItem['href'] {
+export function primaryMainNavHref(): NavItem['href'] {
     return dashboard();
 }

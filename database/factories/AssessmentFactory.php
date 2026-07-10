@@ -4,7 +4,9 @@ namespace Database\Factories;
 
 use App\AssessmentStatus;
 use App\Models\Assessment;
+use App\Models\Campaign;
 use App\Models\User;
+use App\UserRole;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -21,7 +23,16 @@ class AssessmentFactory extends Factory
     {
         return [
             'user_id' => User::factory()->candidate(),
-            'campaign_id' => null,
+            'campaign_id' => function (): ?int {
+                $teamId = User::query()
+                    ->where('role', UserRole::Admin)
+                    ->whereNotNull('current_team_id')
+                    ->value('current_team_id');
+
+                return $teamId === null
+                    ? null
+                    : Campaign::factory()->create(['team_id' => $teamId])->id;
+            },
             'answers_payload' => [
                 [
                     'question_id' => 1,

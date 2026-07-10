@@ -13,9 +13,20 @@ export type CurrentTeam = {
     role: 'owner' | 'administrator' | 'collaborator';
 };
 
+export type Capabilities = {
+    createTeam: boolean;
+    viewCampaigns: boolean;
+    manageCampaigns: boolean;
+    renameTeam: boolean;
+    candidateWork: boolean;
+};
+
 export type Auth = {
     user: User | null;
+    teams: CurrentTeam[];
     currentTeam: CurrentTeam | null;
+    capabilities: Capabilities;
+    readOnly: boolean;
     platformOperator: boolean;
 };
 

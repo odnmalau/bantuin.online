@@ -29,12 +29,12 @@ test('admin routes reject candidates', function () {
         ->assertForbidden();
 });
 
-test('candidate routes reject admins', function () {
+test('candidate work is available independently from legacy roles', function () {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
         ->get(route('candidate.exam'))
-        ->assertForbidden();
+        ->assertOk();
 });
 
 test('assessment settings admin routes are removed', function () {

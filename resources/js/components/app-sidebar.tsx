@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
+import { TeamSwitcher } from '@/components/team-switcher';
 import {
     Sidebar,
     SidebarContent,
@@ -17,7 +18,7 @@ import type { Auth } from '@/types';
 
 export function AppSidebar() {
     const { auth } = usePage<{ auth: Auth }>().props;
-    const mainNavItems = resolveMainNavItems(auth.user?.role, 'sidebar');
+    const mainNavItems = resolveMainNavItems(auth, 'sidebar');
 
     return (
         <Sidebar collapsible="offcanvas" variant="sidebar">
@@ -25,15 +26,13 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            <Link
-                                href={primaryMainNavHref(auth.user?.role)}
-                                prefetch
-                            >
+                            <Link href={primaryMainNavHref()} prefetch>
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>
+                <TeamSwitcher className="w-full justify-between" />
             </SidebarHeader>
 
             <SidebarContent>

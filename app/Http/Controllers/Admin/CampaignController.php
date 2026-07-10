@@ -39,9 +39,11 @@ class CampaignController extends Controller
 
         $search = trim((string) ($filters['search'] ?? ''));
         $status = (string) ($filters['status'] ?? 'all');
+        $currentTeamId = $request->user()->current_team_id;
 
         return Inertia::render('admin/campaigns/index', [
             'campaigns' => Inertia::defer(fn (): array => Campaign::query()
+                ->where('team_id', $currentTeamId)
                 ->with('creator:id,name,email')
                 ->withCount(['sections', 'questions', 'assessments'])
                 ->when($search !== '', fn (Builder $query) => $this->applyCampaignSearch($query, $search))

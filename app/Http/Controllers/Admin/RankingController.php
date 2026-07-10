@@ -35,13 +35,17 @@ class RankingController extends Controller
     public function index(Request $request): Response
     {
         $filters = $request->validate([
-            'campaign' => ['nullable', 'integer', Rule::exists('campaigns', 'id')],
+            'campaign' => [
+                'nullable',
+                'integer',
+                Rule::exists('campaigns', 'id')->where('team_id', $request->user()->current_team_id),
+            ],
             'search' => ['nullable', 'string', 'max:255'],
             'status' => ['nullable', 'string', Rule::in(['all', ...array_column(AssessmentStatus::selectOptions(), 'value')])],
             'date_range' => ['nullable', 'string', Rule::in(array_column(self::dateRangeOptions(), 'value'))],
         ]);
 
-        $campaignOptions = $this->campaignOptions();
+        $campaignOptions = $this->campaignOptions($request->user()->current_team_id);
         $campaignId = $this->resolveCampaignId(
             isset($filters['campaign']) ? (int) $filters['campaign'] : null,
             $campaignOptions,
@@ -77,9 +81,10 @@ class RankingController extends Controller
     /**
      * @return Collection<int, Campaign>
      */
-    private function campaignOptions(): Collection
+    private function campaignOptions(int $teamId): Collection
     {
         return Campaign::query()
+            ->where('team_id', $teamId)
             ->whereHas('assessments', fn (Builder $query) => $query->whereNotNull('ranking_score'))
             ->orderBy('title')
             ->get(['id', 'title']);

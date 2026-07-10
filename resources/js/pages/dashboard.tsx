@@ -1,18 +1,26 @@
-import { Deferred, Head, usePage } from '@inertiajs/react';
-import {
-    RankingOverviewSection,
-    type NeedsAttention,
-    type RankingOverviewCharts,
-    type RankingOverviewSummary,
+import { Deferred, Form, Head, Link, usePage } from '@inertiajs/react';
+import { RankingOverviewSection } from '@/components/admin/ranking-overview-section';
+import type {
+    NeedsAttention,
+    RankingOverviewCharts,
+    RankingOverviewSummary,
 } from '@/components/admin/ranking-overview-section';
+import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
+    CardDescription,
+    CardFooter,
     CardHeader,
+    CardTitle,
 } from '@/components/ui/card';
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { dashboard } from '@/routes';
+import { exam } from '@/routes/candidate';
+import { store as storeTeam, update as updateTeam } from '@/routes/teams';
 import type { SharedData } from '@/types';
 
 type Overview = {
@@ -24,6 +32,7 @@ type Overview = {
 
 type Props = {
     overview?: Overview | null;
+    personalLanding: boolean;
 };
 
 function DashboardOverviewSkeleton() {
@@ -63,17 +72,21 @@ function DashboardOverviewSkeleton() {
     );
 }
 
-export default function Dashboard({ overview }: Props) {
+export default function Dashboard({ overview, personalLanding }: Props) {
     const { auth } = usePage<SharedData>().props;
-    const isAdmin = auth.user?.role === 'admin';
 
     return (
         <>
             <Head title="Dashboard" />
 
             <div className="flex flex-col gap-6 p-4">
-                {isAdmin ? (
-                    <Deferred data="overview" fallback={<DashboardOverviewSkeleton />}>
+                <TeamSummaryCard />
+
+                {auth.capabilities.viewCampaigns ? (
+                    <Deferred
+                        data="overview"
+                        fallback={<DashboardOverviewSkeleton />}
+                    >
                         {overview ? (
                             <RankingOverviewSection
                                 summary={overview.summary}
@@ -85,11 +98,22 @@ export default function Dashboard({ overview }: Props) {
                             />
                         ) : null}
                     </Deferred>
-                ) : (
-                    <div className="relative min-h-[320px] overflow-hidden rounded-xl border border-sidebar-border/70">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                )}
+                ) : personalLanding ? (
+                    <Card className="overflow-hidden border-primary/20 bg-linear-to-br from-primary/8 via-background to-background">
+                        <CardHeader>
+                            <CardTitle>Your candidate work</CardTitle>
+                            <CardDescription>
+                                Continue assessment work here, or create a Team
+                                when you are ready to run a hiring campaign.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardFooter>
+                            <Button asChild variant="outline">
+                                <Link href={exam()}>Open candidate work</Link>
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                ) : null}
             </div>
         </>
     );
@@ -103,3 +127,87 @@ Dashboard.layout = {
         },
     ],
 };
+
+function TeamSummaryCard() {
+    const { auth } = usePage<SharedData>().props;
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>
+                    {auth.currentTeam?.name ?? 'Create your first Team'}
+                </CardTitle>
+                <CardDescription>
+                    {auth.currentTeam
+                        ? `${auth.currentTeam.role} / ${auth.readOnly ? 'Read-only history' : 'Active Team'}`
+                        : 'Teams keep Campaigns and hiring work isolated.'}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-6 lg:grid-cols-2">
+                <Form {...storeTeam.form()} className="grid gap-3">
+                    {({ errors, processing }) => (
+                        <>
+                            <div className="grid gap-2">
+                                <Label htmlFor="new-team-name">New Team</Label>
+                                <Input
+                                    id="new-team-name"
+                                    name="name"
+                                    placeholder="Product Hiring"
+                                    required
+                                />
+                                {errors.name ? (
+                                    <p className="text-sm text-destructive">
+                                        {errors.name}
+                                    </p>
+                                ) : null}
+                            </div>
+                            <Button
+                                type="submit"
+                                className="justify-self-start"
+                                disabled={processing}
+                            >
+                                {processing ? <Spinner /> : null}
+                                Create Team
+                            </Button>
+                        </>
+                    )}
+                </Form>
+
+                {auth.currentTeam && auth.capabilities.renameTeam ? (
+                    <Form
+                        {...updateTeam.form(auth.currentTeam.id)}
+                        className="grid gap-3"
+                    >
+                        {({ errors, processing }) => (
+                            <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="team-name">Team name</Label>
+                                    <Input
+                                        id="team-name"
+                                        name="name"
+                                        defaultValue={auth.currentTeam?.name}
+                                        required
+                                    />
+                                    {errors.name ? (
+                                        <p className="text-sm text-destructive">
+                                            {errors.name}
+                                        </p>
+                                    ) : null}
+                                </div>
+                                <Button
+                                    type="submit"
+                                    variant="outline"
+                                    className="justify-self-start"
+                                    disabled={processing}
+                                >
+                                    {processing ? <Spinner /> : null}
+                                    Rename Team
+                                </Button>
+                            </>
+                        )}
+                    </Form>
+                ) : null}
+            </CardContent>
+        </Card>
+    );
+}

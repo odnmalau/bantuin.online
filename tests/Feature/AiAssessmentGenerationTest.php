@@ -7,6 +7,7 @@ use App\Models\User;
 use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
+use App\Services\Ai\AssessmentGenerationException;
 use App\Services\Ai\QwenAssessmentGenerator;
 use Illuminate\Support\Facades\Http;
 
@@ -253,6 +254,21 @@ test('candidate cannot generate campaign assessments', function () {
             'difficulty' => 'mixed',
         ])
         ->assertForbidden();
+});
+
+test('assessment generation rechecks that the campaign team is writable', function () {
+    AssessmentGeneratorAgent::fake([generatedAssessmentOutput()]);
+    $campaign = Campaign::factory()->create();
+    $campaign->team->update(['status' => 'deactivated', 'deactivated_at' => now()]);
+
+    expect(fn () => app(QwenAssessmentGenerator::class)->generate($campaign, [
+        'question_count' => 2,
+        'language' => 'English',
+        'difficulty' => 'mixed',
+    ]))->toThrow(AssessmentGenerationException::class);
+
+    AssessmentGeneratorAgent::assertNeverPrompted();
+    expect($campaign->questions()->exists())->toBeFalse();
 });
 
 /**

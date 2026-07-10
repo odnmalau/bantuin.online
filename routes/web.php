@@ -15,7 +15,9 @@ use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\CampaignInviteController;
 use App\Http\Controllers\Candidate\AssessmentController;
 use App\Http\Controllers\Candidate\ExamSessionController;
+use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
@@ -33,9 +35,12 @@ Route::middleware('auth')->group(function () {
     Route::post('logout', [LogoutController::class, 'destroy'])->name('logout');
 
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::post('teams', [TeamController::class, 'store'])->name('teams.store');
+    Route::patch('teams/{team}', [TeamController::class, 'update'])->name('teams.update');
+    Route::put('current-team', CurrentTeamController::class)->name('current-team.update');
 });
 
-Route::middleware(['auth', 'role:admin'])
+Route::middleware(['auth', 'current-team'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {
@@ -67,7 +72,7 @@ Route::middleware(['auth', 'role:admin'])
         Route::post('assessments/{assessment}/reject', [AdminAssessmentController::class, 'reject'])->name('assessments.reject');
     });
 
-Route::middleware(['auth', 'role:candidate'])
+Route::middleware('auth')
     ->prefix('candidate')
     ->name('candidate.')
     ->group(function () {

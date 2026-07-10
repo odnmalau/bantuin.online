@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureCurrentTeamMember;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -17,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'current-team' => EnsureCurrentTeamMember::class,
             'role' => EnsureUserHasRole::class,
         ]);
 

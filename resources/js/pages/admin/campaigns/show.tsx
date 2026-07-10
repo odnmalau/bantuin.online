@@ -89,6 +89,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import admin from '@/routes/admin';
+import type { SharedData } from '@/types';
 
 type CampaignQuestion = {
     id: number;
@@ -314,15 +315,28 @@ export default function AdminCampaignsShow({
     questionTypes,
     gradingModeOptions,
 }: Props) {
-    const page = usePage<{ flash?: { campaign_invite_url?: string } }>();
+    const page = usePage<
+        SharedData & { flash?: { campaign_invite_url?: string } }
+    >();
     const latestInviteUrl = page.props.flash?.campaign_invite_url;
+    const { auth } = page.props;
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     return (
         <>
             <Head title={campaign?.title ?? 'Campaign'} />
 
-            <div className="flex flex-col gap-6 p-4">
+            <div
+                className={`flex flex-col gap-6 p-4 ${auth.readOnly ? '[&_form]:pointer-events-none [&_form]:opacity-60' : ''}`}
+            >
+                {auth.readOnly ? (
+                    <Card className="border-amber-500/30 bg-amber-500/5">
+                        <CardContent className="text-sm text-muted-foreground">
+                            This Team is deactivated. Campaign history is
+                            read-only until the Team is reactivated.
+                        </CardContent>
+                    </Card>
+                ) : null}
                 <Deferred
                     data={['campaign', 'invitations']}
                     fallback={<CampaignDetailSkeleton />}

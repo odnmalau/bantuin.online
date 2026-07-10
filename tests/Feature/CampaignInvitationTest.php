@@ -71,6 +71,24 @@ test('exam invite email job sends mailable with invite link', function () {
     Mail::assertSent(CampaignExamInvitationMail::class);
 });
 
+test('exam invite email job rechecks its campaign team boundary', function () {
+    Mail::fake();
+
+    $campaign = Campaign::factory()->active()->create();
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()->createWithPlainToken([
+        'campaign_id' => $campaign->id,
+        'email' => 'candidate@example.com',
+    ]);
+    $job = new SendCampaignExamInvitationEmail($invitation, $plainToken);
+    $sentAt = $invitation->sent_at;
+    $campaign->team->update(['status' => 'deactivated', 'deactivated_at' => now()]);
+
+    $job->handle(app(CampaignInvitationService::class));
+
+    Mail::assertNothingSent();
+    expect($invitation->fresh()->sent_at)->toEqual($sentAt);
+});
+
 test('invite link stores pending redemption and redirects to login', function () {
     $admin = User::factory()->admin()->create();
     $campaign = Campaign::factory()->active()->create();
