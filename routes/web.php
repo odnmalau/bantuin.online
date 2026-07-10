@@ -18,6 +18,7 @@ use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\CampaignInviteController;
 use App\Http\Controllers\Candidate\AssessmentController;
 use App\Http\Controllers\Candidate\ExamSessionController;
+use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -34,7 +35,7 @@ Route::get('invites/{token}', [CampaignInviteController::class, 'show'])->name('
 Route::middleware('auth')->group(function () {
     Route::post('logout', [LogoutController::class, 'destroy'])->name('logout');
 
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('dashboard', DashboardController::class)->name('dashboard');
 });
 
 Route::middleware(['auth', 'role:admin'])
