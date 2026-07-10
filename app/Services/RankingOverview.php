@@ -4,15 +4,20 @@ namespace App\Services;
 
 use App\AssessmentStatus;
 use App\Models\Assessment;
+use App\Models\Campaign;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use stdClass;
 
 class RankingOverview
 {
+    private const ATTENTION_ITEM_LIMIT = 3;
+
     /**
      * Build the ranking overview summary and chart payloads.
      *
      * @return array{
+     *     has_ranked_candidates: bool,
      *     summary: array{
      *         total_ranked: int,
      *         pending_approval: int,
@@ -22,37 +27,34 @@ class RankingOverview
      *         changes: array{
      *             total_ranked: float|null,
      *             pending_approval: float|null,
-     *             needs_manual_review: float|null
+     *             needs_manual_review: float|null,
+     *             average_ranking_score: float|null
      *         }
      *     },
      *     charts: array{
-     *         average_score_trend: list<array{date: string, label: string, average_score: int|null, ranked_count: int}>,
+     *         ranking_activity: list<array{date: string, label: string, ranked_count: int}>,
      *         score_distribution: list<array{bucket: string, label: string, count: int}>
+     *     },
+     *     needs_attention: array{
+     *         summary: array{campaigns: int, pending: int, manual_reviews: int, failures: int},
+     *         items: list<array{campaign_id: int, label: string, badge: string}>
      *     }
      * }
      */
     public function build(): array
     {
-        $assessments = Assessment::query()
-            ->whereNotNull('ranking_score')
-            ->get([
-                'id',
-                'ranking_score',
-                'status',
-                'needs_manual_review',
-                'evaluated_at',
-                'created_at',
-            ]);
+        $periodEnd = now()->endOfDay();
+        $periodStart = now()->subDays(6)->startOfDay();
+        $previousPeriodEnd = $periodStart->copy()->subSecond();
+        $previousPeriodStart = now()->subDays(13)->startOfDay();
 
-        $cutoff = now()->subDays(7);
-        $previousAssessments = $assessments
-            ->filter(fn (Assessment $assessment): bool => $this->rankedBefore($assessment, $cutoff))
-            ->values();
-
-        $currentSummary = $this->summaryFor($assessments);
-        $previousSummary = $this->summaryFor($previousAssessments);
+        $currentSummary = $this->summaryForPeriod($periodStart, $periodEnd);
+        $previousSummary = $this->summaryForPeriod($previousPeriodStart, $previousPeriodEnd);
 
         return [
+            'has_ranked_candidates' => Assessment::query()
+                ->whereNotNull('ranking_score')
+                ->exists(),
             'summary' => [
                 ...$currentSummary,
                 'period_label' => 'Last 7 days',
@@ -60,6 +62,10 @@ class RankingOverview
                     'total_ranked' => $this->changePercent(
                         $currentSummary['total_ranked'],
                         $previousSummary['total_ranked'],
+                    ),
+                    'average_ranking_score' => $this->changePercent(
+                        $currentSummary['average_ranking_score'],
+                        $previousSummary['average_ranking_score'],
                     ),
                     'pending_approval' => $this->changePercent(
                         $currentSummary['pending_approval'],
@@ -72,14 +78,14 @@ class RankingOverview
                 ],
             ],
             'charts' => [
-                'average_score_trend' => $this->averageScoreTrend($assessments),
-                'score_distribution' => $this->scoreDistribution($assessments),
+                'ranking_activity' => $this->rankingActivity($periodStart, $periodEnd),
+                'score_distribution' => $this->scoreDistribution($periodStart, $periodEnd),
             ],
+            'needs_attention' => $this->needsAttention(),
         ];
     }
 
     /**
-     * @param  Collection<int, Assessment>  $assessments
      * @return array{
      *     total_ranked: int,
      *     pending_approval: int,
@@ -87,44 +93,51 @@ class RankingOverview
      *     average_ranking_score: int|null
      * }
      */
-    private function summaryFor(Collection $assessments): array
+    private function summaryForPeriod(CarbonInterface $start, CarbonInterface $end): array
     {
+        $pending = AssessmentStatus::PendingApproval->value;
+
+        $row = $this->rankedInPeriodQuery($start, $end)
+            ->toBase()
+            ->selectRaw('count(*) as total_ranked')
+            ->selectRaw('avg(ranking_score) as average_ranking_score')
+            ->selectRaw('count(case when status = ? then 1 end) as pending_approval', [$pending])
+            ->selectRaw('count(case when needs_manual_review = ? then 1 end) as needs_manual_review', [true])
+            ->first();
+
+        $totalRanked = (int) ($row->total_ranked ?? 0);
+
         return [
-            'total_ranked' => $assessments->count(),
-            'pending_approval' => $assessments->where('status', AssessmentStatus::PendingApproval)->count(),
-            'needs_manual_review' => $assessments->where('needs_manual_review', true)->count(),
-            'average_ranking_score' => $assessments->isEmpty()
+            'total_ranked' => $totalRanked,
+            'pending_approval' => (int) ($row->pending_approval ?? 0),
+            'needs_manual_review' => (int) ($row->needs_manual_review ?? 0),
+            'average_ranking_score' => $totalRanked === 0
                 ? null
-                : (int) round((float) $assessments->avg('ranking_score')),
+                : (int) round((float) $row->average_ranking_score),
         ];
     }
 
     /**
-     * @param  Collection<int, Assessment>  $assessments
-     * @return list<array{date: string, label: string, average_score: int|null, ranked_count: int}>
+     * @return list<array{date: string, label: string, ranked_count: int}>
      */
-    private function averageScoreTrend(Collection $assessments): array
+    private function rankingActivity(CarbonInterface $start, CarbonInterface $end): array
     {
-        $days = collect(range(6, 0))->map(fn (int $daysAgo): array => [
-            'start' => now()->subDays($daysAgo)->startOfDay(),
-            'end' => now()->subDays($daysAgo)->endOfDay(),
-        ]);
+        $countsByDay = $this->rankedInPeriodQuery($start, $end)
+            ->toBase()
+            ->selectRaw('date(coalesce(evaluated_at, created_at)) as day')
+            ->selectRaw('count(*) as ranked_count')
+            ->groupBy('day')
+            ->pluck('ranked_count', 'day');
 
-        return $days
-            ->map(function (array $day) use ($assessments): array {
-                $dayAssessments = $assessments->filter(function (Assessment $assessment) use ($day): bool {
-                    $rankedAt = $assessment->evaluated_at ?? $assessment->created_at;
-
-                    return $rankedAt !== null && $rankedAt->between($day['start'], $day['end']);
-                });
+        return collect(range(6, 0))
+            ->map(function (int $daysAgo) use ($countsByDay): array {
+                $day = now()->subDays($daysAgo)->startOfDay();
+                $key = $day->toDateString();
 
                 return [
-                    'date' => $day['start']->toDateString(),
-                    'label' => $day['start']->format('D'),
-                    'average_score' => $dayAssessments->isEmpty()
-                        ? null
-                        : (int) round((float) $dayAssessments->avg('ranking_score')),
-                    'ranked_count' => $dayAssessments->count(),
+                    'date' => $key,
+                    'label' => $day->format('D'),
+                    'ranked_count' => (int) ($countsByDay[$key] ?? 0),
                 ];
             })
             ->values()
@@ -132,39 +145,141 @@ class RankingOverview
     }
 
     /**
-     * @param  Collection<int, Assessment>  $assessments
      * @return list<array{bucket: string, label: string, count: int}>
      */
-    private function scoreDistribution(Collection $assessments): array
+    private function scoreDistribution(CarbonInterface $start, CarbonInterface $end): array
     {
-        $buckets = [
-            ['bucket' => '0-49', 'label' => '0–49', 'min' => 0, 'max' => 49],
-            ['bucket' => '50-69', 'label' => '50–69', 'min' => 50, 'max' => 69],
-            ['bucket' => '70-84', 'label' => '70–84', 'min' => 70, 'max' => 84],
-            ['bucket' => '85-100', 'label' => '85–100', 'min' => 85, 'max' => 100],
+        $row = $this->rankedInPeriodQuery($start, $end)
+            ->toBase()
+            ->selectRaw('count(case when ranking_score between 0 and 49 then 1 end) as bucket_0_49')
+            ->selectRaw('count(case when ranking_score between 50 and 69 then 1 end) as bucket_50_69')
+            ->selectRaw('count(case when ranking_score between 70 and 84 then 1 end) as bucket_70_84')
+            ->selectRaw('count(case when ranking_score between 85 and 100 then 1 end) as bucket_85_100')
+            ->first();
+
+        return [
+            ['bucket' => '0-49', 'label' => '0–49', 'count' => (int) ($row->bucket_0_49 ?? 0)],
+            ['bucket' => '50-69', 'label' => '50–69', 'count' => (int) ($row->bucket_50_69 ?? 0)],
+            ['bucket' => '70-84', 'label' => '70–84', 'count' => (int) ($row->bucket_70_84 ?? 0)],
+            ['bucket' => '85-100', 'label' => '85–100', 'count' => (int) ($row->bucket_85_100 ?? 0)],
         ];
-
-        return collect($buckets)
-            ->map(fn (array $bucket): array => [
-                'bucket' => $bucket['bucket'],
-                'label' => $bucket['label'],
-                'count' => $assessments
-                    ->filter(function (Assessment $assessment) use ($bucket): bool {
-                        $score = (int) $assessment->ranking_score;
-
-                        return $score >= $bucket['min'] && $score <= $bucket['max'];
-                    })
-                    ->count(),
-            ])
-            ->values()
-            ->all();
     }
 
-    private function rankedBefore(Assessment $assessment, CarbonInterface $cutoff): bool
+    /**
+     * @return array{
+     *     summary: array{campaigns: int, pending: int, manual_reviews: int, failures: int},
+     *     items: list<array{campaign_id: int, label: string, badge: string}>
+     * }
+     */
+    private function needsAttention(): array
     {
-        $rankedAt = $assessment->evaluated_at ?? $assessment->created_at;
+        $empty = [
+            'summary' => [
+                'campaigns' => 0,
+                'pending' => 0,
+                'manual_reviews' => 0,
+                'failures' => 0,
+            ],
+            'items' => [],
+        ];
 
-        return $rankedAt !== null && $rankedAt->lt($cutoff);
+        $pending = AssessmentStatus::PendingApproval->value;
+        $evaluationFailed = AssessmentStatus::EvaluationFailed->value;
+        $emailFailed = AssessmentStatus::EmailFailed->value;
+
+        $failuresExpression = 'sum(case when status in (?, ?) then 1 else 0 end)';
+        $pendingExpression = 'sum(case when status = ? then 1 else 0 end)';
+        $manualReviewsExpression = 'sum(case when needs_manual_review = ? then 1 else 0 end)';
+
+        /** @var Collection<int, stdClass> $rows */
+        $rows = Assessment::query()
+            ->toBase()
+            ->select('campaign_id')
+            ->selectRaw("{$failuresExpression} as failures", [$evaluationFailed, $emailFailed])
+            ->selectRaw("{$pendingExpression} as pending", [$pending])
+            ->selectRaw("{$manualReviewsExpression} as manual_reviews", [true])
+            ->groupBy('campaign_id')
+            ->havingRaw(
+                "{$failuresExpression} > 0 or {$pendingExpression} > 0 or {$manualReviewsExpression} > 0",
+                [$evaluationFailed, $emailFailed, $pending, true],
+            )
+            ->get()
+            ->map(function (stdClass $row): array {
+                $failures = (int) $row->failures;
+                $pendingCount = (int) $row->pending;
+                $manualReviews = (int) $row->manual_reviews;
+
+                [$priority, $badge] = match (true) {
+                    $failures > 0 => [
+                        0,
+                        $failures === 1 ? '1 failure' : "{$failures} failures",
+                    ],
+                    $pendingCount > 0 => [
+                        1,
+                        $pendingCount === 1 ? '1 pending' : "{$pendingCount} pending",
+                    ],
+                    default => [
+                        2,
+                        $manualReviews === 1
+                            ? '1 manual review'
+                            : "{$manualReviews} manual reviews",
+                    ],
+                };
+
+                return [
+                    'campaign_id' => (int) $row->campaign_id,
+                    'priority' => $priority,
+                    'weight' => max($failures, $pendingCount, $manualReviews),
+                    'badge' => $badge,
+                    'pending' => $pendingCount,
+                    'manual_reviews' => $manualReviews,
+                    'failures' => $failures,
+                ];
+            })
+            ->sort(function (array $left, array $right): int {
+                $priority = $left['priority'] <=> $right['priority'];
+
+                if ($priority !== 0) {
+                    return $priority;
+                }
+
+                return $right['weight'] <=> $left['weight'];
+            })
+            ->values();
+
+        if ($rows->isEmpty()) {
+            return $empty;
+        }
+
+        $titles = Campaign::query()
+            ->whereIn('id', $rows->pluck('campaign_id'))
+            ->pluck('title', 'id');
+
+        return [
+            'summary' => [
+                'campaigns' => $rows->count(),
+                'pending' => (int) $rows->sum('pending'),
+                'manual_reviews' => (int) $rows->sum('manual_reviews'),
+                'failures' => (int) $rows->sum('failures'),
+            ],
+            'items' => $rows
+                ->take(self::ATTENTION_ITEM_LIMIT)
+                ->map(fn (array $row): array => [
+                    'campaign_id' => $row['campaign_id'],
+                    'label' => (string) ($titles[$row['campaign_id']] ?? 'Campaign #'.$row['campaign_id']),
+                    'badge' => $row['badge'],
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function rankedInPeriodQuery(CarbonInterface $start, CarbonInterface $end)
+    {
+        return Assessment::query()
+            ->whereNotNull('ranking_score')
+            ->whereRaw('coalesce(evaluated_at, created_at) >= ?', [$start])
+            ->whereRaw('coalesce(evaluated_at, created_at) <= ?', [$end]);
     }
 
     private function changePercent(int|float|null $current, int|float|null $previous): ?float

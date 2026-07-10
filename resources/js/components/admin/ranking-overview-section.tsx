@@ -1,6 +1,11 @@
+import { Link } from '@inertiajs/react';
 import {
     AlertCircle,
+    ChartNoAxesColumn,
+    ChevronDown,
+    ChevronRight,
     ClipboardList,
+    Inbox,
     TrendingDown,
     TrendingUp,
     Trophy,
@@ -29,7 +34,28 @@ import {
     ChartTooltip,
     ChartTooltipContent,
 } from '@/components/ui/chart';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+} from '@/components/ui/empty';
+import {
+    Item,
+    ItemActions,
+    ItemContent,
+    ItemGroup,
+    ItemSeparator,
+    ItemTitle,
+} from '@/components/ui/item';
 import { cn } from '@/lib/utils';
+import admin from '@/routes/admin';
 
 export type RankingOverviewSummary = {
     total_ranked: number;
@@ -41,13 +67,13 @@ export type RankingOverviewSummary = {
         total_ranked: number | null;
         pending_approval: number | null;
         needs_manual_review: number | null;
+        average_ranking_score: number | null;
     };
 };
 
-export type AverageScoreTrendPoint = {
+export type RankingActivityPoint = {
     date: string;
     label: string;
-    average_score: number | null;
     ranked_count: number;
 };
 
@@ -57,14 +83,30 @@ export type ScoreDistributionPoint = {
     count: number;
 };
 
+export type NeedsAttentionItem = {
+    campaign_id: number;
+    label: string;
+    badge: string;
+};
+
+export type NeedsAttention = {
+    summary: {
+        campaigns: number;
+        pending: number;
+        manual_reviews: number;
+        failures: number;
+    };
+    items: NeedsAttentionItem[];
+};
+
 export type RankingOverviewCharts = {
-    average_score_trend: AverageScoreTrendPoint[];
+    ranking_activity: RankingActivityPoint[];
     score_distribution: ScoreDistributionPoint[];
 };
 
-const averageScoreTrendConfig = {
-    average_score: {
-        label: 'Average score',
+const rankingActivityConfig = {
+    ranked_count: {
+        label: 'Ranked',
         color: 'var(--chart-1)',
     },
 } satisfies ChartConfig;
@@ -92,6 +134,10 @@ function formatChangePercent(change: number | null) {
     }
 
     return `${absolute}%`;
+}
+
+function formatCountLabel(count: number, singular: string, plural: string) {
+    return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function SummaryMetric({
@@ -151,42 +197,23 @@ function SummaryMetric({
     );
 }
 
-function AverageScoreTrendChart({
-    data,
-    averageScore,
-}: {
-    data: AverageScoreTrendPoint[];
-    averageScore: number | null;
-}) {
-    const chartData = data.map((point) => ({
-        ...point,
-        average_score: point.average_score ?? undefined,
-    }));
-
+function RankingActivityChart({ data }: { data: RankingActivityPoint[] }) {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Average score</CardTitle>
+                <CardTitle>Ranking activity</CardTitle>
                 <CardDescription>
-                    Daily average ranking score over the last 7 days.
+                    Candidates ranked each day over the last 7 days.
                 </CardDescription>
-                <CardAction>
-                    <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Current</p>
-                        <p className="text-2xl font-semibold tabular-nums">
-                            {averageScore ?? '-'}
-                        </p>
-                    </div>
-                </CardAction>
             </CardHeader>
             <CardContent>
                 <ChartContainer
-                    config={averageScoreTrendConfig}
+                    config={rankingActivityConfig}
                     className="aspect-[2/1] w-full"
                 >
                     <AreaChart
                         accessibilityLayer
-                        data={chartData}
+                        data={data}
                         margin={{ left: 8, right: 8, top: 8 }}
                     >
                         <CartesianGrid vertical={false} />
@@ -197,24 +224,25 @@ function AverageScoreTrendChart({
                             tickMargin={8}
                         />
                         <YAxis
-                            domain={[0, 100]}
+                            allowDecimals={false}
                             tickLine={false}
                             axisLine={false}
                             tickMargin={8}
-                            width={32}
+                            width={28}
                         />
                         <ChartTooltip
                             cursor={false}
-                            content={<ChartTooltipContent indicator="line" />}
+                            content={
+                                <ChartTooltipContent indicator="line" />
+                            }
                         />
                         <Area
-                            dataKey="average_score"
+                            dataKey="ranked_count"
                             type="monotone"
-                            fill="var(--color-average_score)"
+                            fill="var(--color-ranked_count)"
                             fillOpacity={0.2}
-                            stroke="var(--color-average_score)"
+                            stroke="var(--color-ranked_count)"
                             strokeWidth={2}
-                            connectNulls={false}
                         />
                     </AreaChart>
                 </ChartContainer>
@@ -233,7 +261,7 @@ function ScoreDistributionChart({
             <CardHeader>
                 <CardTitle>Score distribution</CardTitle>
                 <CardDescription>
-                    How ranked candidates spread across score bands.
+                    Ranked candidates by score band in the last 7 days.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -276,22 +304,121 @@ function ScoreDistributionChart({
     );
 }
 
+function NeedsAttentionBar({ attention }: { attention: NeedsAttention }) {
+    if (attention.summary.campaigns === 0 || attention.items.length === 0) {
+        return null;
+    }
+
+    const summaryParts = [
+        attention.summary.failures > 0
+            ? formatCountLabel(
+                  attention.summary.failures,
+                  'failure',
+                  'failures',
+              )
+            : null,
+        attention.summary.pending > 0
+            ? formatCountLabel(
+                  attention.summary.pending,
+                  'pending',
+                  'pending',
+              )
+            : null,
+        attention.summary.manual_reviews > 0
+            ? formatCountLabel(
+                  attention.summary.manual_reviews,
+                  'manual review',
+                  'manual reviews',
+              )
+            : null,
+    ].filter(Boolean);
+
+    return (
+        <Collapsible className="group/attention">
+            <Item asChild size="sm" className="border border-border">
+                <CollapsibleTrigger>
+                    <ItemContent className="min-w-0 flex-row flex-wrap items-center gap-x-3 gap-y-1">
+                        <ItemTitle className="flex items-center gap-2">
+                            <AlertCircle className="size-4 text-muted-foreground" />
+                            {formatCountLabel(
+                                attention.summary.campaigns,
+                                'campaign needs attention',
+                                'campaigns need attention',
+                            )}
+                        </ItemTitle>
+                        {summaryParts.length > 0 ? (
+                            <span className="text-sm text-muted-foreground">
+                                {summaryParts.join(' · ')}
+                            </span>
+                        ) : null}
+                    </ItemContent>
+                    <ItemActions>
+                        <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]/attention:rotate-180" />
+                    </ItemActions>
+                </CollapsibleTrigger>
+            </Item>
+
+            <CollapsibleContent className="pt-2">
+                <ItemGroup className="gap-0 rounded-lg border">
+                    {attention.items.map((item, index) => (
+                        <div key={item.campaign_id}>
+                            {index > 0 ? (
+                                <ItemSeparator className="my-0" />
+                            ) : null}
+                            <Item asChild size="sm" className="rounded-none">
+                                <Link
+                                    href={admin.campaigns.show.url(
+                                        item.campaign_id,
+                                    )}
+                                >
+                                    <ItemContent>
+                                        <ItemTitle>{item.label}</ItemTitle>
+                                    </ItemContent>
+                                    <ItemActions>
+                                        <Badge variant="secondary">
+                                            {item.badge}
+                                        </Badge>
+                                        <ChevronRight className="size-4 text-muted-foreground" />
+                                    </ItemActions>
+                                </Link>
+                            </Item>
+                        </div>
+                    ))}
+                </ItemGroup>
+            </CollapsibleContent>
+        </Collapsible>
+    );
+}
+
 export function RankingOverviewSection({
     summary,
     charts,
+    needsAttention,
+    hasRankedCandidates,
 }: {
     summary: RankingOverviewSummary;
     charts: RankingOverviewCharts;
+    needsAttention: NeedsAttention;
+    hasRankedCandidates: boolean;
 }) {
+    const hasPeriodActivity = summary.total_ranked > 0;
+
     return (
         <div className="flex flex-col gap-4">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <SummaryMetric
                     label="Ranked"
                     value={summary.total_ranked}
                     icon={Trophy}
                     periodLabel={summary.period_label}
                     change={summary.changes.total_ranked}
+                />
+                <SummaryMetric
+                    label="Average score"
+                    value={summary.average_ranking_score ?? '-'}
+                    icon={ChartNoAxesColumn}
+                    periodLabel={summary.period_label}
+                    change={summary.changes.average_ranking_score}
                 />
                 <SummaryMetric
                     label="Pending approval"
@@ -309,13 +436,31 @@ export function RankingOverviewSection({
                 />
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-2">
-                <AverageScoreTrendChart
-                    data={charts.average_score_trend}
-                    averageScore={summary.average_ranking_score}
-                />
-                <ScoreDistributionChart data={charts.score_distribution} />
-            </div>
+            <NeedsAttentionBar attention={needsAttention} />
+
+            {!hasRankedCandidates ? (
+                <Empty className="border border-dashed">
+                    <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                            <Inbox />
+                        </EmptyMedia>
+                        <EmptyTitle>No ranked candidates yet</EmptyTitle>
+                        <EmptyDescription>
+                            Ranked candidates and score trends will appear here
+                            after assessments are evaluated.
+                        </EmptyDescription>
+                    </EmptyHeader>
+                </Empty>
+            ) : hasPeriodActivity ? (
+                <div className="grid gap-4 xl:grid-cols-2">
+                    <RankingActivityChart data={charts.ranking_activity} />
+                    <ScoreDistributionChart data={charts.score_distribution} />
+                </div>
+            ) : (
+                <p className="text-sm text-muted-foreground">
+                    No ranking activity in this period.
+                </p>
+            )}
         </div>
     );
 }

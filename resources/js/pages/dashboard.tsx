@@ -1,35 +1,25 @@
 import { Deferred, Head, usePage } from '@inertiajs/react';
-import { Inbox } from 'lucide-react';
 import {
     RankingOverviewSection,
+    type NeedsAttention,
     type RankingOverviewCharts,
     type RankingOverviewSummary,
 } from '@/components/admin/ranking-overview-section';
-import {
-    RecentCampaignsSection,
-    type RecentCampaign,
-} from '@/components/admin/recent-campaigns-section';
 import {
     Card,
     CardContent,
     CardHeader,
 } from '@/components/ui/card';
-import {
-    Empty,
-    EmptyDescription,
-    EmptyHeader,
-    EmptyMedia,
-    EmptyTitle,
-} from '@/components/ui/empty';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { Skeleton } from '@/components/ui/skeleton';
 import { dashboard } from '@/routes';
 import type { SharedData } from '@/types';
 
 type Overview = {
+    has_ranked_candidates: boolean;
     summary: RankingOverviewSummary;
     charts: RankingOverviewCharts;
-    recent_campaigns: RecentCampaign[];
+    needs_attention: NeedsAttention;
 };
 
 type Props = {
@@ -39,8 +29,8 @@ type Props = {
 function DashboardOverviewSkeleton() {
     return (
         <div className="flex flex-col gap-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-                {Array.from({ length: 3 }).map((_, index) => (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, index) => (
                     <Card key={index} size="sm">
                         <CardHeader>
                             <Skeleton className="h-4 w-24" />
@@ -54,7 +44,9 @@ function DashboardOverviewSkeleton() {
                 ))}
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <Skeleton className="h-11 w-full rounded-md" />
+
+            <div className="grid gap-4 xl:grid-cols-2">
                 {Array.from({ length: 2 }).map((_, index) => (
                     <Card key={index}>
                         <CardHeader>
@@ -66,28 +58,6 @@ function DashboardOverviewSkeleton() {
                         </CardContent>
                     </Card>
                 ))}
-            </div>
-
-            <div className="flex flex-col gap-3">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-4 w-64" />
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {Array.from({ length: 3 }).map((_, index) => (
-                        <Card key={index} size="sm">
-                            <CardHeader>
-                                <Skeleton className="h-5 w-36" />
-                                <Skeleton className="h-5 w-16" />
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-4">
-                                <Skeleton className="h-4 w-28" />
-                                <div className="grid grid-cols-2 gap-2">
-                                    <Skeleton className="h-14 w-full" />
-                                    <Skeleton className="h-14 w-full" />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
             </div>
         </div>
     );
@@ -105,35 +75,14 @@ export default function Dashboard({ overview }: Props) {
                 {isAdmin ? (
                     <Deferred data="overview" fallback={<DashboardOverviewSkeleton />}>
                         {overview ? (
-                            <div className="flex flex-col gap-4">
-                                <RankingOverviewSection
-                                    summary={overview.summary}
-                                    charts={overview.charts}
-                                />
-
-                                {overview.summary.total_ranked === 0 &&
-                                overview.recent_campaigns.length > 0 ? (
-                                    <Empty className="border border-dashed">
-                                        <EmptyHeader>
-                                            <EmptyMedia variant="icon">
-                                                <Inbox />
-                                            </EmptyMedia>
-                                            <EmptyTitle>
-                                                No ranked candidates yet
-                                            </EmptyTitle>
-                                            <EmptyDescription>
-                                                Ranked candidates and score
-                                                trends will appear here after
-                                                assessments are evaluated.
-                                            </EmptyDescription>
-                                        </EmptyHeader>
-                                    </Empty>
-                                ) : null}
-
-                                <RecentCampaignsSection
-                                    campaigns={overview.recent_campaigns}
-                                />
-                            </div>
+                            <RankingOverviewSection
+                                summary={overview.summary}
+                                charts={overview.charts}
+                                needsAttention={overview.needs_attention}
+                                hasRankedCandidates={
+                                    overview.has_ranked_candidates
+                                }
+                            />
                         ) : null}
                     </Deferred>
                 ) : (

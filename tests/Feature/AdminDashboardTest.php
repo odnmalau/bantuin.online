@@ -1,7 +1,6 @@
 <?php
 
 use App\AssessmentStatus;
-use App\CampaignStatus;
 use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\User;
@@ -11,9 +10,11 @@ beforeEach(function () {
     $this->withoutVite();
 });
 
-test('admin dashboard includes ranking overview summary and charts', function () {
+test('admin dashboard includes last-7-day summary, two charts, and needs attention', function () {
     $admin = User::factory()->admin()->create();
-    $campaign = Campaign::factory()->create();
+    $campaign = Campaign::factory()->active()->create([
+        'title' => 'Dashboard Campaign',
+    ]);
     $olderCandidate = User::factory()->candidate()->create();
     $newerCandidate = User::factory()->candidate()->create();
 
@@ -39,76 +40,118 @@ test('admin dashboard includes ranking overview summary and charts', function ()
             'created_at' => now()->subDay(),
         ]);
 
+    Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for($campaign)
+        ->create([
+            'ranking_score' => null,
+            'status' => AssessmentStatus::Submitted,
+            'needs_manual_review' => false,
+            'evaluated_at' => null,
+            'created_at' => now()->subHours(2),
+        ]);
+
     $this->actingAs($admin)
         ->get(route('dashboard'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('dashboard')
             ->loadDeferredProps(fn (Assert $reload) => $reload
-                ->where('overview.summary.total_ranked', 2)
+                ->where('overview.has_ranked_candidates', true)
+                ->where('overview.summary.total_ranked', 1)
                 ->where('overview.summary.pending_approval', 1)
                 ->where('overview.summary.needs_manual_review', 1)
-                ->where('overview.summary.average_ranking_score', 85)
+                ->where('overview.summary.average_ranking_score', 90)
                 ->where('overview.summary.period_label', 'Last 7 days')
-                ->where('overview.summary.changes.total_ranked', 100)
+                ->where('overview.summary.changes.total_ranked', 0)
+                ->where('overview.summary.changes.average_ranking_score', 12.5)
                 ->where('overview.summary.changes.pending_approval', 100)
                 ->where('overview.summary.changes.needs_manual_review', 100)
-                ->has('overview.charts.average_score_trend', 7)
-                ->where('overview.charts.average_score_trend.5.average_score', 90)
-                ->where('overview.charts.average_score_trend.5.ranked_count', 1)
-                ->where('overview.charts.score_distribution.2.count', 1)
-                ->where('overview.charts.score_distribution.3.count', 1),
+                ->has('overview.charts.ranking_activity', 7)
+                ->where('overview.charts.ranking_activity.5.ranked_count', 1)
+                ->missing('overview.charts.ranking_activity.5.average_score')
+                ->where('overview.charts.score_distribution.2.count', 0)
+                ->where('overview.charts.score_distribution.3.count', 1)
+                ->where('overview.needs_attention.summary.campaigns', 1)
+                ->where('overview.needs_attention.summary.pending', 1)
+                ->where('overview.needs_attention.summary.manual_reviews', 1)
+                ->where('overview.needs_attention.summary.failures', 0)
+                ->has('overview.needs_attention.items', 1)
+                ->where('overview.needs_attention.items.0.campaign_id', $campaign->id)
+                ->where('overview.needs_attention.items.0.label', 'Dashboard Campaign')
+                ->where('overview.needs_attention.items.0.badge', '1 pending'),
             ),
         );
 });
 
-test('admin dashboard includes attention-first recent campaigns', function () {
+test('admin dashboard needs attention prioritizes failures then pending then manual review and limits items', function () {
     $admin = User::factory()->admin()->create();
 
-    $draft = Campaign::factory()->create([
-        'title' => 'Draft Campaign',
-        'status' => CampaignStatus::Draft,
-        'updated_at' => now()->subHour(),
+    $manualOnly = Campaign::factory()->active()->create([
+        'title' => 'Manual Review Campaign',
     ]);
-
-    $questionReview = Campaign::factory()->create([
-        'title' => 'Question Review Campaign',
-        'status' => CampaignStatus::QuestionReview,
-        'updated_at' => now()->subMinutes(30),
+    $pending = Campaign::factory()->active()->create([
+        'title' => 'Pending Campaign',
     ]);
-
-    $quietActive = Campaign::factory()->active()->create([
-        'title' => 'Quiet Active Campaign',
-        'updated_at' => now()->subMinutes(10),
+    $failed = Campaign::factory()->active()->create([
+        'title' => 'Failed Campaign',
     ]);
-
-    $attentionActive = Campaign::factory()->active()->create([
-        'title' => 'Attention Active Campaign',
-        'updated_at' => now()->subMinutes(5),
+    $extraPending = Campaign::factory()->active()->create([
+        'title' => 'Extra Pending Campaign',
     ]);
-
-    Campaign::factory()->create([
-        'title' => 'Archived Campaign',
-        'status' => CampaignStatus::Archived,
-        'updated_at' => now(),
+    $quiet = Campaign::factory()->active()->create([
+        'title' => 'Quiet Campaign',
     ]);
 
     Assessment::factory()
         ->for(User::factory()->candidate())
-        ->for($attentionActive)
+        ->for($manualOnly)
         ->create([
-            'ranking_score' => 88,
-            'status' => AssessmentStatus::PendingApproval,
+            'ranking_score' => 70,
+            'status' => AssessmentStatus::Evaluated,
             'needs_manual_review' => true,
+            'evaluated_at' => now()->subDay(),
         ]);
 
     Assessment::factory()
         ->for(User::factory()->candidate())
-        ->for($quietActive)
+        ->for($pending)
         ->create([
-            'ranking_score' => 70,
+            'ranking_score' => 85,
+            'status' => AssessmentStatus::PendingApproval,
+            'needs_manual_review' => false,
+            'evaluated_at' => now()->subDay(),
+        ]);
+
+    Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for($failed)
+        ->create([
+            'ranking_score' => null,
+            'status' => AssessmentStatus::EvaluationFailed,
+            'needs_manual_review' => false,
+            'evaluated_at' => null,
+            'created_at' => now()->subDay(),
+        ]);
+
+    Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for($extraPending)
+        ->create([
+            'ranking_score' => 88,
+            'status' => AssessmentStatus::PendingApproval,
+            'needs_manual_review' => false,
+            'evaluated_at' => now()->subDay(),
+        ]);
+
+    Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for($quiet)
+        ->create([
+            'ranking_score' => 75,
             'status' => AssessmentStatus::Evaluated,
             'needs_manual_review' => false,
+            'evaluated_at' => now()->subDay(),
         ]);
 
     $this->actingAs($admin)
@@ -117,19 +160,62 @@ test('admin dashboard includes attention-first recent campaigns', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('dashboard')
             ->loadDeferredProps(fn (Assert $reload) => $reload
-                ->has('overview.recent_campaigns', 4)
-                ->where('overview.recent_campaigns.0.id', $attentionActive->id)
-                ->where('overview.recent_campaigns.0.title', 'Attention Active Campaign')
-                ->where('overview.recent_campaigns.0.status', 'active')
-                ->where('overview.recent_campaigns.0.status_label', 'Active')
-                ->where('overview.recent_campaigns.0.pending_approval_count', 1)
-                ->where('overview.recent_campaigns.0.needs_manual_review_count', 1)
-                ->where('overview.recent_campaigns.0.ranked_count', 1)
-                ->where('overview.recent_campaigns.1.id', $questionReview->id)
-                ->where('overview.recent_campaigns.2.id', $draft->id)
-                ->where('overview.recent_campaigns.3.id', $quietActive->id)
-                ->where('overview.recent_campaigns.3.pending_approval_count', 0)
-                ->where('overview.recent_campaigns.3.ranked_count', 1),
+                ->where('overview.needs_attention.summary.campaigns', 4)
+                ->where('overview.needs_attention.summary.pending', 2)
+                ->where('overview.needs_attention.summary.manual_reviews', 1)
+                ->where('overview.needs_attention.summary.failures', 1)
+                ->has('overview.needs_attention.items', 3)
+                ->where('overview.needs_attention.items.0.campaign_id', $failed->id)
+                ->where('overview.needs_attention.items.0.badge', '1 failure')
+                ->where('overview.needs_attention.items.1.campaign_id', $pending->id)
+                ->where('overview.needs_attention.items.1.badge', '1 pending')
+                ->where('overview.needs_attention.items.2.campaign_id', $extraPending->id)
+                ->where('overview.needs_attention.items.2.badge', '1 pending'),
+            ),
+        );
+});
+
+test('admin dashboard reports when ranked candidates exist but none in the current period', function () {
+    $admin = User::factory()->admin()->create();
+    $campaign = Campaign::factory()->active()->create();
+
+    Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for($campaign)
+        ->create([
+            'ranking_score' => 80,
+            'status' => AssessmentStatus::Evaluated,
+            'needs_manual_review' => false,
+            'evaluated_at' => now()->subDays(20),
+            'created_at' => now()->subDays(20),
+        ]);
+
+    $this->actingAs($admin)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->loadDeferredProps(fn (Assert $reload) => $reload
+                ->where('overview.has_ranked_candidates', true)
+                ->where('overview.summary.total_ranked', 0)
+                ->where('overview.summary.average_ranking_score', null)
+                ->where('overview.charts.ranking_activity.0.ranked_count', 0)
+                ->where('overview.charts.score_distribution.0.count', 0),
+            ),
+        );
+});
+
+test('admin dashboard reports when no candidates have ever been ranked', function () {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->loadDeferredProps(fn (Assert $reload) => $reload
+                ->where('overview.has_ranked_candidates', false)
+                ->where('overview.summary.total_ranked', 0),
             ),
         );
 });
