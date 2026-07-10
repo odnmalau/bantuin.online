@@ -2,7 +2,6 @@ import { Form, Head, Link, router } from '@inertiajs/react';
 import { AlertTriangle, CheckCircle2, FileText, Shield } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import ExamSessionController from '@/actions/App/Http/Controllers/Candidate/ExamSessionController';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -121,14 +120,14 @@ export default function CandidateExam(props: Props) {
             <Head title="Candidate Exam" />
 
             <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-                <Heading
-                    title="Candidate Exam"
-                    description={
-                        props.campaign
-                            ? `${props.campaign.title} - ${props.campaign.role_title}${props.campaign.seniority ? `, ${props.campaign.seniority}` : ''}`
-                            : 'No active campaign is available right now.'
-                    }
-                />
+                {props.campaign ? (
+                    <p className="text-sm text-muted-foreground">
+                        {props.campaign.title} - {props.campaign.role_title}
+                        {props.campaign.seniority
+                            ? `, ${props.campaign.seniority}`
+                            : ''}
+                    </p>
+                ) : null}
 
                 {renderExamContent(props)}
             </div>
@@ -296,7 +295,7 @@ function ActiveSectionExam({
         setAnswers(initialAnswers);
     }
 
-    const { remainingSeconds, isExpired } = useExamTimer(
+    const { remainingSeconds, isExpired, isPending } = useExamTimer(
         examSession.current_section_expires_at,
     );
 
@@ -359,7 +358,7 @@ function ActiveSectionExam({
                         ) : null}
                     </div>
                     <div className="rounded-lg bg-muted px-3 py-2 text-sm font-medium">
-                        {formatExamTimer(remainingSeconds)}
+                        {formatExamTimer(remainingSeconds, isPending)}
                     </div>
                 </div>
             </section>

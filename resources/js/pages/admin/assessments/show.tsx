@@ -1,31 +1,95 @@
-import { Form, Head, Link } from '@inertiajs/react';
+import { Form, Head } from '@inertiajs/react';
 import {
-    Activity,
-    ArrowLeft,
     CheckCircle2,
+    EllipsisVertical,
+    FileText,
+    Inbox,
     Mail,
+    Medal,
     RotateCcw,
     ShieldCheck,
     SlidersHorizontal,
     TrendingUp,
     XCircle,
 } from 'lucide-react';
+import { useState } from 'react';
 import AssessmentController from '@/actions/App/Http/Controllers/Admin/AssessmentController';
 import AssessmentStatusBadge from '@/components/assessment-status-badge';
-import Heading from '@/components/heading';
-import InputError from '@/components/input-error';
+import {
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogMedia,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardAction,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import {
     Dialog,
     DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
+    DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+} from '@/components/ui/empty';
+import {
+    Field,
+    FieldContent,
+    FieldDescription,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+} from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import admin from '@/routes/admin';
 
 type AnswerSnapshot = {
@@ -33,6 +97,15 @@ type AnswerSnapshot = {
     question: string;
     rubric: string;
     answer: string;
+};
+
+type SectionScore = {
+    section_id?: number | null;
+    title: string;
+    weight: number;
+    earned_points: number;
+    total_points: number;
+    score: number | null;
 };
 
 type RankingPayload = {
@@ -54,6 +127,7 @@ type RankingPayload = {
     missing_components?: string[];
     weighting_mode?: string;
     formula?: string;
+    section_scores?: SectionScore[];
 };
 
 type CriticPayload = {
@@ -67,36 +141,17 @@ type CriticPayload = {
     };
 };
 
-type AssessmentEvent = {
-    id: number;
-    type: string;
-    title: string;
-    description: string | null;
-    payload: Record<string, unknown> | null;
-    occurred_at: string;
-    actor: {
-        name: string | null;
-        email: string | null;
-    } | null;
-};
-
-type AuditContext = {
-    provider: string;
-    model: string | null;
-    threshold: number;
-    threshold_source: 'campaign' | 'global';
-    global_passing_score: number;
-    ranking_formula: string;
-    override_reason: string | null;
-    override_score: number | null;
-};
-
 type Assessment = {
     id: number;
     candidate: {
         name: string | null;
         email: string | null;
     };
+    campaign: {
+        title: string | null;
+        role_title: string | null;
+    };
+    rank: number | null;
     approver: {
         name: string;
         email: string;
@@ -119,6 +174,7 @@ type Assessment = {
     essay_score: number | null;
     ranking_score: number | null;
     ranking_payload: RankingPayload | null;
+    section_scores: SectionScore[];
     critic_payload: CriticPayload | null;
     ai_justification: string | null;
     ai_email_subject: string | null;
@@ -136,13 +192,36 @@ type Assessment = {
     approved_at: string | null;
     rejected_at: string | null;
     email_sent_at: string | null;
-    audit: AuditContext;
-    events: AssessmentEvent[];
 };
 
 type Props = {
     assessment: Assessment;
 };
+
+function candidateInitials(name: string | null, email: string | null) {
+    if (name) {
+        return name
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase() ?? '')
+            .join('');
+    }
+
+    return email?.[0]?.toUpperCase() ?? '?';
+}
+
+function formatDate(value: string | null) {
+    if (!value) {
+        return '-';
+    }
+
+    return new Date(value).toLocaleString();
+}
+
+function scoreOrDash(score: number | null | undefined) {
+    return score ?? '-';
+}
 
 export default function AdminAssessmentsShow({ assessment }: Props) {
     const subject =
@@ -151,530 +230,903 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
         'Interview Invitation';
     const body =
         assessment.approved_email_body ?? assessment.ai_email_body ?? '';
+    const candidateName =
+        assessment.candidate.name ??
+        assessment.candidate.email ??
+        'Unknown candidate';
+    const essayScore = assessment.essay_score ?? assessment.ai_score;
 
     return (
         <>
             <Head title="Assessment Review" />
 
-            <div className="space-y-6 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="space-y-4">
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href={admin.assessments.index()}>
-                                <ArrowLeft />
-                                Back
-                            </Link>
-                        </Button>
-                        <Heading
-                            title="Assessment Review"
-                            description={`${assessment.candidate.name ?? 'Unknown candidate'} - ${assessment.candidate.email ?? '-'}`}
-                        />
-                    </div>
-                    <AssessmentStatusBadge status={assessment.status} />
+            <div className="flex flex-col gap-6 p-4">
+                <AssessmentOverviewCard
+                    assessment={assessment}
+                    candidateName={candidateName}
+                    subject={subject}
+                    body={body}
+                />
+
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <ScoreMetric
+                        label="Ranking score"
+                        score={assessment.ranking_score}
+                    />
+                    <ScoreMetric
+                        label="Resume"
+                        score={assessment.resume_score}
+                    />
+                    <ScoreMetric label="Essay" score={essayScore} />
+                    <ScoreMetric
+                        label="MCQ"
+                        score={assessment.mcq_score}
+                    />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-7">
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">Ranking</p>
-                        <p className="mt-1 text-2xl font-semibold">
-                            {assessment.ranking_score ?? '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">Essay</p>
-                        <p className="mt-1 text-2xl font-semibold">
-                            {assessment.essay_score ??
-                                assessment.ai_score ??
-                                '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">Resume</p>
-                        <p className="mt-1 text-2xl font-semibold">
-                            {assessment.resume_score ?? '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">MCQ</p>
-                        <p className="mt-1 text-2xl font-semibold">
-                            {assessment.mcq_score ?? '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">
-                            Submitted
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                            {assessment.created_at}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">
-                            Evaluated
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                            {assessment.evaluated_at ?? '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">
-                            Approved
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                            {assessment.approved_at ?? '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">
-                            Email sent
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                            {assessment.email_sent_at ?? '-'}
-                        </p>
-                    </div>
-                </div>
+                {assessment.needs_manual_review ? (
+                    <Alert>
+                        <ShieldCheck />
+                        <AlertTitle>Manual review required</AlertTitle>
+                        <AlertDescription>
+                            This submission was flagged for human review before
+                            final approval or rejection.
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
 
-                <RecoveryActions assessment={assessment} />
-
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
-                    <ActivityTimeline events={assessment.events} />
-                    <AuditPanel assessment={assessment} />
-                </div>
-
-                {assessment.ai_justification && (
-                    <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                        <h2 className="text-base font-medium">
-                            AI Justification
-                        </h2>
-                        <p className="mt-2 text-sm whitespace-pre-wrap text-muted-foreground">
-                            {assessment.ai_justification}
-                        </p>
-                    </section>
-                )}
-
-                {assessment.critic_payload && (
-                    <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                                <h2 className="text-base font-medium">
-                                    Critic Review
-                                </h2>
-                                <p className="mt-2 text-sm whitespace-pre-wrap text-muted-foreground">
-                                    {assessment.critic_payload.summary ??
-                                        'No critic summary available.'}
-                                </p>
-                            </div>
-                            <div className="text-right text-sm">
-                                <p className="font-medium">
-                                    Outcome:{' '}
-                                    {assessment.critic_payload.outcome ?? '-'}
-                                </p>
-                                {assessment.critic_payload
-                                    .manual_review_required && (
-                                    <p className="mt-1 font-medium text-amber-600 dark:text-amber-400">
-                                        Manual review required
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-
-                        {assessment.critic_payload.findings &&
-                            assessment.critic_payload.findings.length > 0 && (
-                                <ul className="mt-4 list-inside list-disc space-y-1 text-sm text-muted-foreground">
-                                    {assessment.critic_payload.findings.map(
-                                        (finding) => (
-                                            <li key={finding}>{finding}</li>
-                                        ),
-                                    )}
-                                </ul>
+                {assessment.ranking_payload?.missing_components &&
+                assessment.ranking_payload.missing_components.length > 0 ? (
+                    <Alert>
+                        <SlidersHorizontal />
+                        <AlertTitle>Ranking components missing</AlertTitle>
+                        <AlertDescription>
+                            Missing components:{' '}
+                            {assessment.ranking_payload.missing_components.join(
+                                ', ',
                             )}
-                    </section>
-                )}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
 
-                {assessment.ranking_payload && (
-                    <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                                <h2 className="text-base font-medium">
-                                    Ranking Breakdown
-                                </h2>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    {assessment.ranking_payload.formula ??
-                                        'Weighted score from available components.'}
-                                </p>
-                            </div>
-                            <p className="text-sm font-medium">
-                                Mode:{' '}
-                                {assessment.ranking_payload.weighting_mode ??
-                                    '-'}
-                            </p>
-                        </div>
+                <Tabs defaultValue="overview" className="gap-4">
+                    <TabsList variant="line" className="w-full justify-start">
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="resume">Resume</TabsTrigger>
+                        <TabsTrigger value="answers">Answers</TabsTrigger>
+                    </TabsList>
 
-                        <div className="mt-5 grid gap-4 md:grid-cols-3">
-                            <ScoreComponent
-                                label="Resume"
-                                score={
-                                    assessment.ranking_payload.components
-                                        ?.resume_score
-                                }
-                                configuredWeight={
-                                    assessment.ranking_payload
-                                        .configured_weights?.resume_score
-                                }
-                                normalizedWeight={
-                                    assessment.ranking_payload
-                                        .normalized_weights?.resume_score
-                                }
-                            />
-                            <ScoreComponent
-                                label="Essay"
-                                score={
-                                    assessment.ranking_payload.components
-                                        ?.essay_score
-                                }
-                                configuredWeight={
-                                    assessment.ranking_payload
-                                        .configured_weights?.essay_score
-                                }
-                                normalizedWeight={
-                                    assessment.ranking_payload
-                                        .normalized_weights?.essay_score
-                                }
-                            />
-                            <ScoreComponent
-                                label="MCQ"
-                                score={
-                                    assessment.ranking_payload.components
-                                        ?.mcq_score
-                                }
-                                configuredWeight={
-                                    assessment.ranking_payload
-                                        .configured_weights?.mcq_score
-                                }
-                                normalizedWeight={
-                                    assessment.ranking_payload
-                                        .normalized_weights?.mcq_score
-                                }
-                            />
-                        </div>
+                    <TabsContent value="overview" className="flex flex-col gap-6">
+                        <OverviewTab assessment={assessment} />
+                    </TabsContent>
 
-                        {assessment.ranking_payload.missing_components &&
-                            assessment.ranking_payload.missing_components
-                                .length > 0 && (
-                                <p className="mt-4 text-sm text-muted-foreground">
-                                    Missing components:{' '}
-                                    {assessment.ranking_payload.missing_components.join(
-                                        ', ',
-                                    )}
-                                </p>
-                            )}
-                    </section>
-                )}
+                    <TabsContent value="resume" className="flex flex-col gap-6">
+                        <ResumeTab assessment={assessment} />
+                    </TabsContent>
 
-                <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                    <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
-                        <div className="space-y-3">
-                            <div>
-                                <p className="text-sm text-muted-foreground">
-                                    Resume
-                                </p>
-                                <p className="mt-1 text-sm font-medium">
-                                    {assessment.resume_original_name ?? '-'}
-                                </p>
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">
-                                    Resume score
-                                </p>
-                                <p className="mt-1 text-2xl font-semibold">
-                                    {assessment.resume_score ?? '-'}
-                                </p>
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">
-                                    Confidence
-                                </p>
-                                <p className="mt-1 text-sm font-medium">
-                                    {assessment.resume_payload?.confidence ??
-                                        '-'}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div>
-                                <h2 className="text-base font-medium">
-                                    Resume Screening
-                                </h2>
-                                <p className="mt-2 text-sm whitespace-pre-wrap text-muted-foreground">
-                                    {assessment.resume_payload?.summary ??
-                                        assessment.resume_justification ??
-                                        'No resume screening result yet.'}
-                                </p>
-                            </div>
-
-                            <ResumeScreeningList
-                                title="Matched skills"
-                                items={
-                                    assessment.resume_payload?.matched_skills ??
-                                    []
-                                }
-                            />
-                            <ResumeScreeningList
-                                title="Missing skills"
-                                items={
-                                    assessment.resume_payload?.missing_skills ??
-                                    []
-                                }
-                            />
-                            <ResumeScreeningList
-                                title="Risk flags"
-                                items={
-                                    assessment.resume_payload?.risk_flags ?? []
-                                }
-                            />
-                            <ResumeScreeningList
-                                title="Interview probes"
-                                items={
-                                    assessment.resume_payload
-                                        ?.interview_probes ?? []
-                                }
-                            />
-                        </div>
-                    </div>
-                </section>
-
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)]">
-                    <section className="space-y-4">
-                        <h2 className="text-base font-medium">
-                            Answer Snapshot
-                        </h2>
-                        {assessment.answers_payload.map((answer, index) => (
-                            <article
-                                key={answer.question_id}
-                                className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border"
-                            >
-                                <div className="space-y-4">
-                                    <div>
-                                        <p className="text-xs font-medium text-muted-foreground">
-                                            Question {index + 1}
-                                        </p>
-                                        <h3 className="mt-1 text-sm font-medium">
-                                            {answer.question}
-                                        </h3>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-medium text-muted-foreground">
-                                            Rubric
-                                        </p>
-                                        <p className="mt-1 text-sm whitespace-pre-wrap">
-                                            {answer.rubric}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-medium text-muted-foreground">
-                                            Answer
-                                        </p>
-                                        <p className="mt-1 text-sm whitespace-pre-wrap">
-                                            {answer.answer}
-                                        </p>
-                                    </div>
-                                </div>
-                            </article>
-                        ))}
-                    </section>
-
-                    <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                        <div className="space-y-5">
-                            <div>
-                                <h2 className="text-base font-medium">
-                                    Interview Email
-                                </h2>
-                                {!assessment.can_review && (
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        This assessment is not open for review.
-                                    </p>
-                                )}
-                            </div>
-
-                            <Form
-                                {...AssessmentController.approve.form(
-                                    assessment.id,
-                                )}
-                                className="space-y-4"
-                            >
-                                {({ errors, processing }) => {
-                                    const formErrors = errors as Record<
-                                        string,
-                                        string | undefined
-                                    >;
-
-                                    return (
-                                        <>
-                                            <InputError
-                                                message={formErrors.assessment}
-                                            />
-
-                                            <div className="grid gap-2">
-                                                <Label htmlFor="email_subject">
-                                                    Subject
-                                                </Label>
-                                                <input
-                                                    id="email_subject"
-                                                    name="email_subject"
-                                                    defaultValue={subject}
-                                                    disabled={
-                                                        !assessment.can_review
-                                                    }
-                                                    className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                                />
-                                                <InputError
-                                                    message={
-                                                        formErrors.email_subject
-                                                    }
-                                                />
-                                            </div>
-
-                                            <div className="grid gap-2">
-                                                <Label htmlFor="email_body">
-                                                    Body
-                                                </Label>
-                                                <textarea
-                                                    id="email_body"
-                                                    name="email_body"
-                                                    rows={10}
-                                                    defaultValue={body}
-                                                    disabled={
-                                                        !assessment.can_review
-                                                    }
-                                                    className="flex min-h-56 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                                />
-                                                <InputError
-                                                    message={
-                                                        formErrors.email_body
-                                                    }
-                                                />
-                                            </div>
-
-                                            <Button
-                                                type="submit"
-                                                disabled={
-                                                    processing ||
-                                                    !assessment.can_review
-                                                }
-                                            >
-                                                {processing ? (
-                                                    <Spinner />
-                                                ) : (
-                                                    <CheckCircle2 />
-                                                )}
-                                                Approve
-                                            </Button>
-                                        </>
-                                    );
-                                }}
-                            </Form>
-
-                            <RejectAssessmentDialog assessment={assessment} />
-                        </div>
-                    </section>
-                </div>
+                    <TabsContent value="answers" className="flex flex-col gap-6">
+                        <AnswersTab assessment={assessment} />
+                    </TabsContent>
+                </Tabs>
             </div>
         </>
     );
 }
 
-function RecoveryActions({ assessment }: { assessment: Assessment }) {
+function AssessmentOverviewCard({
+    assessment,
+    candidateName,
+    subject,
+    body,
+}: {
+    assessment: Assessment;
+    candidateName: string;
+    subject: string;
+    body: string;
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <Avatar size="lg">
+                            <AvatarFallback>
+                                {candidateInitials(
+                                    assessment.candidate.name,
+                                    assessment.candidate.email,
+                                )}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <CardTitle className="truncate">
+                                    {candidateName}
+                                </CardTitle>
+                                {assessment.rank !== null ? (
+                                    <Badge
+                                        variant={
+                                            assessment.rank <= 3
+                                                ? assessment.rank === 1
+                                                    ? 'default'
+                                                    : 'secondary'
+                                                : 'outline'
+                                        }
+                                    >
+                                        <Medal data-icon="inline-start" />#
+                                        {assessment.rank}
+                                    </Badge>
+                                ) : null}
+                                <AssessmentStatusBadge
+                                    status={assessment.status}
+                                />
+                                {assessment.needs_manual_review ? (
+                                    <Badge variant="outline">
+                                        Needs review
+                                    </Badge>
+                                ) : null}
+                            </div>
+                            <CardDescription className="truncate">
+                                {assessment.candidate.email ?? '-'}
+                            </CardDescription>
+                            <p className="truncate text-sm text-muted-foreground">
+                                {assessment.campaign.role_title ?? 'Role'} ·{' '}
+                                {assessment.campaign.title ?? 'Campaign'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <AssessmentActionsMenu
+                        assessment={assessment}
+                        subject={subject}
+                        body={body}
+                    />
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetaItem
+                        label="Submitted"
+                        value={formatDate(assessment.created_at)}
+                    />
+                    <MetaItem
+                        label="Evaluated"
+                        value={formatDate(assessment.evaluated_at)}
+                    />
+                    <MetaItem
+                        label="Approved"
+                        value={formatDate(assessment.approved_at)}
+                    />
+                    <MetaItem
+                        label="Email sent"
+                        value={formatDate(assessment.email_sent_at)}
+                    />
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function OverviewTab({ assessment }: { assessment: Assessment }) {
+    return (
+        <>
+            {assessment.ai_justification ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>AI Justification</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                            {assessment.ai_justification}
+                        </p>
+                    </CardContent>
+                </Card>
+            ) : null}
+
+            {assessment.critic_payload ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Critic Review</CardTitle>
+                        <CardDescription>
+                            {assessment.critic_payload.summary ??
+                                'No critic summary available.'}
+                        </CardDescription>
+                        <CardAction>
+                            <div className="flex flex-col items-end gap-1.5">
+                                <Badge variant="outline">
+                                    {assessment.critic_payload.outcome ?? '-'}
+                                </Badge>
+                                {assessment.critic_payload
+                                    .manual_review_required ? (
+                                    <Badge variant="secondary">
+                                        Manual review required
+                                    </Badge>
+                                ) : null}
+                            </div>
+                        </CardAction>
+                    </CardHeader>
+                    {assessment.critic_payload.findings &&
+                    assessment.critic_payload.findings.length > 0 ? (
+                        <CardContent>
+                            <div className="flex flex-wrap gap-2">
+                                {assessment.critic_payload.findings.map(
+                                    (finding) => (
+                                        <Badge key={finding} variant="outline">
+                                            {finding}
+                                        </Badge>
+                                    ),
+                                )}
+                            </div>
+                        </CardContent>
+                    ) : null}
+                </Card>
+            ) : null}
+
+            {assessment.section_scores.length > 0 ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Section scores</CardTitle>
+                        <CardDescription>
+                            Per-section results used in the ranking package.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Section</TableHead>
+                                    <TableHead>Weight</TableHead>
+                                    <TableHead>Points</TableHead>
+                                    <TableHead>Score</TableHead>
+                                    <TableHead className="w-40">
+                                        Progress
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {assessment.section_scores.map((section) => (
+                                    <TableRow
+                                        key={`${section.section_id ?? 'section'}-${section.title}`}
+                                    >
+                                        <TableCell className="font-medium">
+                                            {section.title}
+                                        </TableCell>
+                                        <TableCell>{section.weight}</TableCell>
+                                        <TableCell>
+                                            {section.earned_points}/
+                                            {section.total_points}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">
+                                                {section.score ?? '-'}%
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {section.score !== null ? (
+                                                <Progress
+                                                    value={section.score}
+                                                />
+                                            ) : (
+                                                <span className="text-muted-foreground">
+                                                    -
+                                                </span>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            ) : null}
+        </>
+    );
+}
+
+function ResumeTab({ assessment }: { assessment: Assessment }) {
+    const summary =
+        assessment.resume_payload?.summary ??
+        assessment.resume_justification ??
+        null;
+
+    return (
+        <div className="grid gap-6 lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Resume file</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                    <FieldGroup className="gap-4">
+                        <MetaItem
+                            label="Filename"
+                            value={assessment.resume_original_name ?? '-'}
+                        />
+                        <MetaItem
+                            label="Score"
+                            value={scoreOrDash(assessment.resume_score)}
+                        />
+                        <MetaItem
+                            label="Confidence"
+                            value={
+                                assessment.resume_payload?.confidence ?? '-'
+                            }
+                        />
+                    </FieldGroup>
+                    {assessment.resume_score !== null ? (
+                        <Progress value={assessment.resume_score} />
+                    ) : null}
+                </CardContent>
+            </Card>
+
+            <div className="flex flex-col gap-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Resume Screening</CardTitle>
+                        <CardDescription>
+                            AI screening summary and skill signals.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {summary ? (
+                            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                                {summary}
+                            </p>
+                        ) : (
+                            <Empty className="border border-dashed">
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <FileText />
+                                    </EmptyMedia>
+                                    <EmptyTitle>
+                                        No resume screening yet
+                                    </EmptyTitle>
+                                    <EmptyDescription>
+                                        Screening results appear after resume
+                                        evaluation completes.
+                                    </EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                    <SkillGroup
+                        title="Matched skills"
+                        items={
+                            assessment.resume_payload?.matched_skills ?? []
+                        }
+                        variant="default"
+                    />
+                    <SkillGroup
+                        title="Missing skills"
+                        items={
+                            assessment.resume_payload?.missing_skills ?? []
+                        }
+                        variant="outline"
+                    />
+                    <SkillGroup
+                        title="Risk flags"
+                        items={assessment.resume_payload?.risk_flags ?? []}
+                        variant="destructive"
+                    />
+                    <SkillGroup
+                        title="Interview probes"
+                        items={
+                            assessment.resume_payload?.interview_probes ?? []
+                        }
+                        variant="secondary"
+                    />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function AnswersTab({ assessment }: { assessment: Assessment }) {
+    if (assessment.answers_payload.length === 0) {
+        return (
+            <Empty className="border border-dashed">
+                <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                        <Inbox />
+                    </EmptyMedia>
+                    <EmptyTitle>No answers recorded</EmptyTitle>
+                    <EmptyDescription>
+                        Answer snapshots appear after the candidate submits the
+                        assessment.
+                    </EmptyDescription>
+                </EmptyHeader>
+            </Empty>
+        );
+    }
+
+    return (
+        <ScrollArea className="h-[70vh] rounded-lg">
+            <div className="flex flex-col gap-4 pr-4">
+                {assessment.answers_payload.map((answer, index) => (
+                    <Card key={answer.question_id}>
+                        <CardHeader>
+                            <CardDescription>
+                                Question {index + 1}
+                            </CardDescription>
+                            <CardTitle>{answer.question}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-4">
+                            <Field>
+                                <FieldLabel>Rubric</FieldLabel>
+                                <FieldContent>
+                                    <p className="whitespace-pre-wrap text-sm">
+                                        {answer.rubric}
+                                    </p>
+                                </FieldContent>
+                            </Field>
+                            <Separator />
+                            <Field>
+                                <FieldLabel>Answer</FieldLabel>
+                                <FieldContent>
+                                    <p className="whitespace-pre-wrap text-sm">
+                                        {answer.answer}
+                                    </p>
+                                </FieldContent>
+                            </Field>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+        </ScrollArea>
+    );
+}
+
+function InterviewEmailDialog({
+    assessment,
+    subject,
+    body,
+    open,
+    onOpenChange,
+}: {
+    assessment: Assessment;
+    subject: string;
+    body: string;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Interview Email</DialogTitle>
+                    <DialogDescription>
+                        Review and approve the final invitation draft.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <Form
+                    {...AssessmentController.approve.form(assessment.id)}
+                    className="flex flex-col gap-4"
+                >
+                    {({ errors, processing }) => {
+                        const formErrors = formErrorsFrom(errors);
+                        const hasSubjectError = Boolean(
+                            formErrors.email_subject,
+                        );
+                        const hasBodyError = Boolean(formErrors.email_body);
+
+                        return (
+                            <>
+                                <FieldGroup>
+                                    {formErrors.assessment ? (
+                                        <Field>
+                                            <FieldError>
+                                                {formErrors.assessment}
+                                            </FieldError>
+                                        </Field>
+                                    ) : null}
+
+                                    {!assessment.can_review ? (
+                                        <Field>
+                                            <FieldDescription>
+                                                This assessment is not open for
+                                                review.
+                                            </FieldDescription>
+                                        </Field>
+                                    ) : null}
+
+                                    <Field
+                                        data-invalid={
+                                            hasSubjectError || undefined
+                                        }
+                                        data-disabled={
+                                            !assessment.can_review || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="email_subject">
+                                            Subject
+                                        </FieldLabel>
+                                        <Input
+                                            id="email_subject"
+                                            name="email_subject"
+                                            defaultValue={subject}
+                                            disabled={!assessment.can_review}
+                                            aria-invalid={
+                                                hasSubjectError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message:
+                                                        formErrors.email_subject,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
+
+                                    <Field
+                                        data-invalid={
+                                            hasBodyError || undefined
+                                        }
+                                        data-disabled={
+                                            !assessment.can_review || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="email_body">
+                                            Body
+                                        </FieldLabel>
+                                        <Textarea
+                                            id="email_body"
+                                            name="email_body"
+                                            rows={12}
+                                            defaultValue={body}
+                                            disabled={!assessment.can_review}
+                                            aria-invalid={
+                                                hasBodyError || undefined
+                                            }
+                                            className="min-h-56"
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message:
+                                                        formErrors.email_body,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
+                                </FieldGroup>
+
+                                <DialogFooter className="sm:justify-between">
+                                    <RejectAssessmentDialog
+                                        assessment={assessment}
+                                    />
+                                    <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                                        <DialogClose asChild>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                            >
+                                                Cancel
+                                            </Button>
+                                        </DialogClose>
+                                        <Button
+                                            type="submit"
+                                            disabled={
+                                                processing ||
+                                                !assessment.can_review
+                                            }
+                                        >
+                                            {processing ? (
+                                                <Spinner />
+                                            ) : (
+                                                <CheckCircle2 data-icon="inline-start" />
+                                            )}
+                                            Approve
+                                        </Button>
+                                    </div>
+                                </DialogFooter>
+                            </>
+                        );
+                    }}
+                </Form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function ScoreMetric({
+    label,
+    score,
+}: {
+    label: string;
+    score: number | null | undefined;
+}) {
+    return (
+        <Card size="sm">
+            <CardHeader>
+                <CardDescription>{label}</CardDescription>
+                <CardTitle>
+                    <span className="text-2xl tabular-nums">
+                        {scoreOrDash(score)}
+                    </span>
+                </CardTitle>
+            </CardHeader>
+            {typeof score === 'number' ? (
+                <CardContent>
+                    <Progress value={score} />
+                </CardContent>
+            ) : null}
+        </Card>
+    );
+}
+
+function MetaItem({
+    label,
+    value,
+}: {
+    label: string;
+    value: string | number;
+}) {
+    return (
+        <Field>
+            <FieldLabel>{label}</FieldLabel>
+            <FieldContent>
+                <p className="text-sm font-medium break-words">{value}</p>
+            </FieldContent>
+        </Field>
+    );
+}
+
+function SkillGroup({
+    title,
+    items,
+    variant,
+}: {
+    title: string;
+    items: string[];
+    variant: 'default' | 'secondary' | 'destructive' | 'outline';
+}) {
+    return (
+        <Card size="sm">
+            <CardHeader>
+                <CardTitle>{title}</CardTitle>
+                <CardDescription>
+                    {items.length} item{items.length === 1 ? '' : 's'}
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {items.length === 0 ? (
+                    <Empty className="border border-dashed p-6">
+                        <EmptyHeader>
+                            <EmptyTitle>None</EmptyTitle>
+                            <EmptyDescription>
+                                No {title.toLowerCase()} recorded.
+                            </EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                ) : (
+                    <div className="flex flex-wrap gap-2">
+                        {items.map((item) => (
+                            <Badge key={item} variant={variant}>
+                                {item}
+                            </Badge>
+                        ))}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+type AssessmentAction =
+    | 'email'
+    | 'retry'
+    | 'retry_email'
+    | 'promote'
+    | 'override_score';
+
+function AssessmentActionsMenu({
+    assessment,
+    subject,
+    body,
+}: {
+    assessment: Assessment;
+    subject: string;
+    body: string;
+}) {
+    const [openAction, setOpenAction] = useState<AssessmentAction | null>(null);
+
     const hasRecoveryAction =
         assessment.can_retry ||
         assessment.can_retry_email ||
         assessment.can_promote ||
         assessment.can_override_score;
 
-    if (!hasRecoveryAction) {
-        return null;
-    }
-
     return (
-        <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h2 className="text-base font-medium">
-                        Recovery and Override
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Handle failed evaluations, failed email delivery, false
-                        negatives, and manual score corrections without touching
-                        the database.
-                    </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    {assessment.can_retry && (
-                        <RetryEvaluationDialog assessment={assessment} />
-                    )}
-                    {assessment.can_retry_email && (
-                        <RetryEmailDialog assessment={assessment} />
-                    )}
-                    {assessment.can_promote && (
-                        <PromoteAssessmentDialog assessment={assessment} />
-                    )}
-                    {assessment.can_override_score && (
-                        <OverrideScoreDialog assessment={assessment} />
-                    )}
-                </div>
-            </div>
-        </section>
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline">
+                        <EllipsisVertical data-icon="inline-start" />
+                        Actions
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-48">
+                    <DropdownMenuGroup>
+                        <DropdownMenuItem
+                            onSelect={() => setOpenAction('email')}
+                        >
+                            <Mail />
+                            Interview Email
+                        </DropdownMenuItem>
+                    </DropdownMenuGroup>
+
+                    {hasRecoveryAction ? (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuGroup>
+                                {assessment.can_retry ? (
+                                    <DropdownMenuItem
+                                        onSelect={() => setOpenAction('retry')}
+                                    >
+                                        <RotateCcw />
+                                        Retry Evaluation
+                                    </DropdownMenuItem>
+                                ) : null}
+                                {assessment.can_retry_email ? (
+                                    <DropdownMenuItem
+                                        onSelect={() =>
+                                            setOpenAction('retry_email')
+                                        }
+                                    >
+                                        <Mail />
+                                        Retry Email
+                                    </DropdownMenuItem>
+                                ) : null}
+                                {assessment.can_promote ? (
+                                    <DropdownMenuItem
+                                        onSelect={() =>
+                                            setOpenAction('promote')
+                                        }
+                                    >
+                                        <TrendingUp />
+                                        Promote
+                                    </DropdownMenuItem>
+                                ) : null}
+                                {assessment.can_override_score ? (
+                                    <DropdownMenuItem
+                                        onSelect={() =>
+                                            setOpenAction('override_score')
+                                        }
+                                    >
+                                        <SlidersHorizontal />
+                                        Override Score
+                                    </DropdownMenuItem>
+                                ) : null}
+                            </DropdownMenuGroup>
+                        </>
+                    ) : null}
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <InterviewEmailDialog
+                assessment={assessment}
+                subject={subject}
+                body={body}
+                open={openAction === 'email'}
+                onOpenChange={(open) =>
+                    setOpenAction(open ? 'email' : null)
+                }
+            />
+            <RetryEvaluationDialog
+                assessment={assessment}
+                open={openAction === 'retry'}
+                onOpenChange={(open) =>
+                    setOpenAction(open ? 'retry' : null)
+                }
+            />
+            <RetryEmailDialog
+                assessment={assessment}
+                open={openAction === 'retry_email'}
+                onOpenChange={(open) =>
+                    setOpenAction(open ? 'retry_email' : null)
+                }
+            />
+            <PromoteAssessmentDialog
+                assessment={assessment}
+                open={openAction === 'promote'}
+                onOpenChange={(open) =>
+                    setOpenAction(open ? 'promote' : null)
+                }
+            />
+            <OverrideScoreDialog
+                assessment={assessment}
+                open={openAction === 'override_score'}
+                onOpenChange={(open) =>
+                    setOpenAction(open ? 'override_score' : null)
+                }
+            />
+        </>
     );
 }
 
-function RetryEvaluationDialog({ assessment }: { assessment: Assessment }) {
+function formErrorsFrom(
+    errors: unknown,
+): Record<string, string | undefined> {
+    return errors as Record<string, string | undefined>;
+}
+
+type ControlledDialogProps = {
+    assessment: Assessment;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+};
+
+function RetryEvaluationDialog({
+    assessment,
+    open,
+    onOpenChange,
+}: ControlledDialogProps) {
     return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <Button variant="outline">
-                    <RotateCcw />
-                    Retry Evaluation
-                </Button>
-            </DialogTrigger>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
-                <DialogTitle>Retry evaluation</DialogTitle>
-                <DialogDescription>
-                    Queue a fresh AI evaluation job for this failed assessment.
-                    The existing assessment record will be reused.
-                </DialogDescription>
+                <DialogHeader>
+                    <DialogTitle>Retry evaluation</DialogTitle>
+                    <DialogDescription>
+                        Queue a fresh AI evaluation job for this failed
+                        assessment. The existing assessment record will be
+                        reused.
+                    </DialogDescription>
+                </DialogHeader>
 
                 <Form
                     {...AssessmentController.retryEvaluation.form(
                         assessment.id,
                     )}
                     options={{ preserveScroll: true }}
-                    className="space-y-4"
+                    className="flex flex-col gap-4"
                 >
                     {({ errors, processing }) => {
-                        const formErrors = errors as Record<
-                            string,
-                            string | undefined
-                        >;
+                        const formErrors = formErrorsFrom(errors);
+                        const hasReasonError = Boolean(formErrors.reason);
 
                         return (
                             <>
-                                <InputError message={formErrors.assessment} />
+                                <FieldGroup>
+                                    {formErrors.assessment ? (
+                                        <Field>
+                                            <FieldError>
+                                                {formErrors.assessment}
+                                            </FieldError>
+                                        </Field>
+                                    ) : null}
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="retry_reason">
-                                        Reason (optional)
-                                    </Label>
-                                    <textarea
-                                        id="retry_reason"
-                                        name="reason"
-                                        rows={4}
-                                        placeholder="Example: Qwen timed out during the first evaluation."
-                                        className="flex min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    <InputError message={formErrors.reason} />
-                                </div>
+                                    <Field
+                                        data-invalid={
+                                            hasReasonError || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="retry_reason">
+                                            Reason (optional)
+                                        </FieldLabel>
+                                        <Textarea
+                                            id="retry_reason"
+                                            name="reason"
+                                            rows={4}
+                                            placeholder="Example: Qwen timed out during the first evaluation."
+                                            aria-invalid={
+                                                hasReasonError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message: formErrors.reason,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
+                                </FieldGroup>
 
-                                <DialogFooter className="gap-2">
+                                <DialogFooter>
                                     <DialogClose asChild>
                                         <Button type="button" variant="outline">
                                             Cancel
@@ -684,7 +1136,7 @@ function RetryEvaluationDialog({ assessment }: { assessment: Assessment }) {
                                         {processing ? (
                                             <Spinner />
                                         ) : (
-                                            <RotateCcw />
+                                            <RotateCcw data-icon="inline-start" />
                                         )}
                                         Queue Retry
                                     </Button>
@@ -698,59 +1150,81 @@ function RetryEvaluationDialog({ assessment }: { assessment: Assessment }) {
     );
 }
 
-function RetryEmailDialog({ assessment }: { assessment: Assessment }) {
+function RetryEmailDialog({
+    assessment,
+    open,
+    onOpenChange,
+}: ControlledDialogProps) {
     return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <Button variant="outline">
-                    <Mail />
-                    Retry Email
-                </Button>
-            </DialogTrigger>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
-                <DialogTitle>Retry interview email</DialogTitle>
-                <DialogDescription>
-                    Queue another delivery attempt using the approved subject
-                    and body already stored on this assessment.
-                </DialogDescription>
+                <DialogHeader>
+                    <DialogTitle>Retry interview email</DialogTitle>
+                    <DialogDescription>
+                        Queue another delivery attempt using the approved
+                        subject and body already stored on this assessment.
+                    </DialogDescription>
+                </DialogHeader>
 
                 <Form
                     {...AssessmentController.retryEmail.form(assessment.id)}
                     options={{ preserveScroll: true }}
-                    className="space-y-4"
+                    className="flex flex-col gap-4"
                 >
                     {({ errors, processing }) => {
-                        const formErrors = errors as Record<
-                            string,
-                            string | undefined
-                        >;
+                        const formErrors = formErrorsFrom(errors);
+                        const hasReasonError = Boolean(formErrors.reason);
 
                         return (
                             <>
-                                <InputError message={formErrors.assessment} />
+                                <FieldGroup>
+                                    {formErrors.assessment ? (
+                                        <Field>
+                                            <FieldError>
+                                                {formErrors.assessment}
+                                            </FieldError>
+                                        </Field>
+                                    ) : null}
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="retry_email_reason">
-                                        Reason (optional)
-                                    </Label>
-                                    <textarea
-                                        id="retry_email_reason"
-                                        name="reason"
-                                        rows={3}
-                                        placeholder="Example: Resend after fixing mail transport."
-                                        className="flex min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    <InputError message={formErrors.reason} />
-                                </div>
+                                    <Field
+                                        data-invalid={
+                                            hasReasonError || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="retry_email_reason">
+                                            Reason (optional)
+                                        </FieldLabel>
+                                        <Textarea
+                                            id="retry_email_reason"
+                                            name="reason"
+                                            rows={3}
+                                            placeholder="Example: Resend after fixing mail transport."
+                                            aria-invalid={
+                                                hasReasonError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message: formErrors.reason,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
+                                </FieldGroup>
 
-                                <DialogFooter className="gap-2">
+                                <DialogFooter>
                                     <DialogClose asChild>
                                         <Button type="button" variant="outline">
                                             Cancel
                                         </Button>
                                     </DialogClose>
                                     <Button type="submit" disabled={processing}>
-                                        {processing ? <Spinner /> : <Mail />}
+                                        {processing ? (
+                                            <Spinner />
+                                        ) : (
+                                            <Mail data-icon="inline-start" />
+                                        )}
                                         Queue Email
                                     </Button>
                                 </DialogFooter>
@@ -763,92 +1237,140 @@ function RetryEmailDialog({ assessment }: { assessment: Assessment }) {
     );
 }
 
-function PromoteAssessmentDialog({ assessment }: { assessment: Assessment }) {
+function PromoteAssessmentDialog({
+    assessment,
+    open,
+    onOpenChange,
+}: ControlledDialogProps) {
     const hasExistingDraft = Boolean(
         assessment.ai_email_subject && assessment.ai_email_body,
     );
 
     return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <Button variant="outline">
-                    <TrendingUp />
-                    Promote
-                </Button>
-            </DialogTrigger>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
-                <DialogTitle>Promote to interview review</DialogTitle>
-                <DialogDescription>
-                    Move this false negative into pending approval. If no AI
-                    email draft exists, provide a manual draft here.
-                </DialogDescription>
+                <DialogHeader>
+                    <DialogTitle>Promote to interview review</DialogTitle>
+                    <DialogDescription>
+                        Move this false negative into pending approval. If no
+                        AI email draft exists, provide a manual draft here.
+                    </DialogDescription>
+                </DialogHeader>
 
                 <Form
                     {...AssessmentController.promote.form(assessment.id)}
                     options={{ preserveScroll: true }}
-                    className="space-y-4"
+                    className="flex flex-col gap-4"
                 >
                     {({ errors, processing }) => {
-                        const formErrors = errors as Record<
-                            string,
-                            string | undefined
-                        >;
+                        const formErrors = formErrorsFrom(errors);
+                        const hasReasonError = Boolean(formErrors.reason);
+                        const hasSubjectError = Boolean(
+                            formErrors.email_subject,
+                        );
+                        const hasBodyError = Boolean(formErrors.email_body);
 
                         return (
                             <>
-                                <InputError message={formErrors.assessment} />
+                                <FieldGroup>
+                                    {formErrors.assessment ? (
+                                        <Field>
+                                            <FieldError>
+                                                {formErrors.assessment}
+                                            </FieldError>
+                                        </Field>
+                                    ) : null}
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="promote_reason">
-                                        Reason
-                                    </Label>
-                                    <textarea
-                                        id="promote_reason"
-                                        name="reason"
-                                        rows={4}
-                                        placeholder="Explain why this candidate should continue despite the AI recommendation."
-                                        className="flex min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    <InputError message={formErrors.reason} />
-                                </div>
+                                    <Field
+                                        data-invalid={
+                                            hasReasonError || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="promote_reason">
+                                            Reason
+                                        </FieldLabel>
+                                        <Textarea
+                                            id="promote_reason"
+                                            name="reason"
+                                            rows={4}
+                                            placeholder="Explain why this candidate should continue despite the AI recommendation."
+                                            aria-invalid={
+                                                hasReasonError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message: formErrors.reason,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
 
-                                <div className="rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">
-                                    {hasExistingDraft
-                                        ? 'An AI email draft already exists. Leave the fields below blank to keep it, or fill both fields to replace it.'
-                                        : 'No AI email draft exists. Fill both fields below so the promoted assessment can be approved later.'}
-                                </div>
+                                    <Alert>
+                                        <Mail />
+                                        <AlertTitle>Email draft</AlertTitle>
+                                        <AlertDescription>
+                                            {hasExistingDraft
+                                                ? 'An AI email draft already exists. Leave the fields below blank to keep it, or fill both fields to replace it.'
+                                                : 'No AI email draft exists. Fill both fields below so the promoted assessment can be approved later.'}
+                                        </AlertDescription>
+                                    </Alert>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="promote_email_subject">
-                                        Manual email subject
-                                    </Label>
-                                    <input
-                                        id="promote_email_subject"
-                                        name="email_subject"
-                                        defaultValue=""
-                                        className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    <InputError
-                                        message={formErrors.email_subject}
-                                    />
-                                </div>
+                                    <Field
+                                        data-invalid={
+                                            hasSubjectError || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="promote_email_subject">
+                                            Manual email subject
+                                        </FieldLabel>
+                                        <Input
+                                            id="promote_email_subject"
+                                            name="email_subject"
+                                            defaultValue=""
+                                            aria-invalid={
+                                                hasSubjectError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message:
+                                                        formErrors.email_subject,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="promote_email_body">
-                                        Manual email body
-                                    </Label>
-                                    <textarea
-                                        id="promote_email_body"
-                                        name="email_body"
-                                        rows={6}
-                                        className="flex min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    <InputError
-                                        message={formErrors.email_body}
-                                    />
-                                </div>
+                                    <Field
+                                        data-invalid={
+                                            hasBodyError || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="promote_email_body">
+                                            Manual email body
+                                        </FieldLabel>
+                                        <Textarea
+                                            id="promote_email_body"
+                                            name="email_body"
+                                            rows={6}
+                                            aria-invalid={
+                                                hasBodyError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message:
+                                                        formErrors.email_body,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
+                                </FieldGroup>
 
-                                <DialogFooter className="gap-2">
+                                <DialogFooter>
                                     <DialogClose asChild>
                                         <Button type="button" variant="outline">
                                             Cancel
@@ -858,7 +1380,7 @@ function PromoteAssessmentDialog({ assessment }: { assessment: Assessment }) {
                                         {processing ? (
                                             <Spinner />
                                         ) : (
-                                            <TrendingUp />
+                                            <TrendingUp data-icon="inline-start" />
                                         )}
                                         Promote
                                     </Button>
@@ -872,72 +1394,104 @@ function PromoteAssessmentDialog({ assessment }: { assessment: Assessment }) {
     );
 }
 
-function OverrideScoreDialog({ assessment }: { assessment: Assessment }) {
+function OverrideScoreDialog({
+    assessment,
+    open,
+    onOpenChange,
+}: ControlledDialogProps) {
     return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <Button variant="outline">
-                    <SlidersHorizontal />
-                    Override Score
-                </Button>
-            </DialogTrigger>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
-                <DialogTitle>Override ranking score</DialogTitle>
-                <DialogDescription>
-                    Replace the backend ranking score with an auditable manual
-                    score and reason.
-                </DialogDescription>
+                <DialogHeader>
+                    <DialogTitle>Override ranking score</DialogTitle>
+                    <DialogDescription>
+                        Replace the backend ranking score with an auditable
+                        manual score and reason.
+                    </DialogDescription>
+                </DialogHeader>
 
                 <Form
                     {...AssessmentController.overrideScore.form(assessment.id)}
                     options={{ preserveScroll: true }}
-                    className="space-y-4"
+                    className="flex flex-col gap-4"
                 >
                     {({ errors, processing }) => {
-                        const formErrors = errors as Record<
-                            string,
-                            string | undefined
-                        >;
+                        const formErrors = formErrorsFrom(errors);
+                        const hasScoreError = Boolean(
+                            formErrors.ranking_score,
+                        );
+                        const hasReasonError = Boolean(formErrors.reason);
 
                         return (
                             <>
-                                <InputError message={formErrors.assessment} />
+                                <FieldGroup>
+                                    {formErrors.assessment ? (
+                                        <Field>
+                                            <FieldError>
+                                                {formErrors.assessment}
+                                            </FieldError>
+                                        </Field>
+                                    ) : null}
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="ranking_score">
-                                        Ranking score
-                                    </Label>
-                                    <input
-                                        id="ranking_score"
-                                        name="ranking_score"
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        defaultValue={
-                                            assessment.ranking_score ?? ''
+                                    <Field
+                                        data-invalid={
+                                            hasScoreError || undefined
                                         }
-                                        className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    <InputError
-                                        message={formErrors.ranking_score}
-                                    />
-                                </div>
+                                    >
+                                        <FieldLabel htmlFor="ranking_score">
+                                            Ranking score
+                                        </FieldLabel>
+                                        <Input
+                                            id="ranking_score"
+                                            name="ranking_score"
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            defaultValue={
+                                                assessment.ranking_score ?? ''
+                                            }
+                                            aria-invalid={
+                                                hasScoreError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message:
+                                                        formErrors.ranking_score,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="override_reason">
-                                        Reason
-                                    </Label>
-                                    <textarea
-                                        id="override_reason"
-                                        name="reason"
-                                        rows={4}
-                                        placeholder="Explain the manual evidence behind this score."
-                                        className="flex min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    <InputError message={formErrors.reason} />
-                                </div>
+                                    <Field
+                                        data-invalid={
+                                            hasReasonError || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="override_reason">
+                                            Reason
+                                        </FieldLabel>
+                                        <Textarea
+                                            id="override_reason"
+                                            name="reason"
+                                            rows={4}
+                                            placeholder="Explain the manual evidence behind this score."
+                                            aria-invalid={
+                                                hasReasonError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message: formErrors.reason,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
+                                </FieldGroup>
 
-                                <DialogFooter className="gap-2">
+                                <DialogFooter>
                                     <DialogClose asChild>
                                         <Button type="button" variant="outline">
                                             Cancel
@@ -947,7 +1501,7 @@ function OverrideScoreDialog({ assessment }: { assessment: Assessment }) {
                                         {processing ? (
                                             <Spinner />
                                         ) : (
-                                            <SlidersHorizontal />
+                                            <SlidersHorizontal data-icon="inline-start" />
                                         )}
                                         Save Override
                                     </Button>
@@ -963,321 +1517,107 @@ function OverrideScoreDialog({ assessment }: { assessment: Assessment }) {
 
 function RejectAssessmentDialog({ assessment }: { assessment: Assessment }) {
     return (
-        <Dialog>
-            <DialogTrigger asChild>
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
                 <Button variant="outline" disabled={!assessment.can_review}>
-                    <XCircle />
+                    <XCircle data-icon="inline-start" />
                     Reject
                 </Button>
-            </DialogTrigger>
-            <DialogContent>
-                <DialogTitle>Reject assessment</DialogTitle>
-                <DialogDescription>
-                    Reject this candidate without sending an email. A reason is
-                    required for the audit trail.
-                </DialogDescription>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
+                        <XCircle />
+                    </AlertDialogMedia>
+                    <AlertDialogTitle>Reject assessment</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Reject this candidate without sending an email. A reason
+                        is required for the audit trail.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
 
                 <Form
                     {...AssessmentController.reject.form(assessment.id)}
                     options={{ preserveScroll: true }}
-                    className="space-y-4"
+                    className="flex flex-col gap-4"
                 >
                     {({ errors, processing }) => {
-                        const formErrors = errors as Record<
-                            string,
-                            string | undefined
-                        >;
+                        const formErrors = formErrorsFrom(errors);
+                        const hasReasonError = Boolean(formErrors.reason);
 
                         return (
                             <>
-                                <InputError message={formErrors.assessment} />
+                                <FieldGroup>
+                                    {formErrors.assessment ? (
+                                        <Field>
+                                            <FieldError>
+                                                {formErrors.assessment}
+                                            </FieldError>
+                                        </Field>
+                                    ) : null}
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="reject_reason">
-                                        Reason
-                                    </Label>
-                                    <textarea
-                                        id="reject_reason"
-                                        name="reason"
-                                        rows={4}
-                                        placeholder="Explain why this assessment is rejected."
-                                        className="flex min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    />
-                                    <InputError message={formErrors.reason} />
-                                </div>
+                                    <Field
+                                        data-invalid={
+                                            hasReasonError || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="reject_reason">
+                                            Reason
+                                        </FieldLabel>
+                                        <Textarea
+                                            id="reject_reason"
+                                            name="reason"
+                                            rows={4}
+                                            placeholder="Explain why this assessment is rejected."
+                                            aria-invalid={
+                                                hasReasonError || undefined
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={[
+                                                {
+                                                    message: formErrors.reason,
+                                                },
+                                            ]}
+                                        />
+                                    </Field>
+                                </FieldGroup>
 
-                                <DialogFooter className="gap-2">
-                                    <DialogClose asChild>
-                                        <Button type="button" variant="outline">
-                                            Cancel
-                                        </Button>
-                                    </DialogClose>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>
+                                        Cancel
+                                    </AlertDialogCancel>
                                     <Button
                                         type="submit"
                                         variant="destructive"
                                         disabled={processing}
                                     >
-                                        {processing ? <Spinner /> : <XCircle />}
+                                        {processing ? (
+                                            <Spinner />
+                                        ) : (
+                                            <XCircle data-icon="inline-start" />
+                                        )}
                                         Reject
                                     </Button>
-                                </DialogFooter>
+                                </AlertDialogFooter>
                             </>
                         );
                     }}
                 </Form>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-function ActivityTimeline({ events }: { events: AssessmentEvent[] }) {
-    return (
-        <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-            <div className="flex items-start gap-3">
-                <Activity className="mt-0.5 h-5 w-5 text-muted-foreground" />
-                <div>
-                    <h2 className="text-base font-medium">
-                        Agent Activity Timeline
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Step-by-step audit trail for candidate, AI, backend, and
-                        Admin actions.
-                    </p>
-                </div>
-            </div>
-
-            {events.length === 0 ? (
-                <p className="mt-5 rounded-md bg-muted/40 p-4 text-sm text-muted-foreground">
-                    No timeline events have been recorded yet.
-                </p>
-            ) : (
-                <ol className="mt-6 space-y-5">
-                    {events.map((event) => (
-                        <li key={event.id} className="relative pl-6">
-                            <span className="absolute top-1.5 left-0 h-2.5 w-2.5 rounded-full bg-primary" />
-                            <div className="space-y-2">
-                                <div className="flex flex-wrap items-start justify-between gap-3">
-                                    <div>
-                                        <h3 className="text-sm font-medium">
-                                            {event.title}
-                                        </h3>
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            {event.type}
-                                            {event.actor
-                                                ? ` by ${event.actor.name ?? event.actor.email ?? 'Unknown actor'}`
-                                                : ''}
-                                        </p>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        {event.occurred_at}
-                                    </p>
-                                </div>
-
-                                {event.description && (
-                                    <p className="text-sm text-muted-foreground">
-                                        {event.description}
-                                    </p>
-                                )}
-
-                                <EventPayload payload={event.payload} />
-                            </div>
-                        </li>
-                    ))}
-                </ol>
-            )}
-        </section>
-    );
-}
-
-function AuditPanel({ assessment }: { assessment: Assessment }) {
-    const resumePayload = assessment.resume_payload;
-    const criticPayload = assessment.critic_payload;
-
-    return (
-        <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-            <div className="flex items-start gap-3">
-                <ShieldCheck className="mt-0.5 h-5 w-5 text-muted-foreground" />
-                <div>
-                    <h2 className="text-base font-medium">AI Audit Panel</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Runtime configuration and risk signals used for review.
-                    </p>
-                </div>
-            </div>
-
-            <div className="mt-5 space-y-4 text-sm">
-                <AuditRow label="Provider" value={assessment.audit.provider} />
-                <AuditRow label="Model" value={assessment.audit.model ?? '-'} />
-                <AuditRow
-                    label="Threshold"
-                    value={
-                        assessment.audit.threshold_source === 'campaign'
-                            ? `${assessment.audit.threshold} (campaign)`
-                            : `${assessment.audit.threshold} (global default ${assessment.audit.global_passing_score})`
-                    }
-                />
-                <AuditRow
-                    label="Ranking formula"
-                    value={assessment.audit.ranking_formula}
-                />
-                {assessment.audit.override_score !== null && (
-                    <AuditRow
-                        label="Override score"
-                        value={assessment.audit.override_score}
-                    />
-                )}
-                {assessment.audit.override_reason && (
-                    <AuditRow
-                        label="Override reason"
-                        value={assessment.audit.override_reason}
-                    />
-                )}
-                <AuditRow
-                    label="Needs manual review"
-                    value={assessment.needs_manual_review ? 'Yes' : 'No'}
-                />
-                <AuditRow
-                    label="Critic outcome"
-                    value={criticPayload?.outcome ?? '-'}
-                />
-                <AuditRow
-                    label="Critic findings"
-                    value={criticPayload?.findings?.length ?? 0}
-                />
-                <AuditRow
-                    label="Resume confidence"
-                    value={resumePayload?.confidence ?? '-'}
-                />
-                <AuditRow
-                    label="Risk flags"
-                    value={resumePayload?.risk_flags?.length ?? 0}
-                />
-                <AuditRow
-                    label="Interview probes"
-                    value={resumePayload?.interview_probes?.length ?? 0}
-                />
-            </div>
-        </section>
-    );
-}
-
-function AuditRow({ label, value }: { label: string; value: string | number }) {
-    return (
-        <div className="grid gap-1 border-b border-sidebar-border/50 pb-3 last:border-0 last:pb-0">
-            <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className="font-medium break-words">{value}</p>
-        </div>
-    );
-}
-
-function EventPayload({
-    payload,
-}: {
-    payload: Record<string, unknown> | null;
-}) {
-    if (!payload || Object.keys(payload).length === 0) {
-        return null;
-    }
-
-    return (
-        <dl className="grid gap-2 rounded-md bg-muted/40 p-3 text-xs sm:grid-cols-2">
-            {Object.entries(payload).map(([key, value]) => (
-                <div key={key} className="space-y-1">
-                    <dt className="font-medium text-muted-foreground">
-                        {formatPayloadKey(key)}
-                    </dt>
-                    <dd className="break-words">{formatPayloadValue(value)}</dd>
-                </div>
-            ))}
-        </dl>
-    );
-}
-
-function ResumeScreeningList({
-    title,
-    items,
-}: {
-    title: string;
-    items: string[];
-}) {
-    if (items.length === 0) {
-        return null;
-    }
-
-    return (
-        <div>
-            <p className="text-xs font-medium text-muted-foreground">{title}</p>
-            <ul className="mt-2 list-inside list-disc space-y-1 text-sm">
-                {items.map((item) => (
-                    <li key={item}>{item}</li>
-                ))}
-            </ul>
-        </div>
-    );
-}
-
-function formatPayloadKey(key: string): string {
-    return key.replaceAll('_', ' ');
-}
-
-function formatPayloadValue(value: unknown): string {
-    if (value === null || value === undefined) {
-        return '-';
-    }
-
-    if (typeof value === 'boolean') {
-        return value ? 'Yes' : 'No';
-    }
-
-    if (Array.isArray(value)) {
-        return value.map(formatPayloadValue).join(', ');
-    }
-
-    if (typeof value === 'object') {
-        return JSON.stringify(value);
-    }
-
-    return String(value);
-}
-
-function ScoreComponent({
-    label,
-    score,
-    configuredWeight,
-    normalizedWeight,
-}: {
-    label: string;
-    score?: number | null;
-    configuredWeight?: number;
-    normalizedWeight?: number;
-}) {
-    return (
-        <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-            <div className="flex items-start justify-between gap-3">
-                <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="mt-1 text-2xl font-semibold">
-                        {score ?? '-'}
-                    </p>
-                </div>
-                <div className="text-right text-xs text-muted-foreground">
-                    <p>Configured {configuredWeight ?? '-'}%</p>
-                    <p>Used {normalizedWeight ?? '-'}%</p>
-                </div>
-            </div>
-        </div>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 }
 
 AdminAssessmentsShow.layout = {
     breadcrumbs: [
         {
-            title: 'Assessment Workstation',
-            href: admin.assessments.index(),
+            title: 'Rankings',
+            href: admin.rankings.index(),
         },
         {
             title: 'Review',
-            href: admin.assessments.index(),
+            href: admin.rankings.index(),
         },
     ],
 };

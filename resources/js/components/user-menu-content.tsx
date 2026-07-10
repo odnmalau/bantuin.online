@@ -1,5 +1,5 @@
-import { Link, router } from '@inertiajs/react';
-import { LogOut, Settings } from 'lucide-react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { BookOpen, LogOut, Settings } from 'lucide-react';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -10,7 +10,7 @@ import { UserInfo } from '@/components/user-info';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
-import type { User } from '@/types';
+import type { SharedData, User } from '@/types';
 
 type Props = {
     user: User;
@@ -18,6 +18,7 @@ type Props = {
 
 export function UserMenuContent({ user }: Props) {
     const cleanup = useMobileNavigation();
+    const { docsUrl } = usePage<SharedData>().props;
 
     const handleLogout = () => {
         cleanup();
@@ -40,10 +41,24 @@ export function UserMenuContent({ user }: Props) {
                         prefetch
                         onClick={cleanup}
                     >
-                        <Settings className="mr-2" />
+                        <Settings />
                         Settings
                     </Link>
                 </DropdownMenuItem>
+                {docsUrl ? (
+                    <DropdownMenuItem asChild>
+                        <a
+                            className="block w-full cursor-pointer"
+                            href={docsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={cleanup}
+                        >
+                            <BookOpen />
+                            Documentation
+                        </a>
+                    </DropdownMenuItem>
+                ) : null}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
@@ -55,7 +70,7 @@ export function UserMenuContent({ user }: Props) {
                     onClick={handleLogout}
                     data-test="logout-button"
                 >
-                    <LogOut className="mr-2" />
+                    <LogOut />
                     Log out
                 </Link>
             </DropdownMenuItem>

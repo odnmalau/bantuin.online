@@ -1,9 +1,49 @@
-import { Form, Head, Link } from '@inertiajs/react';
-import { Eye, Plus, SquarePen, Trash2 } from 'lucide-react';
+import { Deferred, Form, Head, router, useForm } from '@inertiajs/react';
+import { MoreHorizontal, Plus, SlidersHorizontal } from 'lucide-react';
+import type { FormEvent } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import CampaignController from '@/actions/App/Http/Controllers/Admin/CampaignController';
-import Heading from '@/components/heading';
+import CampaignForm from '@/components/admin/campaign-form';
+import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardAction,
+    CardContent,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+    SheetTrigger,
+} from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import admin from '@/routes/admin';
 
 type CampaignRow = {
@@ -11,6 +51,9 @@ type CampaignRow = {
     title: string;
     role_title: string;
     seniority: string | null;
+    job_description: string | null;
+    required_skills: string[];
+    language: string | null;
     threshold_score: number;
     status: string;
     status_label: string;
@@ -21,167 +64,476 @@ type CampaignRow = {
     created_at: string;
 };
 
-type Props = {
-    campaigns: CampaignRow[];
+type CampaignFilters = {
+    search: string;
+    status: string;
 };
 
-export default function AdminCampaignsIndex({ campaigns }: Props) {
+type SelectOption = {
+    value: string;
+    label: string;
+};
+
+type Props = {
+    campaigns?: CampaignRow[];
+    filters: CampaignFilters;
+    statusOptions: SelectOption[];
+};
+
+function CampaignMetric({
+    label,
+    value,
+}: {
+    label: string;
+    value: number | string;
+}) {
+    return (
+        <div className="rounded-md border border-sidebar-border/70 p-3">
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="mt-1 text-base font-medium">{value}</p>
+        </div>
+    );
+}
+
+function CampaignsGridSkeleton() {
+    return (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+                <Card key={index} size="sm">
+                    <CardHeader>
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-6 w-16" />
+                    </CardHeader>
+                    <CardContent className="flex flex-1 flex-col gap-4">
+                        <div className="flex flex-col gap-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-4 w-24" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {Array.from({ length: 4 }).map(
+                                (__, metricIndex) => (
+                                    <div
+                                        key={metricIndex}
+                                        className="rounded-md border border-sidebar-border/70 p-3"
+                                    >
+                                        <Skeleton className="h-3 w-16" />
+                                        <Skeleton className="mt-2 h-5 w-10" />
+                                    </div>
+                                ),
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            ))}
+        </div>
+    );
+}
+
+export default function AdminCampaignsIndex({
+    campaigns,
+    filters,
+    statusOptions,
+}: Props) {
+    const { data, setData, get, processing } = useForm<CampaignFilters>({
+        search: filters.search ?? '',
+        status: filters.status ?? 'all',
+    });
+    const [campaignPendingDeletion, setCampaignPendingDeletion] =
+        useState<CampaignRow | null>(null);
+    const [campaignPendingEdit, setCampaignPendingEdit] =
+        useState<CampaignRow | null>(null);
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        get(admin.campaigns.index.url(), {
+            preserveScroll: true,
+            preserveState: true,
+        });
+    }
+
+    function applyFilters(nextFilters: CampaignFilters) {
+        setData(nextFilters);
+
+        router.get(admin.campaigns.index.url(), nextFilters, {
+            preserveScroll: true,
+            preserveState: true,
+        });
+    }
+
     return (
         <>
             <Head title="Campaigns" />
 
-            <div className="space-y-6 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading
-                        title="Campaigns"
-                        description="Manage role-based hiring assessment campaigns."
-                    />
-                    <Button asChild>
-                        <Link href={admin.campaigns.create()}>
-                            <Plus />
-                            New campaign
-                        </Link>
-                    </Button>
+            <div className="flex flex-col gap-6 p-4">
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2 lg:flex-row">
+                        <form
+                            onSubmit={submit}
+                            className="flex flex-1 flex-col gap-2 sm:flex-row"
+                        >
+                            <Input
+                                type="search"
+                                value={data.search}
+                                onChange={(event) =>
+                                    setData('search', event.target.value)
+                                }
+                                placeholder="Search campaigns by title, role, or seniority"
+                                className="flex-1"
+                            />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="outline"
+                                        disabled={processing}
+                                        aria-label="Open filters"
+                                    >
+                                        <SlidersHorizontal data-icon="inline-start" />
+                                        <span className="sr-only">
+                                            Open filters
+                                        </span>
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    align="end"
+                                    className="w-56"
+                                >
+                                    <DropdownMenuGroup>
+                                        <DropdownMenuLabel>
+                                            Status
+                                        </DropdownMenuLabel>
+                                        <DropdownMenuRadioGroup
+                                            value={data.status}
+                                            onValueChange={(status) =>
+                                                applyFilters({
+                                                    ...data,
+                                                    status,
+                                                })
+                                            }
+                                        >
+                                            <DropdownMenuRadioItem value="all">
+                                                All statuses
+                                            </DropdownMenuRadioItem>
+                                            {statusOptions.map((option) => (
+                                                <DropdownMenuRadioItem
+                                                    key={option.value}
+                                                    value={option.value}
+                                                >
+                                                    {option.label}
+                                                </DropdownMenuRadioItem>
+                                            ))}
+                                        </DropdownMenuRadioGroup>
+                                    </DropdownMenuGroup>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </form>
+                        <CreateCampaignSheet>
+                            <Button>
+                                <Plus data-icon="inline-start" />
+                                New campaign
+                            </Button>
+                        </CreateCampaignSheet>
+                    </div>
                 </div>
 
-                {campaigns.length === 0 ? (
-                    <div className="rounded-lg border border-sidebar-border/70 p-8 text-center dark:border-sidebar-border">
-                        <h2 className="text-base font-medium">
-                            No campaigns yet
-                        </h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Create a campaign before generating or assigning
-                            assessment questions.
-                        </p>
-                    </div>
-                ) : (
-                    <div className="overflow-hidden rounded-lg border border-sidebar-border/70 dark:border-sidebar-border">
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[960px] text-sm">
-                                <thead className="border-b bg-muted/40 text-left">
-                                    <tr>
-                                        <th className="px-4 py-3 font-medium">
-                                            Campaign
-                                        </th>
-                                        <th className="w-28 px-4 py-3 font-medium">
-                                            Threshold
-                                        </th>
-                                        <th className="w-32 px-4 py-3 font-medium">
-                                            Status
-                                        </th>
-                                        <th className="w-28 px-4 py-3 font-medium">
-                                            Sections
-                                        </th>
-                                        <th className="w-28 px-4 py-3 font-medium">
-                                            Questions
-                                        </th>
-                                        <th className="w-32 px-4 py-3 font-medium">
-                                            Submissions
-                                        </th>
-                                        <th className="w-40 px-4 py-3 text-right font-medium">
-                                            Actions
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {campaigns.map((campaign) => (
-                                        <tr key={campaign.id}>
-                                            <td className="px-4 py-4 align-top">
-                                                <div className="space-y-1">
-                                                    <p className="font-medium">
-                                                        {campaign.title}
-                                                    </p>
-                                                    <p className="text-muted-foreground">
-                                                        {campaign.role_title}
-                                                        {campaign.seniority
-                                                            ? `, ${campaign.seniority}`
-                                                            : ''}
-                                                    </p>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-4 align-top font-medium">
-                                                {campaign.threshold_score}
-                                            </td>
-                                            <td className="px-4 py-4 align-top">
-                                                <Badge
-                                                    variant={
-                                                        campaign.status ===
-                                                        'active'
-                                                            ? 'default'
-                                                            : 'secondary'
-                                                    }
-                                                >
-                                                    {campaign.status_label}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-4 py-4 align-top text-muted-foreground">
-                                                {campaign.sections_count}
-                                            </td>
-                                            <td className="px-4 py-4 align-top text-muted-foreground">
-                                                {campaign.questions_count}
-                                            </td>
-                                            <td className="px-4 py-4 align-top text-muted-foreground">
-                                                {campaign.assessments_count}
-                                            </td>
-                                            <td className="px-4 py-4 align-top">
-                                                <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        size="icon"
-                                                        variant="outline"
-                                                        asChild
-                                                    >
-                                                        <Link
-                                                            href={admin.campaigns.show(
-                                                                campaign.id,
-                                                            )}
-                                                            aria-label="View campaign"
-                                                        >
-                                                            <Eye />
-                                                        </Link>
-                                                    </Button>
-                                                    <Button
-                                                        size="icon"
-                                                        variant="outline"
-                                                        asChild
-                                                    >
-                                                        <Link
-                                                            href={admin.campaigns.edit(
-                                                                campaign.id,
-                                                            )}
-                                                            aria-label="Edit campaign"
-                                                        >
-                                                            <SquarePen />
-                                                        </Link>
-                                                    </Button>
-                                                    <Form
-                                                        {...CampaignController.destroy.form.delete(
-                                                            campaign.id,
-                                                        )}
-                                                    >
-                                                        {({ processing }) => (
-                                                            <Button
-                                                                size="icon"
-                                                                variant="outline"
-                                                                disabled={
-                                                                    processing
-                                                                }
-                                                                aria-label="Delete campaign"
-                                                            >
-                                                                <Trash2 />
-                                                            </Button>
-                                                        )}
-                                                    </Form>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                <Deferred data="campaigns" fallback={<CampaignsGridSkeleton />}>
+                    {campaigns !== undefined && campaigns.length === 0 ? (
+                        <div className="rounded-lg border border-sidebar-border/70 p-8 text-center dark:border-sidebar-border">
+                            <h2 className="text-base font-medium">
+                                No campaigns yet
+                            </h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Create a campaign before generating or assigning
+                                assessment questions.
+                            </p>
                         </div>
-                    </div>
-                )}
+                    ) : campaigns !== undefined ? (
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {campaigns.map((campaign) => (
+                                <Card
+                                    key={campaign.id}
+                                    size="sm"
+                                    role="link"
+                                    tabIndex={0}
+                                    className="cursor-pointer"
+                                    onClick={() =>
+                                        router.visit(
+                                            admin.campaigns.show.url(
+                                                campaign.id,
+                                            ),
+                                        )
+                                    }
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.currentTarget !== event.target
+                                        ) {
+                                            return;
+                                        }
+
+                                        if (
+                                            event.key === 'Enter' ||
+                                            event.key === ' '
+                                        ) {
+                                            event.preventDefault();
+                                            router.visit(
+                                                admin.campaigns.show.url(
+                                                    campaign.id,
+                                                ),
+                                            );
+                                        }
+                                    }}
+                                >
+                                    <CardHeader>
+                                        <CardTitle>{campaign.title}</CardTitle>
+                                        <CardAction
+                                            className="flex items-center gap-2"
+                                            onClick={(event) =>
+                                                event.stopPropagation()
+                                            }
+                                        >
+                                            <Badge
+                                                variant={
+                                                    campaign.status === 'active'
+                                                        ? 'default'
+                                                        : 'secondary'
+                                                }
+                                            >
+                                                {campaign.status_label}
+                                            </Badge>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        aria-label="Open campaign actions"
+                                                    >
+                                                        <MoreHorizontal data-icon="inline-start" />
+                                                        <span className="sr-only">
+                                                            Open campaign
+                                                            actions
+                                                        </span>
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent
+                                                    align="end"
+                                                    className="w-44"
+                                                >
+                                                    <DropdownMenuGroup>
+                                                        <DropdownMenuItem
+                                                            onSelect={(
+                                                                event,
+                                                            ) => {
+                                                                event.preventDefault();
+                                                                setCampaignPendingEdit(
+                                                                    campaign,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Edit campaign
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuGroup>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        variant="destructive"
+                                                        onSelect={(event) => {
+                                                            event.preventDefault();
+                                                            setCampaignPendingDeletion(
+                                                                campaign,
+                                                            );
+                                                        }}
+                                                    >
+                                                        Delete campaign
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </CardAction>
+                                    </CardHeader>
+                                    <CardContent className="flex flex-1 flex-col gap-4">
+                                        <div className="flex flex-col gap-1">
+                                            <p className="text-sm font-medium">
+                                                {campaign.role_title}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {campaign.seniority ||
+                                                    'No seniority specified'}
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <CampaignMetric
+                                                label="Threshold"
+                                                value={
+                                                    campaign.threshold_score
+                                                }
+                                            />
+                                            <CampaignMetric
+                                                label="Submissions"
+                                                value={
+                                                    campaign.assessments_count
+                                                }
+                                            />
+                                            <CampaignMetric
+                                                label="Sections"
+                                                value={
+                                                    campaign.sections_count
+                                                }
+                                            />
+                                            <CampaignMetric
+                                                label="Questions"
+                                                value={
+                                                    campaign.questions_count
+                                                }
+                                            />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    ) : null}
+                </Deferred>
+
+                <DeleteCampaignDialog
+                    campaign={campaignPendingDeletion}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setCampaignPendingDeletion(null);
+                        }
+                    }}
+                />
+                <EditCampaignSheet
+                    campaign={campaignPendingEdit}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setCampaignPendingEdit(null);
+                        }
+                    }}
+                />
             </div>
         </>
+    );
+}
+
+function CreateCampaignSheet({ children }: { children: ReactNode }) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>{children}</SheetTrigger>
+            <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
+                <SheetHeader>
+                    <SheetTitle>Create campaign</SheetTitle>
+                    <SheetDescription>
+                        Define the role context, required skills, and passing
+                        threshold.
+                    </SheetDescription>
+                </SheetHeader>
+                <CampaignForm
+                    action={CampaignController.store.form()}
+                    submitLabel="Create campaign"
+                    onSuccess={() => setOpen(false)}
+                    onCancel={() => setOpen(false)}
+                    className="flex-1 overflow-hidden"
+                    bodyClassName="flex-1 overflow-y-auto px-4"
+                    footerClassName="mt-auto border-t bg-background p-4"
+                />
+            </SheetContent>
+        </Sheet>
+    );
+}
+
+function EditCampaignSheet({
+    campaign,
+    onOpenChange,
+}: {
+    campaign: CampaignRow | null;
+    onOpenChange: (open: boolean) => void;
+}) {
+    return (
+        <Sheet open={campaign !== null} onOpenChange={onOpenChange}>
+            <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
+                <SheetHeader>
+                    <SheetTitle>Edit campaign</SheetTitle>
+                    <SheetDescription>
+                        Update role context, required skills, and scoring
+                        threshold.
+                    </SheetDescription>
+                </SheetHeader>
+                {campaign !== null ? (
+                    <CampaignForm
+                        action={CampaignController.update.form.patch(
+                            campaign.id,
+                        )}
+                        submitLabel="Save changes"
+                        campaign={campaign}
+                        onSuccess={() => onOpenChange(false)}
+                        onCancel={() => onOpenChange(false)}
+                        className="flex-1 overflow-hidden"
+                        bodyClassName="flex-1 overflow-y-auto px-4"
+                        footerClassName="mt-auto border-t bg-background p-4"
+                    />
+                ) : null}
+            </SheetContent>
+        </Sheet>
+    );
+}
+
+function DeleteCampaignDialog({
+    campaign,
+    onOpenChange,
+}: {
+    campaign: CampaignRow | null;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const canDelete = (campaign?.assessments_count ?? 0) === 0;
+
+    return (
+        <Dialog open={campaign !== null} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogTitle>Delete campaign?</DialogTitle>
+                <DialogDescription>
+                    {campaign === null
+                        ? 'Confirm campaign deletion.'
+                        : `This will permanently delete "${campaign.title}". This action cannot be undone.`}
+                </DialogDescription>
+
+                {!canDelete && (
+                    <p className="text-sm text-destructive">
+                        Campaigns with submitted assessments cannot be deleted.
+                    </p>
+                )}
+
+                {campaign !== null && (
+                    <Form
+                        {...CampaignController.destroy.form.delete(campaign.id)}
+                        onSuccess={() => onOpenChange(false)}
+                        className="flex flex-col gap-4"
+                    >
+                        {({ errors, processing }) => (
+                            <>
+                                <InputError message={errors.campaign} />
+
+                                <DialogFooter>
+                                    <DialogClose asChild>
+                                        <Button type="button" variant="outline">
+                                            Cancel
+                                        </Button>
+                                    </DialogClose>
+                                    <Button
+                                        type="submit"
+                                        variant="destructive"
+                                        disabled={processing || !canDelete}
+                                    >
+                                        Delete campaign
+                                    </Button>
+                                </DialogFooter>
+                            </>
+                        )}
+                    </Form>
+                )}
+            </DialogContent>
+        </Dialog>
     );
 }
 

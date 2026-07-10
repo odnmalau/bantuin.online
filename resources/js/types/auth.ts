@@ -16,6 +16,7 @@ export type AuthFeatures = {
 
 export type SharedData = {
     name: string;
+    docsUrl: string | null;
     auth: Auth;
     authFeatures: AuthFeatures;
     sidebarOpen: boolean;

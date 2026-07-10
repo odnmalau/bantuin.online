@@ -4,13 +4,18 @@ import { useEffect, useMemo, useState } from 'react';
 export function useExamTimer(expiresAt: string | null): {
     remainingSeconds: number | null;
     isExpired: boolean;
+    isPending: boolean;
 } {
-    const [now, setNow] = useState(() => Date.now());
+    const [now, setNow] = useState<number | null>(null);
 
     useEffect(() => {
         if (expiresAt === null) {
+            setNow(null);
+
             return;
         }
+
+        setNow(Date.now());
 
         const interval = window.setInterval(() => {
             setNow(Date.now());
@@ -28,6 +33,7 @@ export function useExamTimer(expiresAt: string | null): {
 
     return {
         remainingSeconds,
+        isPending: expiresAt !== null && now === null,
         isExpired:
             expiresAt !== null &&
             remainingSeconds !== null &&
@@ -37,9 +43,9 @@ export function useExamTimer(expiresAt: string | null): {
 
 function computeRemaining(
     expiresAt: string | null,
-    nowMs: number,
+    nowMs: number | null,
 ): number | null {
-    if (expiresAt === null) {
+    if (expiresAt === null || nowMs === null) {
         return null;
     }
 
@@ -49,7 +55,14 @@ function computeRemaining(
     return Math.max(0, diff);
 }
 
-export function formatExamTimer(seconds: number | null): string {
+export function formatExamTimer(
+    seconds: number | null,
+    isPending = false,
+): string {
+    if (isPending) {
+        return '--:--';
+    }
+
     if (seconds === null) {
         return 'No time limit';
     }

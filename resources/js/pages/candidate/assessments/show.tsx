@@ -2,7 +2,6 @@ import { Head, usePoll } from '@inertiajs/react';
 import { useEffect } from 'react';
 import AssessmentController from '@/actions/App/Http/Controllers/Candidate/AssessmentController';
 import AssessmentStatusBadge from '@/components/assessment-status-badge';
-import Heading from '@/components/heading';
 import candidate from '@/routes/candidate';
 
 type AnswerSnapshot = {
@@ -62,15 +61,15 @@ export default function CandidateAssessmentShow({ assessment }: Props) {
             <Head title="Assessment Status" />
 
             <div className="space-y-6 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading
-                        title="Assessment Status"
-                        description={
-                            assessment.campaign
-                                ? `${assessment.campaign.title} - ${assessment.campaign.role_title}`
-                                : 'Track your submitted assessment and review your answers.'
-                        }
-                    />
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    {assessment.campaign ? (
+                        <p className="text-sm text-muted-foreground">
+                            {assessment.campaign.title} -{' '}
+                            {assessment.campaign.role_title}
+                        </p>
+                    ) : (
+                        <span />
+                    )}
                     <AssessmentStatusBadge status={assessment.status} />
                 </div>
 
@@ -100,7 +99,7 @@ export default function CandidateAssessmentShow({ assessment }: Props) {
                             Submitted
                         </p>
                         <p className="mt-1 text-sm font-medium">
-                            {assessment.created_at}
+                            {new Date(assessment.created_at).toLocaleString()}
                         </p>
                     </div>
                     <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
@@ -108,7 +107,11 @@ export default function CandidateAssessmentShow({ assessment }: Props) {
                             Evaluated
                         </p>
                         <p className="mt-1 text-sm font-medium">
-                            {assessment.evaluated_at ?? '-'}
+                            {assessment.evaluated_at
+                                ? new Date(
+                                      assessment.evaluated_at,
+                                  ).toLocaleString()
+                                : '-'}
                         </p>
                     </div>
                 </div>
@@ -157,16 +160,16 @@ export default function CandidateAssessmentShow({ assessment }: Props) {
     );
 }
 
-CandidateAssessmentShow.layout = {
-    breadcrumbs: (page: { props: Props }) => {
-        const examHref =
-            page.props.assessment.campaign_id !== null
-                ? AssessmentController.campaignExam.url(
-                      page.props.assessment.campaign_id,
-                  )
-                : candidate.exam();
+CandidateAssessmentShow.layout = (props: Partial<Props>) => {
+    const assessment = props.assessment;
+    const examHref =
+        assessment?.campaign_id !== null &&
+        assessment?.campaign_id !== undefined
+            ? AssessmentController.campaignExam.url(assessment.campaign_id)
+            : candidate.exam();
 
-        return [
+    return {
+        breadcrumbs: [
             {
                 title: 'Candidate Exam',
                 href: examHref,
@@ -175,6 +178,6 @@ CandidateAssessmentShow.layout = {
                 title: 'Assessment Status',
                 href: examHref,
             },
-        ];
-    },
+        ],
+    };
 };

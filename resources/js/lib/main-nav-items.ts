@@ -1,10 +1,7 @@
 import {
-    BookOpen,
     BriefcaseBusiness,
-    ClipboardList,
     FileText,
     LayoutGrid,
-    SlidersHorizontal,
     Trophy,
 } from 'lucide-react';
 import { dashboard } from '@/routes';
@@ -22,35 +19,30 @@ const defaultNavItems: NavItem[] = [
     },
 ];
 
+const dashboardNavItem = defaultNavItems[0];
+
 const adminHeaderNavItems: NavItem[] = [
+    {
+        title: 'Campaigns',
+        href: admin.campaigns.index(),
+    },
     {
         title: 'Rankings',
         href: admin.rankings.index(),
-        icon: Trophy,
-    },
-    {
-        title: 'Workstation',
-        href: admin.assessments.index(),
-        icon: ClipboardList,
     },
 ];
 
 const adminSidebarNavItems: NavItem[] = [
+    dashboardNavItem,
     {
         title: 'Campaigns',
         href: admin.campaigns.index(),
         icon: BriefcaseBusiness,
     },
     {
-        title: 'Question Libraries',
-        href: admin.questionBanks.index(),
-        icon: BookOpen,
-    },
-    ...adminHeaderNavItems,
-    {
-        title: 'Settings',
-        href: admin.assessmentSettings.edit(),
-        icon: SlidersHorizontal,
+        title: 'Rankings',
+        href: admin.rankings.index(),
+        icon: Trophy,
     },
 ];
 
@@ -67,9 +59,9 @@ export function resolveMainNavItems(
     surface: NavigationSurface,
 ): NavItem[] {
     if (role === 'admin') {
-        return surface === 'sidebar'
-            ? adminSidebarNavItems
-            : adminHeaderNavItems;
+        return surface === 'header'
+            ? adminHeaderNavItems
+            : adminSidebarNavItems;
     }
 
     if (role === 'candidate') {
@@ -82,5 +74,5 @@ export function resolveMainNavItems(
 export function primaryMainNavHref(
     role: User['role'] | undefined,
 ): NavItem['href'] {
-    return resolveMainNavItems(role, 'sidebar')[0]?.href ?? dashboard();
+    return dashboard();
 }

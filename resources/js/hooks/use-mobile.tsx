@@ -7,7 +7,7 @@ const mql =
         ? undefined
         : window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
 
-function mediaQueryListener(callback: (event: MediaQueryListEvent) => void) {
+function mediaQueryListener(callback: () => void) {
     if (!mql) {
         return () => {};
     }
