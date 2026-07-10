@@ -2,18 +2,11 @@
 
 namespace App\Http\Requests\Admin;
 
-use App\CampaignStatus;
-use App\Http\Requests\Admin\Concerns\ValidatesCampaignRankingWeights;
-use App\Models\Campaign;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\Validator;
 
 class UpdateCampaignRequest extends FormRequest
 {
-    use ValidatesCampaignRankingWeights;
-
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -29,13 +22,7 @@ class UpdateCampaignRequest extends FormRequest
     {
         $this->merge([
             'required_skills' => $this->stringList('required_skills'),
-            'nice_to_have_skills' => $this->stringList('nice_to_have_skills'),
             'language' => $this->input('language', 'English'),
-            'ranking_weights' => Campaign::normalizeRankingWeights(
-                is_array($this->input('ranking_weights'))
-                    ? $this->input('ranking_weights')
-                    : Campaign::defaultRankingWeights(),
-            ),
         ]);
     }
 
@@ -53,22 +40,9 @@ class UpdateCampaignRequest extends FormRequest
             'job_description' => ['nullable', 'string'],
             'required_skills' => ['nullable', 'array'],
             'required_skills.*' => ['string', 'max:100'],
-            'nice_to_have_skills' => ['nullable', 'array'],
-            'nice_to_have_skills.*' => ['string', 'max:100'],
             'language' => ['required', 'string', 'max:40'],
             'threshold_score' => ['required', 'integer', 'min:0', 'max:100'],
-            'status' => ['required', Rule::enum(CampaignStatus::class)],
-            'ai_generation_notes' => ['nullable', 'string'],
-            ...$this->rankingWeightRules(),
         ];
-    }
-
-    /**
-     * @return array<int, callable(Validator): void>
-     */
-    public function after(): array
-    {
-        return $this->rankingWeightAfterValidators();
     }
 
     /**

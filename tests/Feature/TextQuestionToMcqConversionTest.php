@@ -3,7 +3,6 @@
 use App\Ai\Agents\TextQuestionToMcqConverterAgent;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
-use App\Models\QuestionBank;
 use App\Models\User;
 use App\QuestionGradingMode;
 use App\QuestionStatus;
@@ -101,38 +100,6 @@ test('convert to mcq is rejected for multiple choice campaign questions', functi
     $this->actingAs($admin)
         ->post(route('admin.campaigns.questions.convert-to-mcq', [$campaign, $question]))
         ->assertSessionHasErrors('conversion');
-});
-
-test('admin can convert draft bank text question to multiple choice', function () {
-    TextQuestionToMcqConverterAgent::fake([
-        convertedMcqOutput(),
-    ]);
-
-    $admin = User::factory()->admin()->create();
-    $questionBank = QuestionBank::factory()->for($admin, 'creator')->create();
-    $question = $questionBank->questions()->create([
-        'type' => QuestionType::ShortText,
-        'grading_mode' => QuestionGradingMode::Ai,
-        'prompt' => 'Describe Laravel form request validation.',
-        'expected_rubric' => 'Mentions rules, messages, and authorization.',
-        'points' => 10,
-        'difficulty' => 'medium',
-        'skill_tags' => ['Laravel'],
-        'ai_generated' => true,
-        'status' => QuestionStatus::Draft,
-        'sort_order' => 10,
-    ]);
-
-    $this->actingAs($admin)
-        ->post(route('admin.question-banks.questions.convert-to-mcq', [$questionBank, $question]))
-        ->assertSessionHasNoErrors()
-        ->assertRedirect(route('admin.question-banks.questions.edit', [$questionBank, $question]));
-
-    expect($question->refresh())
-        ->type->toBe(QuestionType::MultipleChoice)
-        ->grading_mode->toBe(QuestionGradingMode::Deterministic)
-        ->expected_rubric->toBeNull()
-        ->ai_generated->toBeTrue();
 });
 
 test('invalid mcq conversion output leaves question unchanged', function () {

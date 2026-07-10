@@ -39,16 +39,6 @@ class User extends Authenticatable
     }
 
     /**
-     * Get question banks created by this user.
-     *
-     * @return HasMany<QuestionBank, $this>
-     */
-    public function questionBanks(): HasMany
-    {
-        return $this->hasMany(QuestionBank::class, 'created_by');
-    }
-
-    /**
      * Get campaign exam invitations assigned to this candidate.
      *
      * @return HasMany<CampaignInvitation, $this>

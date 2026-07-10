@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use App\UserRole;
+use Illuminate\Support\Facades\Route;
 
 test('google sign-in creates candidate users', function () {
     fakeGoogleAuthConfig();
@@ -24,7 +25,7 @@ test('admin routes reject candidates', function () {
     $candidate = User::factory()->candidate()->create();
 
     $this->actingAs($candidate)
-        ->get(route('admin.assessments.index'))
+        ->get(route('admin.rankings.index'))
         ->assertForbidden();
 });
 
@@ -36,10 +37,15 @@ test('candidate routes reject admins', function () {
         ->assertForbidden();
 });
 
+test('assessment settings admin routes are removed', function () {
+    expect(Route::has('admin.assessment-settings.edit'))->toBeFalse()
+        ->and(Route::has('admin.assessment-settings.update'))->toBeFalse();
+});
+
 test('guests are redirected from role protected routes', function (string $route) {
     $this->get(route($route))->assertRedirect(route('login'));
 })->with([
-    'admin.assessments.index',
+    'admin.rankings.index',
     'candidate.exam',
 ]);
 

@@ -10,7 +10,7 @@ enum UserRole: string
     public function homePath(): string
     {
         return match ($this) {
-            self::Admin => '/admin/assessments',
+            self::Admin => '/admin/rankings',
             self::Candidate => '/candidate/exam',
         };
     }

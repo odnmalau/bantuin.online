@@ -12,8 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('campaigns', function (Blueprint $table) {
-            $table->jsonb('nice_to_have_skills')->nullable()->after('required_skills');
-            $table->string('language', 40)->default('English')->after('nice_to_have_skills');
+            $table->string('language', 40)->default('English')->after('required_skills');
         });
     }
 
@@ -23,7 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('campaigns', function (Blueprint $table) {
-            $table->dropColumn(['nice_to_have_skills', 'language']);
+            $table->dropColumn('language');
         });
     }
 };

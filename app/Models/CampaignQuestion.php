@@ -14,7 +14,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'campaign_id',
     'campaign_section_id',
-    'source_bank_question_id',
     'type',
     'grading_mode',
     'prompt',
@@ -52,16 +51,6 @@ class CampaignQuestion extends Model
     public function section(): BelongsTo
     {
         return $this->belongsTo(CampaignSection::class, 'campaign_section_id');
-    }
-
-    /**
-     * Get the source question bank item when imported.
-     *
-     * @return BelongsTo<BankQuestion, $this>
-     */
-    public function sourceBankQuestion(): BelongsTo
-    {
-        return $this->belongsTo(BankQuestion::class, 'source_bank_question_id');
     }
 
     /**

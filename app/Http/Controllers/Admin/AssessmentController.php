@@ -15,8 +15,6 @@ use App\Jobs\SendInterviewInvitationEmail;
 use App\Models\Assessment;
 use App\Models\User;
 use App\Services\AssessmentEventRecorder;
-use App\Services\AssessmentSettings;
-use App\Services\CandidateRankingCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -25,50 +23,17 @@ use Inertia\Response;
 class AssessmentController extends Controller
 {
     /**
-     * Show the HRD assessment workstation.
-     */
-    public function index(): Response
-    {
-        return Inertia::render('admin/assessments/index', [
-            'assessments' => Assessment::query()
-                ->with('user:id,name,email')
-                ->orderByRaw('ranking_score is null')
-                ->orderByDesc('ranking_score')
-                ->latest()
-                ->get()
-                ->map(fn (Assessment $assessment): array => [
-                    'id' => $assessment->id,
-                    'candidate_name' => $assessment->user?->name,
-                    'candidate_email' => $assessment->user?->email,
-                    'ai_score' => $assessment->ai_score,
-                    'resume_score' => $assessment->resume_score,
-                    'mcq_score' => $assessment->mcq_score,
-                    'essay_score' => $assessment->essay_score,
-                    'ranking_score' => $assessment->ranking_score,
-                    'status' => $assessment->status->value,
-                    'created_at' => $assessment->created_at,
-                    'evaluated_at' => $assessment->evaluated_at,
-                ]),
-        ]);
-    }
-
-    /**
      * Show a single assessment review page.
      */
-    public function show(
-        Assessment $assessment,
-        AssessmentSettings $settings,
-        CandidateRankingCalculator $rankingCalculator,
-    ): Response {
+    public function show(Assessment $assessment): Response
+    {
         $assessment->loadMissing([
             'user:id,name,email',
             'approver:id,name,email',
-            'campaign:id,title,threshold_score',
-            'events.actor:id,name,email',
+            'campaign:id,title,role_title,threshold_score',
         ]);
-        $sortedEvents = $assessment->events->sortByDesc('occurred_at')->values();
-        $latestOverrideEvent = $sortedEvents->firstWhere('type', 'admin_overrode_ranking_score');
         $canReview = $this->canReview($assessment);
+        $leaderboardRank = $this->leaderboardRankFor($assessment);
 
         return Inertia::render('admin/assessments/show', [
             'assessment' => [
@@ -77,6 +42,11 @@ class AssessmentController extends Controller
                     'name' => $assessment->user?->name,
                     'email' => $assessment->user?->email,
                 ],
+                'campaign' => [
+                    'title' => $assessment->campaign?->title,
+                    'role_title' => $assessment->campaign?->role_title,
+                ],
+                'rank' => $leaderboardRank,
                 'approver' => $assessment->approver?->only(['name', 'email']),
                 'answers_payload' => $assessment->answers_payload,
                 'resume_original_name' => $assessment->resume_original_name,
@@ -89,6 +59,7 @@ class AssessmentController extends Controller
                 'essay_score' => $assessment->essay_score,
                 'ranking_score' => $assessment->ranking_score,
                 'ranking_payload' => $assessment->ranking_payload,
+                'section_scores' => data_get($assessment->ranking_payload, 'section_scores', []),
                 'critic_payload' => $assessment->critic_payload,
                 'ai_justification' => $assessment->ai_justification,
                 'ai_email_subject' => $assessment->ai_email_subject,
@@ -106,28 +77,33 @@ class AssessmentController extends Controller
                 'approved_at' => $assessment->approved_at,
                 'rejected_at' => $assessment->rejected_at,
                 'email_sent_at' => $assessment->email_sent_at,
-                'audit' => [
-                    'provider' => config('assessment.qwen.provider'),
-                    'model' => config('assessment.qwen.model'),
-                    'threshold' => $settings->passingScoreFor($assessment),
-                    'threshold_source' => $settings->passingScoreSource($assessment),
-                    'global_passing_score' => $settings->passingScore(),
-                    'ranking_formula' => data_get($assessment->ranking_payload, 'formula', $rankingCalculator->configuredFormula()),
-                    'override_reason' => data_get($latestOverrideEvent?->payload, 'reason'),
-                    'override_score' => data_get($latestOverrideEvent?->payload, 'to_score'),
-                ],
-                'events' => $sortedEvents
-                    ->map(fn ($event): array => [
-                        'id' => $event->id,
-                        'type' => $event->type,
-                        'title' => $event->title,
-                        'description' => $event->description,
-                        'payload' => $event->payload,
-                        'occurred_at' => $event->occurred_at,
-                        'actor' => $event->actor?->only(['name', 'email']),
-                    ]),
             ],
         ]);
+    }
+
+    /**
+     * Resolve the candidate's current leaderboard rank among scored assessments.
+     */
+    private function leaderboardRankFor(Assessment $assessment): ?int
+    {
+        if ($assessment->ranking_score === null) {
+            return null;
+        }
+
+        $higherRankedCount = Assessment::query()
+            ->whereNotNull('ranking_score')
+            ->where(function ($query) use ($assessment): void {
+                $query
+                    ->where('ranking_score', '>', $assessment->ranking_score)
+                    ->orWhere(function ($tiedQuery) use ($assessment): void {
+                        $tiedQuery
+                            ->where('ranking_score', $assessment->ranking_score)
+                            ->where('id', '>', $assessment->id);
+                    });
+            })
+            ->count();
+
+        return $higherRankedCount + 1;
     }
 
     /**

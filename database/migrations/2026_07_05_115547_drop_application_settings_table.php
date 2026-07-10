@@ -11,9 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('question_banks', function (Blueprint $table) {
-            $table->jsonb('ai_generation_audit')->nullable()->after('is_active');
-        });
+        Schema::dropIfExists('application_settings');
     }
 
     /**
@@ -21,8 +19,11 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('question_banks', function (Blueprint $table) {
-            $table->dropColumn('ai_generation_audit');
+        Schema::create('application_settings', function (Blueprint $table): void {
+            $table->id();
+            $table->string('key')->unique();
+            $table->text('value');
+            $table->timestamps();
         });
     }
 };

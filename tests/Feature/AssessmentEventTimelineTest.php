@@ -166,7 +166,7 @@ test('admin approval and email job record human and delivery events', function (
         ->toContain('admin_approved', 'email_sent');
 });
 
-test('admin can view timeline and audit panel while candidate cannot see internal events', function () {
+test('assessment event timeline stays internal and is not exposed on review page', function () {
     $admin = User::factory()->admin()->create();
     $candidate = User::factory()->candidate()->create();
     $assessment = Assessment::factory()
@@ -189,19 +189,20 @@ test('admin can view timeline and audit panel while candidate cannot see interna
         ],
     );
 
+    expect($assessment->refresh()->events()->pluck('type')->all())
+        ->toContain('internal_audit_event');
+
     $this->actingAs($admin)
         ->get(route('admin.assessments.show', $assessment))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/assessments/show')
-            ->has('assessment.events', 1)
-            ->where('assessment.events.0.type', 'internal_audit_event')
-            ->where('assessment.events.0.title', 'Internal Qwen audit event')
-            ->where('assessment.events.0.payload.token', '[redacted]')
-            ->where('assessment.audit.provider', 'qwen')
-            ->where('assessment.audit.model', 'qwen3.7-plus')
-            ->where('assessment.audit.threshold', 75),
-        );
+            ->missing('assessment.events')
+            ->missing('assessment.audit')
+            ->missing('assessment.events.0.payload.token'),
+        )
+        ->assertDontSee('Internal Qwen audit event', false)
+        ->assertDontSee('secret-qwen-token', false);
 
     $this->actingAs($candidate)
         ->get(route('candidate.assessments.show', $assessment))

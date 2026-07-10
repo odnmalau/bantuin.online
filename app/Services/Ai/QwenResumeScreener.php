@@ -49,7 +49,6 @@ class QwenResumeScreener
                 'seniority' => $campaign?->seniority,
                 'job_description' => $campaign?->job_description,
                 'required_skills' => $campaign?->required_skills ?? [],
-                'nice_to_have_skills' => $campaign?->nice_to_have_skills ?? [],
                 'threshold_score' => $campaign?->threshold_score,
             ],
             'assessment_context' => [

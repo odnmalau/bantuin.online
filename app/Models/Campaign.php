@@ -17,12 +17,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'seniority',
     'job_description',
     'required_skills',
-    'nice_to_have_skills',
     'language',
     'threshold_score',
     'ranking_weights',
     'status',
-    'ai_generation_notes',
     'ai_generation_audit',
     'activated_at',
 ])]
@@ -142,7 +140,6 @@ class Campaign extends Model
     {
         return [
             'required_skills' => 'array',
-            'nice_to_have_skills' => 'array',
             'threshold_score' => 'integer',
             'ranking_weights' => 'array',
             'ai_generation_audit' => 'array',

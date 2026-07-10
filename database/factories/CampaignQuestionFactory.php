@@ -25,7 +25,6 @@ class CampaignQuestionFactory extends Factory
         return [
             'campaign_id' => Campaign::factory(),
             'campaign_section_id' => CampaignSection::factory(),
-            'source_bank_question_id' => null,
             'type' => QuestionType::LongText,
             'grading_mode' => QuestionGradingMode::Ai,
             'prompt' => fake()->sentence(12),

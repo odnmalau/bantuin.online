@@ -3,10 +3,8 @@
 namespace App\Services\Ai;
 
 use App\Ai\Agents\McqOptionsRegeneratorAgent;
-use App\Models\BankQuestion;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
-use App\Models\QuestionBank;
 use App\QuestionType;
 use App\Services\Ai\Concerns\ConfiguresQwenAssessmentAgent;
 use App\Services\Ai\Concerns\ValidatesMcqStructuredOutput;
@@ -34,27 +32,6 @@ class QwenMcqOptionsRegenerator
                     'language' => $campaign->language,
                     'job_description' => $campaign->job_description,
                     'required_skills' => $campaign->required_skills ?? [],
-                ],
-            ],
-        ));
-    }
-
-    public function regenerateForBankQuestion(BankQuestion $question, QuestionBank $questionBank): McqOptionsRegenerationResult
-    {
-        $this->assertRegeneratableMcq($question);
-
-        return $this->regenerate($this->promptPayload(
-            prompt: $question->prompt,
-            difficulty: $question->difficulty,
-            skillTags: $question->skill_tags ?? [],
-            currentOptions: $question->options ?? [],
-            context: [
-                'source' => 'bank_question',
-                'question_bank' => [
-                    'title' => $questionBank->title,
-                    'skill_area' => $questionBank->skill_area,
-                    'difficulty' => $questionBank->difficulty,
-                    'description' => $questionBank->description,
                 ],
             ],
         ));
@@ -107,7 +84,7 @@ class QwenMcqOptionsRegenerator
         ];
     }
 
-    private function assertRegeneratableMcq(CampaignQuestion|BankQuestion $question): void
+    private function assertRegeneratableMcq(CampaignQuestion $question): void
     {
         if ($question->type !== QuestionType::MultipleChoice) {
             throw AssessmentGenerationException::invalidOutput('only multiple choice questions support option regeneration.');

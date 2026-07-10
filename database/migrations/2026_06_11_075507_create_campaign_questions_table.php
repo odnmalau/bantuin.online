@@ -15,7 +15,6 @@ return new class extends Migration
             $table->id();
             $table->foreignId('campaign_id')->constrained()->cascadeOnDelete();
             $table->foreignId('campaign_section_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('source_bank_question_id')->nullable()->constrained('bank_questions')->nullOnDelete();
             $table->string('type')->index();
             $table->text('prompt');
             $table->jsonb('options')->nullable();

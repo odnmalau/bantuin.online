@@ -12,19 +12,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('bank_questions', function (Blueprint $table) {
-            $table->string('grading_mode')->default('ai')->after('type')->index();
-        });
-
         Schema::table('campaign_questions', function (Blueprint $table) {
             $table->string('grading_mode')->default('ai')->after('type')->index();
         });
 
-        foreach (['bank_questions', 'campaign_questions'] as $table) {
-            DB::table($table)
-                ->whereIn('type', ['multiple_choice', 'yes_no', 'fill_blank', 'matching_pairs'])
-                ->update(['grading_mode' => 'deterministic']);
-        }
+        DB::table('campaign_questions')
+            ->whereIn('type', ['multiple_choice', 'yes_no', 'fill_blank', 'matching_pairs'])
+            ->update(['grading_mode' => 'deterministic']);
     }
 
     /**
@@ -32,11 +26,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('bank_questions', function (Blueprint $table) {
-            $table->dropIndex(['grading_mode']);
-            $table->dropColumn('grading_mode');
-        });
-
         Schema::table('campaign_questions', function (Blueprint $table) {
             $table->dropIndex(['grading_mode']);
             $table->dropColumn('grading_mode');

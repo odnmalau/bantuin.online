@@ -11,10 +11,6 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('bank_questions', function (Blueprint $table) {
-            $table->string('status')->default('approved')->index();
-        });
-
         Schema::table('campaign_questions', function (Blueprint $table) {
             $table->string('status')->default('approved')->index();
         });
@@ -25,10 +21,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('bank_questions', function (Blueprint $table) {
-            $table->dropColumn('status');
-        });
-
         Schema::table('campaign_questions', function (Blueprint $table) {
             $table->dropColumn('status');
         });

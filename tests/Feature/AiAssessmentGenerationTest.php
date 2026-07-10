@@ -28,8 +28,10 @@ test('admin can generate draft assessment questions for a campaign', function ()
         'role_title' => 'Backend Engineer',
         'job_description' => 'Build Laravel APIs and queue workers.',
         'required_skills' => ['Laravel', 'PostgreSQL', 'Queues'],
-        'ai_generation_notes' => 'Prefer practical debugging questions.',
     ]);
+    $campaign->forceFill([
+        'ai_generation_notes' => 'Prefer practical debugging questions.',
+    ])->save();
 
     $this->actingAs($admin)
         ->from(route('admin.campaigns.show', $campaign))
@@ -80,7 +82,11 @@ test('admin can generate draft assessment questions for a campaign', function ()
 
     AssessmentGeneratorAgent::assertPrompted(fn ($prompt): bool => str_contains($prompt->prompt, 'Backend Engineer')
         && str_contains($prompt->prompt, 'Laravel')
-        && str_contains($prompt->prompt, 'multiple choice'));
+        && str_contains($prompt->prompt, 'multiple choice')
+        && str_contains($prompt->prompt, 'ai_generation_notes')
+        && ! str_contains($prompt->prompt, 'generation_instructions')
+        && str_contains($prompt->prompt, 'Prioritize job-relevant scenarios over trivia')
+        && ! str_contains($prompt->prompt, 'Prefer practical debugging questions.'));
 });
 
 test('campaign assessment generation respects question_count limit', function () {

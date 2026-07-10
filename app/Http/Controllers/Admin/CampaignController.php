@@ -9,13 +9,15 @@ use App\Http\Requests\Admin\UpdateCampaignRequest;
 use App\Models\Campaign;
 use App\Models\CampaignInvitation;
 use App\Models\CampaignSection;
-use App\Models\QuestionBank;
 use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use App\Services\CampaignInvitationService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,12 +27,22 @@ class CampaignController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'status' => ['nullable', 'string', Rule::in(['all', ...array_column(CampaignStatus::selectOptions(), 'value')])],
+        ]);
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        $status = (string) ($filters['status'] ?? 'all');
+
         return Inertia::render('admin/campaigns/index', [
-            'campaigns' => Campaign::query()
+            'campaigns' => Inertia::defer(fn (): array => Campaign::query()
                 ->with('creator:id,name,email')
                 ->withCount(['sections', 'questions', 'assessments'])
+                ->when($search !== '', fn (Builder $query) => $this->applyCampaignSearch($query, $search))
+                ->when($status !== 'all', fn (Builder $query) => $query->where('status', $status))
                 ->latest()
                 ->get()
                 ->map(fn (Campaign $campaign): array => [
@@ -38,6 +50,9 @@ class CampaignController extends Controller
                     'title' => $campaign->title,
                     'role_title' => $campaign->role_title,
                     'seniority' => $campaign->seniority,
+                    'job_description' => $campaign->job_description,
+                    'required_skills' => $campaign->required_skills ?? [],
+                    'language' => $campaign->language,
                     'threshold_score' => $campaign->threshold_score,
                     'status' => $campaign->status->value,
                     'status_label' => $campaign->status->label(),
@@ -46,7 +61,13 @@ class CampaignController extends Controller
                     'assessments_count' => $campaign->assessments_count,
                     'created_by' => $campaign->creator?->name,
                     'created_at' => $campaign->created_at,
-                ]),
+                ])
+                ->all()),
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+            ],
+            'statusOptions' => CampaignStatus::selectOptions(),
         ]);
     }
 
@@ -55,10 +76,7 @@ class CampaignController extends Controller
      */
     public function create(): Response
     {
-        return Inertia::render('admin/campaigns/create', [
-            'statusOptions' => CampaignStatus::selectOptions(),
-            'defaultRankingWeights' => Campaign::defaultRankingWeights(),
-        ]);
+        return Inertia::render('admin/campaigns/create');
     }
 
     /**
@@ -72,7 +90,9 @@ class CampaignController extends Controller
             $campaign = Campaign::query()->create([
                 ...$validated,
                 'created_by' => $request->user()->id,
-                'activated_at' => $validated['status'] === CampaignStatus::Active->value ? now() : null,
+                'ranking_weights' => Campaign::defaultRankingWeights(),
+                'status' => CampaignStatus::Draft,
+                'activated_at' => null,
             ]);
 
             $this->createDefaultSection($campaign);
@@ -90,58 +110,62 @@ class CampaignController extends Controller
      */
     public function show(Campaign $campaign): Response
     {
-        $campaign->loadMissing([
-            'creator:id,name,email',
-            'invitations' => fn ($query) => $query->latest()->latest('id'),
-            'sections' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
-            'sections.questions' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
-            'sections.questions.sourceBankQuestion.questionBank:id,title',
-        ]);
-
-        $publishability = $this->publishability($campaign);
-        $invitations = app(CampaignInvitationService::class);
-
         return Inertia::render('admin/campaigns/show', [
-            'campaign' => [
-                'id' => $campaign->id,
-                'title' => $campaign->title,
-                'role_title' => $campaign->role_title,
-                'seniority' => $campaign->seniority,
-                'job_description' => $campaign->job_description,
-                'required_skills' => $campaign->required_skills ?? [],
-                'nice_to_have_skills' => $campaign->nice_to_have_skills ?? [],
-                'language' => $campaign->language,
-                'threshold_score' => $campaign->threshold_score,
-                'ranking_weights' => $campaign->resolvedRankingWeights(),
-                'ranking_weights_configured' => $campaign->hasConfiguredRankingWeights(),
-                'status' => $campaign->status->value,
-                'status_label' => $campaign->status->label(),
-                'ai_generation_notes' => $campaign->ai_generation_notes,
-                'ai_generation_audit' => $campaign->ai_generation_audit ?? [],
-                'created_by' => $campaign->creator?->name,
-                'created_at' => $campaign->created_at,
-                'activated_at' => $campaign->activated_at,
-                'draft_questions_count' => $publishability['draft_questions_count'],
-                'approved_questions_count' => $publishability['approved_questions_count'],
-                'can_publish' => $publishability['can_publish'],
-                'sections' => $campaign->sections->map(fn (CampaignSection $section): array => [
-                    'id' => $section->id,
-                    'title' => $section->title,
-                    'description' => $section->description,
-                    'duration_minutes' => $section->duration_minutes,
-                    'scoring_mode' => $section->scoring_mode,
-                    'weight' => $section->weight,
-                    'sort_order' => $section->sort_order,
-                    'questions' => $section->questions
-                        ->map(fn ($question): array => $this->campaignQuestionPayload($question)),
-                ]),
-            ],
-            'invitations' => $campaign->invitations->map(
-                fn (CampaignInvitation $invitation): array => $invitations->invitationPayload($invitation),
-            ),
+            'campaign' => Inertia::defer(function () use ($campaign): array {
+                $campaign->loadMissing([
+                    'creator:id,name,email',
+                    'sections' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+                    'sections.questions' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+                ]);
+
+                $publishability = $this->publishability($campaign);
+
+                return [
+                    'id' => $campaign->id,
+                    'title' => $campaign->title,
+                    'role_title' => $campaign->role_title,
+                    'seniority' => $campaign->seniority,
+                    'job_description' => $campaign->job_description,
+                    'required_skills' => $campaign->required_skills ?? [],
+                    'language' => $campaign->language,
+                    'threshold_score' => $campaign->threshold_score,
+                    'ranking_weights' => $campaign->resolvedRankingWeights(),
+                    'ranking_weights_configured' => $campaign->hasConfiguredRankingWeights(),
+                    'status' => $campaign->status->value,
+                    'status_label' => $campaign->status->label(),
+                    'ai_generation_audit' => $campaign->ai_generation_audit ?? [],
+                    'created_by' => $campaign->creator?->name,
+                    'created_at' => $campaign->created_at,
+                    'activated_at' => $campaign->activated_at,
+                    'draft_questions_count' => $publishability['draft_questions_count'],
+                    'approved_questions_count' => $publishability['approved_questions_count'],
+                    'can_publish' => $publishability['can_publish'],
+                    'sections' => $campaign->sections->map(fn (CampaignSection $section): array => [
+                        'id' => $section->id,
+                        'title' => $section->title,
+                        'description' => $section->description,
+                        'duration_minutes' => $section->duration_minutes,
+                        'scoring_mode' => $section->scoring_mode,
+                        'weight' => $section->weight,
+                        'sort_order' => $section->sort_order,
+                        'questions' => $section->questions
+                            ->map(fn ($question): array => $this->campaignQuestionPayload($question)),
+                    ]),
+                ];
+            }),
+            'invitations' => Inertia::defer(function () use ($campaign): array {
+                $campaign->loadMissing([
+                    'invitations' => fn ($query) => $query->latest()->latest('id'),
+                ]);
+
+                $invitations = app(CampaignInvitationService::class);
+
+                return $campaign->invitations
+                    ->map(fn (CampaignInvitation $invitation): array => $invitations->invitationPayload($invitation))
+                    ->all();
+            }),
             'questionTypes' => QuestionType::selectOptions(),
             'gradingModeOptions' => QuestionGradingMode::selectOptions(),
-            'questionBanks' => $this->questionBanksForImport(),
         ]);
     }
 
@@ -158,15 +182,9 @@ class CampaignController extends Controller
                 'seniority' => $campaign->seniority,
                 'job_description' => $campaign->job_description,
                 'required_skills' => $campaign->required_skills ?? [],
-                'nice_to_have_skills' => $campaign->nice_to_have_skills ?? [],
                 'language' => $campaign->language,
                 'threshold_score' => $campaign->threshold_score,
-                'ranking_weights' => $campaign->resolvedRankingWeights(),
-                'ranking_weights_configured' => $campaign->hasConfiguredRankingWeights(),
-                'status' => $campaign->status->value,
-                'ai_generation_notes' => $campaign->ai_generation_notes,
             ],
-            'statusOptions' => CampaignStatus::selectOptions(),
         ]);
     }
 
@@ -176,14 +194,6 @@ class CampaignController extends Controller
     public function update(UpdateCampaignRequest $request, Campaign $campaign): RedirectResponse
     {
         $validated = $request->validated();
-
-        if ($validated['status'] === CampaignStatus::Active->value) {
-            if ($campaign->activated_at === null) {
-                $validated['activated_at'] = now();
-            }
-        } else {
-            $validated['activated_at'] = null;
-        }
 
         $campaign->update($validated);
 
@@ -227,21 +237,16 @@ class CampaignController extends Controller
         return to_route('admin.campaigns.show', $campaign);
     }
 
-    /**
-     * @return array<int, array{id: int, title: string, skill_area: string|null, difficulty: string, questions: array<int, array{id: int, type: string, type_label: string, prompt: string, points: int, difficulty: string, skill_tags: array<int, string>}>}>
-     */
-    private function questionBanksForImport(): array
+    private function applyCampaignSearch(Builder $query, string $search): void
     {
-        return QuestionBank::query()
-            ->where('is_active', true)
-            ->with(['questions' => fn ($query) => $query
-                ->where('status', QuestionStatus::Approved)
-                ->orderBy('sort_order')
-                ->orderBy('id')])
-            ->orderBy('title')
-            ->get()
-            ->map(fn (QuestionBank $questionBank): array => $this->importableQuestionBankPayload($questionBank))
-            ->all();
+        $term = '%'.mb_strtolower($search).'%';
+
+        $query->where(function (Builder $query) use ($term): void {
+            $query
+                ->whereRaw('LOWER(title) LIKE ?', [$term])
+                ->orWhereRaw('LOWER(role_title) LIKE ?', [$term])
+                ->orWhereRaw('LOWER(COALESCE(seniority, \'\')) LIKE ?', [$term]);
+        });
     }
 
     /**
@@ -296,43 +301,7 @@ class CampaignController extends Controller
             'status' => $question->status->value,
             'status_label' => $question->status->label(),
             'is_required' => $question->is_required,
-            'source_bank_question_id' => $question->source_bank_question_id,
-            'source_question_bank' => $question->sourceBankQuestion?->questionBank?->title,
             'sort_order' => $question->sort_order,
-        ];
-    }
-
-    /**
-     * @return array{id: int, title: string, skill_area: string|null, difficulty: string, questions: array<int, array<string, mixed>>}
-     */
-    private function importableQuestionBankPayload(QuestionBank $questionBank): array
-    {
-        return [
-            'id' => $questionBank->id,
-            'title' => $questionBank->title,
-            'skill_area' => $questionBank->skill_area,
-            'difficulty' => $questionBank->difficulty,
-            'questions' => $questionBank->questions
-                ->map(fn ($question): array => $this->importableBankQuestionPayload($question))
-                ->all(),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function importableBankQuestionPayload(mixed $question): array
-    {
-        return [
-            'id' => $question->id,
-            'type' => $question->type->value,
-            'type_label' => $question->type->label(),
-            'grading_mode' => $question->grading_mode->value,
-            'grading_mode_label' => $question->grading_mode->label(),
-            'prompt' => $question->prompt,
-            'points' => $question->points,
-            'difficulty' => $question->difficulty,
-            'skill_tags' => $question->skill_tags ?? [],
         ];
     }
 

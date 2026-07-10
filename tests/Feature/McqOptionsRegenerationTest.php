@@ -3,9 +3,7 @@
 use App\Ai\Agents\McqOptionsRegeneratorAgent;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
-use App\Models\QuestionBank;
 use App\Models\User;
-use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use App\Services\Ai\QwenMcqOptionsRegenerator;
@@ -101,42 +99,6 @@ test('regenerate mcq options is rejected for non multiple choice campaign questi
     $this->actingAs($admin)
         ->post(route('admin.campaigns.questions.regenerate-mcq-options', [$campaign, $question]))
         ->assertSessionHasErrors('regeneration');
-});
-
-test('admin can regenerate mcq options for draft bank question', function () {
-    McqOptionsRegeneratorAgent::fake([
-        [
-            'options' => ['PostgreSQL', 'SQLite', 'MySQL', 'MongoDB'],
-            'correct_answer' => ['PostgreSQL'],
-        ],
-    ]);
-
-    $admin = User::factory()->admin()->create();
-    $questionBank = QuestionBank::factory()->for($admin, 'creator')->create([
-        'title' => 'Database Skills',
-        'skill_area' => 'PostgreSQL',
-    ]);
-    $question = $questionBank->questions()->create([
-        'type' => QuestionType::MultipleChoice,
-        'grading_mode' => QuestionGradingMode::Deterministic,
-        'prompt' => 'Which database does HirePilot target in production?',
-        'options' => ['A', 'B'],
-        'correct_answer' => ['A'],
-        'points' => 10,
-        'difficulty' => 'medium',
-        'skill_tags' => ['PostgreSQL'],
-        'ai_generated' => true,
-        'status' => QuestionStatus::Draft,
-        'sort_order' => 10,
-    ]);
-
-    $this->actingAs($admin)
-        ->from(route('admin.question-banks.questions.edit', [$questionBank, $question]))
-        ->post(route('admin.question-banks.questions.regenerate-mcq-options', [$questionBank, $question]))
-        ->assertSessionHasNoErrors()
-        ->assertRedirect(route('admin.question-banks.questions.edit', [$questionBank, $question]));
-
-    expect($question->refresh()->correct_answer)->toBe(['PostgreSQL']);
 });
 
 test('invalid regenerated mcq output is rejected without updating question', function () {

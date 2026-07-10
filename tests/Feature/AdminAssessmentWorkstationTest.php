@@ -3,6 +3,7 @@
 use App\AssessmentStatus;
 use App\Jobs\SendInterviewInvitationEmail;
 use App\Models\Assessment;
+use App\Models\Campaign;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -11,39 +12,16 @@ beforeEach(function () {
     $this->withoutVite();
 });
 
-test('admin can view assessment workstation list', function () {
-    $admin = User::factory()->admin()->create();
-    $candidate = User::factory()->candidate()->create([
-        'name' => 'Candidate One',
-        'email' => 'candidate-one@example.com',
-    ]);
-    $assessment = Assessment::factory()
-        ->for($candidate)
-        ->create([
-            'ai_score' => 82,
-            'status' => AssessmentStatus::PendingApproval,
-            'evaluated_at' => now(),
-        ]);
-
-    $this->actingAs($admin)
-        ->get(route('admin.assessments.index'))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('admin/assessments/index')
-            ->has('assessments', 1)
-            ->where('assessments.0.id', $assessment->id)
-            ->where('assessments.0.candidate_name', 'Candidate One')
-            ->where('assessments.0.candidate_email', 'candidate-one@example.com')
-            ->where('assessments.0.ai_score', 82)
-            ->where('assessments.0.status', AssessmentStatus::PendingApproval->value),
-        );
-});
-
 test('admin can view assessment detail', function () {
     $admin = User::factory()->admin()->create();
     $candidate = User::factory()->candidate()->create();
+    $campaign = Campaign::factory()->create([
+        'title' => 'Backend Hiring',
+        'role_title' => 'Backend Engineer',
+    ]);
     $assessment = Assessment::factory()
         ->for($candidate)
+        ->for($campaign)
         ->create([
             'answers_payload' => [
                 [
@@ -54,10 +32,31 @@ test('admin can view assessment detail', function () {
                 ],
             ],
             'ai_score' => 82,
+            'ranking_score' => 91,
             'ai_justification' => 'Strong enough for interview.',
             'ai_email_subject' => 'Interview invitation',
             'ai_email_body' => 'Please continue to interview.',
             'status' => AssessmentStatus::PendingApproval,
+            'ranking_payload' => [
+                'section_scores' => [
+                    [
+                        'section_id' => 10,
+                        'title' => 'Knowledge Check',
+                        'weight' => 100,
+                        'earned_points' => 10,
+                        'total_points' => 10,
+                        'score' => 100,
+                    ],
+                ],
+            ],
+        ]);
+
+    Assessment::factory()
+        ->for(User::factory()->candidate())
+        ->for($campaign)
+        ->create([
+            'ranking_score' => 72,
+            'status' => AssessmentStatus::Evaluated,
         ]);
 
     $this->actingAs($admin)
@@ -67,6 +66,11 @@ test('admin can view assessment detail', function () {
             ->component('admin/assessments/show')
             ->where('assessment.id', $assessment->id)
             ->where('assessment.ai_score', 82)
+            ->where('assessment.rank', 1)
+            ->where('assessment.campaign.title', 'Backend Hiring')
+            ->where('assessment.campaign.role_title', 'Backend Engineer')
+            ->where('assessment.section_scores.0.title', 'Knowledge Check')
+            ->where('assessment.section_scores.0.score', 100)
             ->where('assessment.ai_justification', 'Strong enough for interview.')
             ->where('assessment.answers_payload.0.question', 'Explain indexes.')
             ->where('assessment.answers_payload.0.rubric', 'Mentions read and write tradeoffs.')
@@ -139,7 +143,7 @@ test('admin can reject reviewable assessment', function (AssessmentStatus $statu
     AssessmentStatus::Overridden,
 ]);
 
-test('candidate cannot access assessment workstation', function (string $route, string $method) {
+test('candidate cannot access assessment review actions', function (string $route, string $method) {
     $candidate = User::factory()->candidate()->create();
     $assessment = Assessment::factory()
         ->for(User::factory()->candidate())
@@ -147,16 +151,10 @@ test('candidate cannot access assessment workstation', function (string $route, 
             'status' => AssessmentStatus::PendingApproval,
         ]);
 
-    $url = match ($route) {
-        'admin.assessments.index' => route($route),
-        default => route($route, $assessment),
-    };
-
     $this->actingAs($candidate)
-        ->call($method, $url)
+        ->call($method, route($route, $assessment))
         ->assertForbidden();
 })->with([
-    ['admin.assessments.index', 'GET'],
     ['admin.assessments.show', 'GET'],
     ['admin.assessments.approve', 'POST'],
     ['admin.assessments.reject', 'POST'],

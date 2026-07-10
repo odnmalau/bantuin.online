@@ -5,14 +5,14 @@ namespace App\Services\Ai;
 use App\Ai\Agents\AssessmentEvaluatorAgent;
 use App\Models\Assessment;
 use App\Services\Ai\Concerns\ConfiguresQwenAssessmentAgent;
-use App\Services\AssessmentSettings;
+use App\Services\AssessmentThreshold;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 
 class QwenAssessmentEvaluator
 {
     use ConfiguresQwenAssessmentAgent;
 
-    public function __construct(private AssessmentSettings $settings) {}
+    public function __construct(private AssessmentThreshold $threshold) {}
 
     /**
      * Evaluate an assessment with Qwen.
@@ -21,7 +21,7 @@ class QwenAssessmentEvaluator
     {
         $this->assertQwenApiKeyConfigured(AssessmentEvaluationException::class);
 
-        $passingScore = $this->settings->passingScoreFor($assessment);
+        $passingScore = $this->threshold->passingScoreFor($assessment);
         $maxRepairAttempts = $this->maxRepairAttempts();
         $response = $this->promptAgent($this->prompt($assessment));
 
@@ -65,7 +65,7 @@ class QwenAssessmentEvaluator
                 'job_description' => $assessment->campaign->job_description,
                 'required_skills' => $assessment->campaign->required_skills ?? [],
             ],
-            'threshold' => $this->settings->passingScoreFor($assessment),
+            'threshold' => $this->threshold->passingScoreFor($assessment),
             'answers' => collect($assessment->answers_payload)
                 ->map(fn (array $answer): array => [
                     'question_id' => $answer['question_id'] ?? null,
@@ -104,7 +104,7 @@ class QwenAssessmentEvaluator
                     'body' => 'string when score >= threshold, otherwise null',
                 ],
             ],
-            'threshold' => $this->settings->passingScoreFor($assessment),
+            'threshold' => $this->threshold->passingScoreFor($assessment),
             'original_context' => $this->promptPayload($assessment),
         ]);
     }

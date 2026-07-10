@@ -11,7 +11,7 @@ use App\Services\Ai\AssessmentEvaluationException;
 use App\Services\Ai\AssessmentEvaluationResult;
 use App\Services\Ai\QwenAssessmentEvaluator;
 use App\Services\AssessmentEvaluationPipeline;
-use App\Services\AssessmentSettings;
+use App\Services\AssessmentThreshold;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -418,7 +418,7 @@ test('evaluation job uses campaign threshold when assessment belongs to a campai
 test('evaluation job marks evaluator failure as evaluation failed', function () {
     Log::spy();
 
-    app()->instance(QwenAssessmentEvaluator::class, new class(app(AssessmentSettings::class)) extends QwenAssessmentEvaluator
+    app()->instance(QwenAssessmentEvaluator::class, new class(app(AssessmentThreshold::class)) extends QwenAssessmentEvaluator
     {
         public function evaluate(Assessment $assessment): AssessmentEvaluationResult
         {

@@ -5,38 +5,57 @@ namespace App\Http\Controllers\Admin;
 use App\AssessmentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
-use App\Services\CandidateRankingCalculator;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class RankingController extends Controller
 {
     /**
-     * Show the transparent candidate ranking dashboard.
+     * @return array<int, array{value: string, label: string}>
      */
-    public function index(CandidateRankingCalculator $rankingCalculator): Response
+    public static function dateRangeOptions(): array
     {
+        return [
+            ['value' => 'all', 'label' => 'All time'],
+            ['value' => '7d', 'label' => 'Last 7 days'],
+            ['value' => '30d', 'label' => 'Last 30 days'],
+            ['value' => 'this_month', 'label' => 'This month'],
+        ];
+    }
+
+    /**
+     * Show the candidate ranking leaderboard.
+     */
+    public function index(Request $request): Response
+    {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'status' => ['nullable', 'string', Rule::in(['all', ...array_column(AssessmentStatus::selectOptions(), 'value')])],
+            'date_range' => ['nullable', 'string', Rule::in(array_column(self::dateRangeOptions(), 'value'))],
+        ]);
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        $status = (string) ($filters['status'] ?? 'all');
+        $dateRange = (string) ($filters['date_range'] ?? 'all');
+
         $assessments = Assessment::query()
             ->with([
                 'campaign:id,title,role_title',
                 'user:id,name,email',
             ])
             ->whereNotNull('ranking_score')
+            ->when($search !== '', fn (Builder $query) => $this->applyRankingSearch($query, $search))
+            ->when($status !== 'all', fn (Builder $query) => $query->where('status', $status))
+            ->when($dateRange !== 'all', fn (Builder $query) => $this->applyDateRange($query, $dateRange))
             ->orderByDesc('ranking_score')
             ->latest()
             ->get();
 
         return Inertia::render('admin/rankings/index', [
-            'formula' => $rankingCalculator->configuredFormula(),
-            'weights' => $rankingCalculator->configuredWeights(),
-            'summary' => [
-                'total_ranked' => $assessments->count(),
-                'pending_approval' => $assessments->where('status', AssessmentStatus::PendingApproval)->count(),
-                'needs_manual_review' => $assessments->where('needs_manual_review', true)->count(),
-                'average_ranking_score' => $assessments->isEmpty()
-                    ? null
-                    : (int) round((float) $assessments->avg('ranking_score')),
-            ],
             'rankings' => $assessments
                 ->values()
                 ->map(fn (Assessment $assessment, int $index): array => [
@@ -52,12 +71,51 @@ class RankingController extends Controller
                     'mcq_score' => $assessment->mcq_score,
                     'status' => $assessment->status->value,
                     'needs_manual_review' => $assessment->needs_manual_review,
-                    'matched_skills' => data_get($assessment->resume_payload, 'matched_skills', []),
-                    'missing_skills' => data_get($assessment->resume_payload, 'missing_skills', []),
-                    'interview_probes' => data_get($assessment->resume_payload, 'interview_probes', []),
-                    'section_scores' => data_get($assessment->ranking_payload, 'section_scores', []),
-                    'evaluated_at' => $assessment->evaluated_at,
                 ]),
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'date_range' => $dateRange,
+            ],
+            'statusOptions' => AssessmentStatus::selectOptions(),
+            'dateRangeOptions' => self::dateRangeOptions(),
         ]);
+    }
+
+    private function applyRankingSearch(Builder $query, string $search): void
+    {
+        $term = '%'.mb_strtolower($search).'%';
+
+        $query->where(function (Builder $query) use ($term): void {
+            $query
+                ->whereHas('user', function (Builder $query) use ($term): void {
+                    $query
+                        ->whereRaw('LOWER(name) LIKE ?', [$term])
+                        ->orWhereRaw('LOWER(email) LIKE ?', [$term]);
+                })
+                ->orWhereHas('campaign', function (Builder $query) use ($term): void {
+                    $query
+                        ->whereRaw('LOWER(title) LIKE ?', [$term])
+                        ->orWhereRaw('LOWER(role_title) LIKE ?', [$term]);
+                });
+        });
+    }
+
+    private function applyDateRange(Builder $query, string $dateRange): void
+    {
+        $now = now();
+
+        [$from, $to] = match ($dateRange) {
+            '7d' => [$now->copy()->subDays(6)->startOfDay(), $now->copy()->endOfDay()],
+            '30d' => [$now->copy()->subDays(29)->startOfDay(), $now->copy()->endOfDay()],
+            'this_month' => [$now->copy()->startOfMonth(), $now->copy()->endOfDay()],
+            default => [null, null],
+        };
+
+        if (! $from instanceof CarbonInterface || ! $to instanceof CarbonInterface) {
+            return;
+        }
+
+        $query->whereBetween('evaluated_at', [$from, $to]);
     }
 }

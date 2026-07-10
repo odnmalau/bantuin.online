@@ -3,7 +3,6 @@
 use App\AssessmentStatus;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
-use App\Models\QuestionBank;
 use App\Models\User;
 use App\UserRole;
 use Database\Seeders\DatabaseSeeder;
@@ -18,8 +17,7 @@ test('database seeder creates demo users and campaign questions', function () {
         ->and($candidate->role)->toBe(UserRole::Candidate)
         ->and($candidate->google_id)->toBe('seed-demo-candidate')
         ->and(Campaign::query()->where('title', 'Backend Engineer Autopilot Campaign')->exists())->toBeTrue()
-        ->and(CampaignQuestion::query()->whereHas('campaign', fn ($query) => $query->where('title', 'Backend Engineer Autopilot Campaign'))->count())->toBeGreaterThanOrEqual(4)
-        ->and(QuestionBank::query()->where('title', 'Laravel Backend - Mid Level')->exists())->toBeTrue();
+        ->and(CampaignQuestion::query()->whereHas('campaign', fn ($query) => $query->where('title', 'Backend Engineer Autopilot Campaign'))->count())->toBeGreaterThanOrEqual(4);
 });
 
 test('database seeder creates useful demo assessments', function () {
@@ -55,7 +53,6 @@ test('database seeder is idempotent for demo records', function () {
             'invited@hirepilot.test',
         ])->count())->toBe(3)
         ->and(Campaign::query()->where('title', 'Backend Engineer Autopilot Campaign')->count())->toBe(1)
-        ->and(QuestionBank::query()->where('title', 'Laravel Backend - Mid Level')->count())->toBe(1)
         ->and(CampaignQuestion::query()->whereHas('campaign', fn ($query) => $query->where('title', 'Backend Engineer Autopilot Campaign'))->count())->toBeGreaterThanOrEqual(4)
         ->and(demoAssessmentCount())->toBe(3);
 });

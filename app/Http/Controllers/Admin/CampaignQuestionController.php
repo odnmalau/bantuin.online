@@ -31,7 +31,7 @@ class CampaignQuestionController extends Controller
     }
 
     /**
-     * Update a campaign question snapshot without mutating its source library question.
+     * Update a campaign question.
      */
     public function update(UpdateCampaignQuestionRequest $request, Campaign $campaign, CampaignQuestion $question): RedirectResponse
     {

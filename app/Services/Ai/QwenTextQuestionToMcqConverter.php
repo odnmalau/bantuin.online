@@ -3,10 +3,8 @@
 namespace App\Services\Ai;
 
 use App\Ai\Agents\TextQuestionToMcqConverterAgent;
-use App\Models\BankQuestion;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
-use App\Models\QuestionBank;
 use App\Services\Ai\Concerns\ConfiguresQwenAssessmentAgent;
 use App\Services\Ai\Concerns\ValidatesMcqStructuredOutput;
 use Illuminate\Support\Arr;
@@ -35,28 +33,6 @@ class QwenTextQuestionToMcqConverter
                     'language' => $campaign->language,
                     'job_description' => $campaign->job_description,
                     'required_skills' => $campaign->required_skills ?? [],
-                ],
-            ],
-        ));
-    }
-
-    public function convertBankQuestion(BankQuestion $question, QuestionBank $questionBank): TextQuestionToMcqConversionResult
-    {
-        $this->assertConvertibleTextQuestion($question);
-
-        return $this->convert($this->promptPayload(
-            prompt: $question->prompt,
-            expectedRubric: $question->expected_rubric,
-            difficulty: $question->difficulty,
-            skillTags: $question->skill_tags ?? [],
-            sourceType: $question->type->value,
-            context: [
-                'source' => 'bank_question',
-                'question_bank' => [
-                    'title' => $questionBank->title,
-                    'skill_area' => $questionBank->skill_area,
-                    'difficulty' => $questionBank->difficulty,
-                    'description' => $questionBank->description,
                 ],
             ],
         ));
@@ -125,7 +101,7 @@ class QwenTextQuestionToMcqConverter
         );
     }
 
-    private function assertConvertibleTextQuestion(CampaignQuestion|BankQuestion $question): void
+    private function assertConvertibleTextQuestion(CampaignQuestion $question): void
     {
         if (! $question->type->canConvertToMcq()) {
             throw AssessmentGenerationException::invalidOutput('only short text and long text questions can be converted to multiple choice.');

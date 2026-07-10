@@ -16,7 +16,7 @@ class AssessmentEvaluationPipeline
     public function __construct(
         private QwenAssessmentEvaluator $evaluator,
         private QwenAssessmentCritic $critic,
-        private AssessmentSettings $settings,
+        private AssessmentThreshold $threshold,
         private DeterministicAssessmentGrader $deterministicGrader,
         private CandidateRankingCalculator $rankingCalculator,
         private AssessmentEventRecorder $events,
@@ -30,7 +30,7 @@ class AssessmentEvaluationPipeline
             return null;
         }
 
-        $passingScore = $this->settings->passingScoreFor($assessment);
+        $passingScore = $this->threshold->passingScoreFor($assessment);
 
         $assessment->update([
             'status' => AssessmentStatus::Evaluating,
@@ -206,7 +206,7 @@ class AssessmentEvaluationPipeline
                 'status' => $status->value,
                 'review_score' => $reviewScore,
                 'passing_score' => $passingScore,
-                'passing_score_source' => $this->settings->passingScoreSource($assessment),
+                'passing_score_source' => $this->threshold->passingScoreSource($assessment),
                 'needs_manual_review' => $needsManualReview,
             ],
         );

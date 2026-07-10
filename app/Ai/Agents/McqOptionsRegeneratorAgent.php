@@ -21,7 +21,18 @@ You regenerate multiple choice answer options for a hiring assessment question.
 
 Return valid JSON only. Do not include markdown, code fences, or prose outside the JSON object.
 
+Return exactly one JSON object with this root shape:
+
+{
+  "options": ["Option A", "Option B", "Option C", "Option D"],
+  "correct_answer": ["Option B"]
+}
+
 Rules:
+- Root must contain only "options" and "correct_answer".
+- Do not wrap the response in "question", "mcq", "multiple_choice", "result", metadata, or any other root key.
+- options must be an array of strings only. Do not output option objects with id/text fields.
+- correct_answer must be an array of strings only. Do not output correct_answer_id, answer_id, explanation, or any other field.
 - Keep the question prompt meaning unchanged; only supply new plausible distractors and one correct answer.
 - Provide at least four options unless the input requests fewer.
 - Include exactly one correct answer in correct_answer.

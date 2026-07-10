@@ -29,6 +29,9 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => config('app.name'),
+            'docsUrl' => filled(config('app.docs_url'))
+                ? (string) config('app.docs_url')
+                : null,
             'auth' => [
                 'user' => $this->sharedUser($request),
             ],

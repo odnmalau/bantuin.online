@@ -4,11 +4,9 @@ namespace Database\Seeders;
 
 use App\CampaignInvitationStatus;
 use App\CampaignStatus;
-use App\Models\BankQuestion;
 use App\Models\Campaign;
 use App\Models\CampaignInvitation;
 use App\Models\CampaignSection;
-use App\Models\QuestionBank;
 use App\Models\User;
 use App\QuestionStatus;
 use App\QuestionType;
@@ -27,18 +25,7 @@ class DemoCampaignSeeder extends Seeder
             ->where('email', 'admin@hirepilot.test')
             ->firstOrFail();
 
-        $questionBank = QuestionBank::query()->updateOrCreate(
-            ['title' => 'Laravel Backend - Mid Level'],
-            [
-                'created_by' => $admin->id,
-                'description' => 'Reusable screening questions for backend roles using Laravel, PostgreSQL, and queue workers.',
-                'skill_area' => 'Backend Engineering',
-                'difficulty' => 'medium',
-                'is_active' => true,
-            ],
-        );
-
-        $bankQuestions = collect([
+        $questions = collect([
             [
                 'type' => QuestionType::MultipleChoice,
                 'prompt' => 'Which queue driver is configured for HirePilot?',
@@ -83,18 +70,7 @@ class DemoCampaignSeeder extends Seeder
                 'skill_tags' => ['AI Safety', 'Human Review'],
                 'sort_order' => 40,
             ],
-        ])->map(function (array $question) use ($questionBank): BankQuestion {
-            return BankQuestion::query()->updateOrCreate(
-                [
-                    'question_bank_id' => $questionBank->id,
-                    'prompt' => $question['prompt'],
-                ],
-                [
-                    ...$question,
-                    'ai_generated' => true,
-                ],
-            );
-        });
+        ]);
 
         $campaign = Campaign::query()->updateOrCreate(
             ['title' => 'Backend Engineer Autopilot Campaign'],
@@ -106,7 +82,6 @@ class DemoCampaignSeeder extends Seeder
                 'required_skills' => ['Laravel', 'PostgreSQL', 'Queues', 'Debugging'],
                 'threshold_score' => 75,
                 'status' => CampaignStatus::Active,
-                'ai_generation_notes' => 'Prefer practical scenario questions over trivia. Keep human review visible for borderline candidates.',
                 'activated_at' => now(),
             ],
         );
@@ -139,29 +114,21 @@ class DemoCampaignSeeder extends Seeder
             ],
         );
 
-        foreach ($bankQuestions as $bankQuestion) {
-            $section = $bankQuestion->type->usesDeterministicGrading()
+        foreach ($questions as $question) {
+            $section = $question['type']->usesDeterministicGrading()
                 ? $knowledgeSection
                 : $reasoningSection;
 
             $campaign->questions()->updateOrCreate(
                 [
                     'campaign_section_id' => $section->id,
-                    'prompt' => $bankQuestion->prompt,
+                    'prompt' => $question['prompt'],
                 ],
                 [
-                    'source_bank_question_id' => $bankQuestion->id,
-                    'type' => $bankQuestion->type,
-                    'options' => $bankQuestion->options,
-                    'correct_answer' => $bankQuestion->correct_answer,
-                    'expected_rubric' => $bankQuestion->expected_rubric,
-                    'points' => $bankQuestion->points,
-                    'difficulty' => $bankQuestion->difficulty,
-                    'skill_tags' => $bankQuestion->skill_tags,
+                    ...$question,
                     'ai_generated' => true,
                     'status' => QuestionStatus::Approved,
                     'is_required' => true,
-                    'sort_order' => $bankQuestion->sort_order,
                 ],
             );
         }

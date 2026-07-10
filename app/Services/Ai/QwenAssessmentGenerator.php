@@ -13,6 +13,7 @@ use App\Services\Ai\Concerns\LimitsGeneratedQuestionCount;
 use App\Services\Ai\Concerns\NormalizesGeneratedQuestions;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 
 class QwenAssessmentGenerator
 {
@@ -33,9 +34,11 @@ class QwenAssessmentGenerator
 
         $this->assertQwenApiKeyConfigured();
 
+        $prompt = $this->prompt($campaign, $options);
+
         $response = $this->promptStructuredAgent(
             new AssessmentGeneratorAgent,
-            $this->prompt($campaign, $options),
+            $prompt,
             AssessmentGenerationException::class,
         );
 
@@ -64,10 +67,9 @@ class QwenAssessmentGenerator
                 'seniority' => $campaign->seniority,
                 'job_description' => $campaign->job_description,
                 'required_skills' => $campaign->required_skills ?? [],
-                'nice_to_have_skills' => $campaign->nice_to_have_skills ?? [],
                 'language' => $campaign->language ?? 'English',
                 'threshold_score' => $campaign->threshold_score,
-                'ai_generation_notes' => $campaign->ai_generation_notes,
+                'ai_generation_notes' => $this->generationNotes(),
             ],
             'generation_options' => [
                 'question_count' => (int) ($options['question_count'] ?? 6),
@@ -160,7 +162,6 @@ class QwenAssessmentGenerator
                 $campaignSection->questions()->create([
                     ...$question,
                     'campaign_id' => $campaign->id,
-                    'source_bank_question_id' => null,
                     'ai_generated' => true,
                     'status' => QuestionStatus::Draft,
                     'is_required' => true,
@@ -205,5 +206,10 @@ class QwenAssessmentGenerator
     private function prompt(Campaign $campaign, array $options): string
     {
         return $this->encodePrompt($this->promptPayload($campaign, $options));
+    }
+
+    private function generationNotes(): string
+    {
+        return File::get(base_path('prompt/campaign-assessment-generation.txt'));
     }
 }

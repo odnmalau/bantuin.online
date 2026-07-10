@@ -3,7 +3,6 @@
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
-use App\Models\QuestionBank;
 use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
@@ -77,19 +76,23 @@ test('draft question mutation does not regenerate non draft questions', function
 });
 
 test('draft question mutation converts text questions to multiple choice', function () {
-    $questionBank = QuestionBank::factory()->create();
-    $question = $questionBank->questions()->create([
-        'type' => QuestionType::LongText,
-        'grading_mode' => QuestionGradingMode::Ai,
-        'prompt' => 'Explain queue workers.',
-        'expected_rubric' => 'Mentions retries and failed jobs.',
-        'points' => 10,
-        'difficulty' => 'medium',
-        'skill_tags' => ['Laravel'],
-        'ai_generated' => false,
-        'status' => QuestionStatus::Draft,
-        'sort_order' => 10,
-    ]);
+    $campaign = Campaign::factory()->create();
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $question = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create([
+            'type' => QuestionType::LongText,
+            'grading_mode' => QuestionGradingMode::Ai,
+            'prompt' => 'Explain queue workers.',
+            'expected_rubric' => 'Mentions retries and failed jobs.',
+            'points' => 10,
+            'difficulty' => 'medium',
+            'skill_tags' => ['Laravel'],
+            'ai_generated' => false,
+            'status' => QuestionStatus::Draft,
+            'sort_order' => 10,
+        ]);
 
     app(DraftQuestionMutation::class)->convertToMcq(
         $question,

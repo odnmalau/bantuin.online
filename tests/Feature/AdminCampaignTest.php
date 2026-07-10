@@ -30,10 +30,44 @@ test('admin can view campaigns', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/campaigns/index')
-            ->has('campaigns', 1)
-            ->where('campaigns.0.id', $campaign->id)
-            ->where('campaigns.0.title', 'Backend Engineer Screening')
-            ->where('campaigns.0.questions_count', 1),
+            ->loadDeferredProps(fn (Assert $reload) => $reload
+                ->has('campaigns', 1)
+                ->where('campaigns.0.id', $campaign->id)
+                ->where('campaigns.0.title', 'Backend Engineer Screening')
+                ->where('campaigns.0.questions_count', 1),
+            ),
+        );
+});
+
+test('admin can search and filter campaigns', function () {
+    $admin = User::factory()->admin()->create();
+    $matchingCampaign = Campaign::factory()->for($admin, 'creator')->create([
+        'title' => 'Frontend Engineer Screening',
+        'role_title' => 'Frontend Engineer',
+        'status' => CampaignStatus::Active,
+    ]);
+
+    Campaign::factory()->for($admin, 'creator')->create([
+        'title' => 'Backend Engineer Screening',
+        'role_title' => 'Backend Engineer',
+        'status' => CampaignStatus::Draft,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.campaigns.index', [
+            'search' => 'frontend',
+            'status' => CampaignStatus::Active->value,
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('admin/campaigns/index')
+            ->where('filters.search', 'frontend')
+            ->where('filters.status', CampaignStatus::Active->value)
+            ->has('statusOptions', 4)
+            ->loadDeferredProps(fn (Assert $reload) => $reload
+                ->has('campaigns', 1)
+                ->where('campaigns.0.id', $matchingCampaign->id),
+            ),
         );
 });
 
@@ -48,9 +82,8 @@ test('admin can create a campaign with a default section', function () {
             'seniority' => 'Mid-level',
             'job_description' => 'Build APIs and queue workers.',
             'required_skills' => "Laravel\nPostgreSQL\nQueues",
+            'language' => 'English',
             'threshold_score' => 80,
-            'status' => CampaignStatus::Active->value,
-            'ai_generation_notes' => 'Prioritize practical debugging.',
         ])
         ->assertSessionHasNoErrors();
 
@@ -61,8 +94,9 @@ test('admin can create a campaign with a default section', function () {
     expect($campaign)
         ->role_title->toBe('Backend Engineer')
         ->required_skills->toBe(['Laravel', 'PostgreSQL', 'Queues'])
-        ->status->toBe(CampaignStatus::Active)
-        ->activated_at->not->toBeNull()
+        ->status->toBe(CampaignStatus::Draft)
+        ->activated_at->toBeNull()
+        ->ranking_weights->toMatchArray(Campaign::defaultRankingWeights())
         ->and($campaign->sections()->count())->toBe(1);
 });
 
@@ -81,9 +115,8 @@ test('admin can update a campaign', function () {
             'seniority' => 'Senior',
             'job_description' => 'Own architecture.',
             'required_skills' => "Architecture\nLeadership",
+            'language' => 'English',
             'threshold_score' => 85,
-            'status' => CampaignStatus::Active->value,
-            'ai_generation_notes' => 'Include system design.',
         ])
         ->assertSessionHasNoErrors()
         ->assertRedirect(route('admin.campaigns.show', $campaign));
@@ -93,11 +126,11 @@ test('admin can update a campaign', function () {
         ->role_title->toBe('Senior Backend Engineer')
         ->required_skills->toBe(['Architecture', 'Leadership'])
         ->threshold_score->toBe(85)
-        ->status->toBe(CampaignStatus::Active)
-        ->activated_at->not->toBeNull();
+        ->status->toBe(CampaignStatus::Draft)
+        ->activated_at->toBeNull();
 });
 
-test('admin clears activated_at when moving a campaign from active back to draft', function () {
+test('admin can move a campaign from active back to draft', function () {
     $admin = User::factory()->admin()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'status' => CampaignStatus::Active,
@@ -105,24 +138,31 @@ test('admin clears activated_at when moving a campaign from active back to draft
     ]);
 
     $this->actingAs($admin)
-        ->from(route('admin.campaigns.edit', $campaign))
-        ->patch(route('admin.campaigns.update', $campaign), [
-            'title' => $campaign->title,
-            'role_title' => $campaign->role_title,
-            'seniority' => $campaign->seniority,
-            'job_description' => $campaign->job_description,
-            'required_skills' => implode("\n", $campaign->required_skills ?? []),
-            'nice_to_have_skills' => implode("\n", $campaign->nice_to_have_skills ?? []),
-            'language' => $campaign->language ?? 'English',
-            'threshold_score' => $campaign->threshold_score,
-            'status' => CampaignStatus::Draft->value,
-            'ai_generation_notes' => $campaign->ai_generation_notes,
-        ])
+        ->from(route('admin.campaigns.show', $campaign))
+        ->post(route('admin.campaigns.draft', $campaign))
         ->assertSessionHasNoErrors()
         ->assertRedirect(route('admin.campaigns.show', $campaign));
 
     expect($campaign->refresh())
         ->status->toBe(CampaignStatus::Draft)
+        ->activated_at->toBeNull();
+});
+
+test('admin can archive a campaign', function () {
+    $admin = User::factory()->admin()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create([
+        'status' => CampaignStatus::Active,
+        'activated_at' => now()->subDay(),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->post(route('admin.campaigns.archive', $campaign))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    expect($campaign->refresh())
+        ->status->toBe(CampaignStatus::Archived)
         ->activated_at->toBeNull();
 });
 
@@ -384,6 +424,9 @@ test('candidate cannot access campaign management', function (string $route, str
     ['admin.campaigns.edit', 'GET'],
     ['admin.campaigns.update', 'PATCH'],
     ['admin.campaigns.publish', 'POST'],
+    ['admin.campaigns.archive', 'POST'],
+    ['admin.campaigns.draft', 'POST'],
+    ['admin.campaigns.ranking.update', 'PATCH'],
     ['admin.campaigns.questions.approve-all', 'POST'],
     ['admin.campaigns.destroy', 'DELETE'],
 ]);
@@ -430,15 +473,11 @@ test('candidate cannot update campaign questions', function () {
 
 test('campaign rejects ranking weights that do not total 100', function () {
     $admin = User::factory()->admin()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
     $this->actingAs($admin)
-        ->from(route('admin.campaigns.create'))
-        ->post(route('admin.campaigns.store'), [
-            'title' => 'Invalid Weights Campaign',
-            'role_title' => 'Backend Engineer',
-            'threshold_score' => 75,
-            'status' => CampaignStatus::Draft->value,
-            'language' => 'English',
+        ->from(route('admin.campaigns.show', $campaign))
+        ->patch(route('admin.campaigns.ranking.update', $campaign), [
             'ranking_weights' => [
                 'resume_score' => 50,
                 'essay_score' => 40,
@@ -447,10 +486,14 @@ test('campaign rejects ranking weights that do not total 100', function () {
         ])
         ->assertSessionHasErrors('ranking_weights');
 
-    expect(Campaign::query()->where('title', 'Invalid Weights Campaign')->exists())->toBeFalse();
+    expect($campaign->refresh()->ranking_weights)->not->toMatchArray([
+        'resume_score' => 50,
+        'essay_score' => 40,
+        'mcq_score' => 5,
+    ]);
 });
 
-test('campaign stores custom ranking weights language and nice to have skills', function () {
+test('campaign stores language and required skills from the main form', function () {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
@@ -459,15 +502,8 @@ test('campaign stores custom ranking weights language and nice to have skills', 
             'title' => 'Weighted Campaign',
             'role_title' => 'Backend Engineer',
             'threshold_score' => 75,
-            'status' => CampaignStatus::Draft->value,
             'language' => 'Indonesian',
             'required_skills' => "Laravel\nQueues",
-            'nice_to_have_skills' => "Redis\nDocker",
-            'ranking_weights' => [
-                'resume_score' => 40,
-                'essay_score' => 40,
-                'mcq_score' => 20,
-            ],
         ])
         ->assertSessionHasNoErrors();
 
@@ -476,7 +512,26 @@ test('campaign stores custom ranking weights language and nice to have skills', 
     expect($campaign)
         ->language->toBe('Indonesian')
         ->required_skills->toBe(['Laravel', 'Queues'])
-        ->nice_to_have_skills->toBe(['Redis', 'Docker'])
+        ->ranking_weights->toMatchArray(Campaign::defaultRankingWeights());
+});
+
+test('admin can update campaign ranking weights from the detail page', function () {
+    $admin = User::factory()->admin()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->patch(route('admin.campaigns.ranking.update', $campaign), [
+            'ranking_weights' => [
+                'resume_score' => 40,
+                'essay_score' => 40,
+                'mcq_score' => 20,
+            ],
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    expect($campaign->refresh())
         ->ranking_weights->toMatchArray([
             'resume_score' => 40,
             'essay_score' => 40,
@@ -495,6 +550,16 @@ test('admin can delete a campaign without submitted assessments', function () {
         ->assertRedirect(route('admin.campaigns.index'));
 
     expect(Campaign::query()->whereKey($campaign->id)->exists())->toBeFalse();
+});
+
+test('campaign index requires confirmation before deleting a campaign', function () {
+    $source = file_get_contents(resource_path('js/pages/admin/campaigns/index.tsx'));
+
+    expect($source)
+        ->toContain('DialogTitle')
+        ->toContain('Delete campaign?')
+        ->toContain('Campaigns with submitted assessments cannot be deleted.')
+        ->toContain('CampaignController.destroy.form.delete');
 });
 
 test('admin cannot delete a campaign that already has assessments', function () {

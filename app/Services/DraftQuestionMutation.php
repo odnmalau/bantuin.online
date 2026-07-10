@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\BankQuestion;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\QuestionGradingMode;
@@ -17,7 +16,7 @@ class DraftQuestionMutation
     /**
      * @param  callable(): McqOptionsRegenerationResult  $regenerate
      */
-    public function regenerateMcqOptions(CampaignQuestion|BankQuestion $question, callable $regenerate): void
+    public function regenerateMcqOptions(CampaignQuestion $question, callable $regenerate): void
     {
         $this->ensureDraftMcqRegeneration($question);
 
@@ -32,7 +31,7 @@ class DraftQuestionMutation
     /**
      * @param  callable(): TextQuestionToMcqConversionResult  $convert
      */
-    public function convertToMcq(CampaignQuestion|BankQuestion $question, callable $convert): void
+    public function convertToMcq(CampaignQuestion $question, callable $convert): void
     {
         $this->ensureDraftMcqConversion($question);
 
@@ -61,7 +60,7 @@ class DraftQuestionMutation
             ]);
     }
 
-    private function ensureDraftMcqRegeneration(CampaignQuestion|BankQuestion $question): void
+    private function ensureDraftMcqRegeneration(CampaignQuestion $question): void
     {
         if ($question->type !== QuestionType::MultipleChoice) {
             throw ValidationException::withMessages([
@@ -76,7 +75,7 @@ class DraftQuestionMutation
         );
     }
 
-    private function ensureDraftMcqConversion(CampaignQuestion|BankQuestion $question): void
+    private function ensureDraftMcqConversion(CampaignQuestion $question): void
     {
         if (! $question->type->canConvertToMcq()) {
             throw ValidationException::withMessages([

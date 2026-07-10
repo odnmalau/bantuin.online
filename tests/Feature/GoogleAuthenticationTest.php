@@ -62,7 +62,7 @@ test('google callback links an existing admin without changing role', function (
     );
 
     $this->get(route('auth.google.callback'))
-        ->assertRedirect(route('admin.assessments.index', absolute: false));
+        ->assertRedirect(route('admin.rankings.index', absolute: false));
 
     $admin->refresh();
 

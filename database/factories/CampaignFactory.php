@@ -28,7 +28,6 @@ class CampaignFactory extends Factory
             'required_skills' => ['Laravel', 'PostgreSQL', 'Queues'],
             'threshold_score' => 75,
             'status' => CampaignStatus::Draft,
-            'ai_generation_notes' => null,
             'activated_at' => null,
         ];
     }

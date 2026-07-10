@@ -37,4 +37,37 @@ enum AssessmentStatus: string
             default => false,
         };
     }
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Submitted => 'Submitted',
+            self::Evaluating => 'Evaluating',
+            self::ResumeProcessing => 'Resume processing',
+            self::ResumeScreening => 'Resume screening',
+            self::PendingApproval => 'Pending approval',
+            self::Evaluated => 'Evaluated',
+            self::NeedsManualReview => 'Needs review',
+            self::Overridden => 'Overridden',
+            self::Rejected => 'Rejected',
+            self::Approved => 'Approved',
+            self::EmailSent => 'Email sent',
+            self::EmailFailed => 'Email failed',
+            self::EvaluationFailed => 'Evaluation failed',
+        };
+    }
+
+    /**
+     * @return array<int, array{value: string, label: string}>
+     */
+    public static function selectOptions(): array
+    {
+        return array_map(
+            fn (self $status): array => [
+                'value' => $status->value,
+                'label' => $status->label(),
+            ],
+            self::cases(),
+        );
+    }
 }
