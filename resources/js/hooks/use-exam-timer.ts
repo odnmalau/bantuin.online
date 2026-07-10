@@ -6,16 +6,14 @@ export function useExamTimer(expiresAt: string | null): {
     isExpired: boolean;
     isPending: boolean;
 } {
-    const [now, setNow] = useState<number | null>(null);
+    const [now, setNow] = useState<number | null>(() =>
+        expiresAt === null ? null : Date.now(),
+    );
 
     useEffect(() => {
         if (expiresAt === null) {
-            setNow(null);
-
             return;
         }
-
-        setNow(Date.now());
 
         const interval = window.setInterval(() => {
             setNow(Date.now());
