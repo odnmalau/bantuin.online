@@ -27,11 +27,14 @@ class AuthenticateGoogleUser
             $user = User::query()->where('email', $email)->first();
         }
 
+        $avatar = $googleUser->getAvatar();
+
         if ($user !== null) {
             $user->forceFill([
                 'google_id' => $googleId,
                 'name' => $googleUser->getName() ?? $user->name,
                 'email' => $email,
+                'avatar' => filled($avatar) ? $avatar : $user->avatar,
             ])->save();
 
             return $user;
@@ -41,6 +44,7 @@ class AuthenticateGoogleUser
             'name' => $googleUser->getName() ?? Str::before($email, '@'),
             'email' => $email,
             'google_id' => $googleId,
+            'avatar' => filled($avatar) ? $avatar : null,
             'role' => UserRole::Candidate,
         ]);
     }

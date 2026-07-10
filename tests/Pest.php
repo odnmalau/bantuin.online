@@ -178,12 +178,13 @@ function fakeGoogleRedirect(string $redirectUrl = 'https://accounts.google.com/o
         ->andReturn($provider);
 }
 
-function fakeGoogleUserAuthentication(string $id, string $email, string $name): void
+function fakeGoogleUserAuthentication(string $id, string $email, string $name, ?string $avatar = null): void
 {
     $googleUser = Mockery::mock(SocialiteUser::class);
     $googleUser->shouldReceive('getId')->andReturn($id);
     $googleUser->shouldReceive('getEmail')->andReturn($email);
     $googleUser->shouldReceive('getName')->andReturn($name);
+    $googleUser->shouldReceive('getAvatar')->andReturn($avatar);
 
     $provider = Mockery::mock(SocialiteProvider::class);
     $provider->shouldReceive('user')->once()->andReturn($googleUser);

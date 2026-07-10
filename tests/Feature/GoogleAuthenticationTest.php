@@ -32,6 +32,7 @@ test('google callback logs in a new candidate', function () {
         id: 'google-user-123',
         email: 'candidate@example.com',
         name: 'Candidate User',
+        avatar: 'https://lh3.googleusercontent.com/a/candidate-avatar',
     );
 
     $response = $this->get(route('auth.google.callback'));
@@ -42,6 +43,7 @@ test('google callback logs in a new candidate', function () {
 
     expect($user)->not->toBeNull()
         ->and($user->google_id)->toBe('google-user-123')
+        ->and($user->avatar)->toBe('https://lh3.googleusercontent.com/a/candidate-avatar')
         ->and($user->role)->toBe(UserRole::Candidate);
 
     $response->assertRedirect(route('candidate.exam', absolute: false));
@@ -70,18 +72,20 @@ test('google callback links an existing admin without changing role', function (
         ->and($admin->role)->toBe(UserRole::Admin);
 });
 
-test('google callback syncs email from google for returning users', function () {
+test('google callback syncs email and avatar from google for returning users', function () {
     fakeGoogleAuthConfig();
 
     $user = User::factory()->candidate()->create([
         'email' => 'old@example.com',
         'google_id' => 'google-sync-email',
+        'avatar' => 'https://lh3.googleusercontent.com/a/old-avatar',
     ]);
 
     fakeGoogleUserAuthentication(
         id: 'google-sync-email',
         email: 'new@example.com',
         name: 'Updated Name',
+        avatar: 'https://lh3.googleusercontent.com/a/new-avatar',
     );
 
     $this->get(route('auth.google.callback'));
@@ -89,7 +93,31 @@ test('google callback syncs email from google for returning users', function () 
     $user->refresh();
 
     expect($user->email)->toBe('new@example.com')
-        ->and($user->name)->toBe('Updated Name');
+        ->and($user->name)->toBe('Updated Name')
+        ->and($user->avatar)->toBe('https://lh3.googleusercontent.com/a/new-avatar');
+});
+
+test('google callback keeps existing avatar when google omits one', function () {
+    fakeGoogleAuthConfig();
+
+    $user = User::factory()->candidate()->create([
+        'email' => 'avatar@example.com',
+        'google_id' => 'google-keep-avatar',
+        'avatar' => 'https://lh3.googleusercontent.com/a/existing-avatar',
+    ]);
+
+    fakeGoogleUserAuthentication(
+        id: 'google-keep-avatar',
+        email: 'avatar@example.com',
+        name: 'Avatar User',
+        avatar: null,
+    );
+
+    $this->get(route('auth.google.callback'));
+
+    $user->refresh();
+
+    expect($user->avatar)->toBe('https://lh3.googleusercontent.com/a/existing-avatar');
 });
 
 test('google callback redirects to login when the user cancels', function () {

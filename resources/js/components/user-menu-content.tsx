@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { BookOpen, LogOut, Settings } from 'lucide-react';
+import { BookOpen, Github, LogOut, Settings } from 'lucide-react';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -11,6 +11,8 @@ import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import type { SharedData, User } from '@/types';
+
+const repositoryUrl = 'https://github.com/odnmalau/bantuin.online';
 
 type Props = {
     user: User;
@@ -59,6 +61,18 @@ export function UserMenuContent({ user }: Props) {
                         </a>
                     </DropdownMenuItem>
                 ) : null}
+                <DropdownMenuItem asChild>
+                    <a
+                        className="block w-full cursor-pointer"
+                        href={repositoryUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={cleanup}
+                    >
+                        <Github />
+                        Repository
+                    </a>
+                </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>

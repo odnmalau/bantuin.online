@@ -23,6 +23,7 @@ class UserFactory extends Factory
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'google_id' => 'factory-'.Str::uuid()->toString(),
+            'avatar' => null,
             'role' => UserRole::Candidate,
             'remember_token' => Str::random(10),
         ];

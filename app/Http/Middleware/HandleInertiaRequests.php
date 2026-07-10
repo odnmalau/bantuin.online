@@ -43,7 +43,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array{id: int, name: string, email: string, role: string}|null
+     * @return array{id: int, name: string, email: string, avatar: ?string, role: string}|null
      */
     private function sharedUser(Request $request): ?array
     {
@@ -54,7 +54,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         return [
-            ...$user->only(['id', 'name', 'email']),
+            ...$user->only(['id', 'name', 'email', 'avatar']),
             'role' => $user->role->value,
         ];
     }
