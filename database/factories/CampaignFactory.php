@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\CampaignStatus;
 use App\Models\Campaign;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -20,6 +21,7 @@ class CampaignFactory extends Factory
     public function definition(): array
     {
         return [
+            'team_id' => Team::factory(),
             'created_by' => User::factory()->admin(),
             'title' => fake()->jobTitle().' Hiring Campaign',
             'role_title' => fake()->jobTitle(),

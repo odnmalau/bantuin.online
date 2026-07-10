@@ -34,6 +34,8 @@ class HandleInertiaRequests extends Middleware
                 : null,
             'auth' => [
                 'user' => $this->sharedUser($request),
+                'currentTeam' => $this->sharedCurrentTeam($request),
+                'platformOperator' => $request->user()?->isPlatformOperator() ?? false,
             ],
             'sidebarOpen' => $this->sidebarOpen($request),
             'authFeatures' => [
@@ -56,6 +58,39 @@ class HandleInertiaRequests extends Middleware
         return [
             ...$user->only(['id', 'name', 'email', 'avatar']),
             'role' => $user->role->value,
+        ];
+    }
+
+    /**
+     * @return array{id: int, name: string, status: string, role: string}|null
+     */
+    private function sharedCurrentTeam(Request $request): ?array
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User || $user->current_team_id === null) {
+            return null;
+        }
+
+        $team = $user->currentTeam()->first();
+
+        if ($team === null) {
+            return null;
+        }
+
+        $membership = $user->activeTeamMemberships()
+            ->where('team_id', $team->id)
+            ->first();
+
+        if ($membership === null) {
+            return null;
+        }
+
+        return [
+            'id' => $team->id,
+            'name' => $team->name,
+            'status' => $team->status->value,
+            'role' => $membership->role->value,
         ];
     }
 

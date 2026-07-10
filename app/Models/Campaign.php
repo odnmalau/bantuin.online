@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'created_by',
+    'team_id',
     'title',
     'role_title',
     'seniority',
@@ -28,6 +29,21 @@ class Campaign extends Model
 {
     /** @use HasFactory<CampaignFactory> */
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::updating(function (Campaign $campaign): void {
+            if ($campaign->isDirty('team_id')) {
+                throw new \LogicException('Campaign Team ownership is immutable.');
+            }
+        });
+    }
+
+    /** @return BelongsTo<Team, $this> */
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(Team::class);
+    }
 
     /**
      * Get the admin that created the campaign.

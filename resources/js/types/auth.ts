@@ -6,8 +6,17 @@ export type User = {
     avatar?: string;
 };
 
+export type CurrentTeam = {
+    id: number;
+    name: string;
+    status: 'active' | 'deactivated';
+    role: 'owner' | 'administrator' | 'collaborator';
+};
+
 export type Auth = {
     user: User | null;
+    currentTeam: CurrentTeam | null;
+    platformOperator: boolean;
 };
 
 export type AuthFeatures = {

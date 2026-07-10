@@ -72,7 +72,8 @@ test('admin can search and filter campaigns', function () {
 });
 
 test('admin can create a campaign with a default section', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->admin()->teamOwner()->create();
+    $currentTeam = $admin->currentTeam;
 
     $response = $this->actingAs($admin)
         ->from(route('admin.campaigns.create'))
@@ -92,12 +93,50 @@ test('admin can create a campaign with a default section', function () {
     $response->assertRedirect(route('admin.campaigns.show', $campaign));
 
     expect($campaign)
+        ->team_id->toBe($currentTeam->id)
+        ->created_by->toBe($admin->id)
         ->role_title->toBe('Backend Engineer')
         ->required_skills->toBe(['Laravel', 'PostgreSQL', 'Queues'])
         ->status->toBe(CampaignStatus::Draft)
         ->activated_at->toBeNull()
         ->ranking_weights->toMatchArray(Campaign::defaultRankingWeights())
         ->and($campaign->sections()->count())->toBe(1);
+});
+
+test('admin cannot create a campaign for a deactivated current team', function () {
+    $admin = User::factory()->admin()->teamOwner()->create();
+    $admin->currentTeam->update([
+        'status' => 'deactivated',
+        'deactivated_at' => now(),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.create'))
+        ->post(route('admin.campaigns.store'), [
+            'title' => 'Blocked Campaign',
+            'role_title' => 'Backend Engineer',
+            'threshold_score' => 75,
+        ])
+        ->assertSessionHasErrors('campaign')
+        ->assertRedirect(route('admin.campaigns.create'));
+
+    expect(Campaign::query()->where('title', 'Blocked Campaign')->exists())->toBeFalse();
+});
+
+test('legacy admin without a current team cannot create a campaign', function () {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.create'))
+        ->post(route('admin.campaigns.store'), [
+            'title' => 'Unowned Campaign',
+            'role_title' => 'Backend Engineer',
+            'threshold_score' => 75,
+        ])
+        ->assertSessionHasErrors('campaign')
+        ->assertRedirect(route('admin.campaigns.create'));
+
+    expect(Campaign::query()->where('title', 'Unowned Campaign')->exists())->toBeFalse();
 });
 
 test('admin can update a campaign', function () {
@@ -494,7 +533,7 @@ test('campaign rejects ranking weights that do not total 100', function () {
 });
 
 test('campaign stores language and required skills from the main form', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->admin()->teamOwner()->create();
 
     $this->actingAs($admin)
         ->from(route('admin.campaigns.create'))

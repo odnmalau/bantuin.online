@@ -9,10 +9,13 @@ use App\Http\Requests\Admin\UpdateCampaignRequest;
 use App\Models\Campaign;
 use App\Models\CampaignInvitation;
 use App\Models\CampaignSection;
+use App\Models\Team;
+use App\Models\User;
 use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use App\Services\CampaignInvitationService;
+use App\TeamStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -85,11 +88,36 @@ class CampaignController extends Controller
     public function store(StoreCampaignRequest $request): RedirectResponse
     {
         $campaign = DB::transaction(function () use ($request): Campaign {
+            $user = User::query()->whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            $currentTeamId = $user->current_team_id;
+            $team = $currentTeamId === null
+                ? null
+                : Team::query()->whereKey($currentTeamId)->lockForUpdate()->first();
+            $membership = $team === null
+                ? null
+                : $user->activeTeamMemberships()
+                    ->where('team_id', $team->id)
+                    ->lockForUpdate()
+                    ->first();
+
+            if ($team === null || $membership === null) {
+                throw ValidationException::withMessages([
+                    'campaign' => __('Select a Current Team before creating a Campaign.'),
+                ]);
+            }
+
+            if ($team->status !== TeamStatus::Active) {
+                throw ValidationException::withMessages([
+                    'campaign' => __('The Current Team is deactivated and cannot create Campaigns.'),
+                ]);
+            }
+
             $validated = $request->validated();
 
             $campaign = Campaign::query()->create([
                 ...$validated,
-                'created_by' => $request->user()->id,
+                'team_id' => $team->id,
+                'created_by' => $user->id,
                 'ranking_weights' => Campaign::defaultRankingWeights(),
                 'status' => CampaignStatus::Draft,
                 'activated_at' => null,

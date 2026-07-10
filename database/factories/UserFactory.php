@@ -2,6 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Models\PlatformOperatorAuthority;
+use App\Models\Team;
+use App\Models\TeamMembership;
 use App\Models\User;
 use App\UserRole;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -47,6 +50,43 @@ class UserFactory extends Factory
         return $this->state(fn () => [
             'role' => UserRole::Candidate,
         ]);
+    }
+
+    public function teamOwner(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            $team = Team::factory()->ownedBy($user)->create();
+
+            $user->selectCurrentTeam($team);
+        });
+    }
+
+    public function teamAdministrator(Team $team): static
+    {
+        return $this->afterCreating(function (User $user) use ($team): void {
+            TeamMembership::factory()->for($team)->for($user)->administrator()->create();
+        });
+    }
+
+    public function teamCollaborator(Team $team): static
+    {
+        return $this->afterCreating(function (User $user) use ($team): void {
+            TeamMembership::factory()->for($team)->for($user)->collaborator()->create();
+        });
+    }
+
+    public function withCurrentTeam(Team $team): static
+    {
+        return $this->afterCreating(function (User $user) use ($team): void {
+            $user->selectCurrentTeam($team);
+        });
+    }
+
+    public function platformOperator(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            PlatformOperatorAuthority::factory()->for($user)->create();
+        });
     }
 
     /**
