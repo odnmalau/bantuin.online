@@ -46,10 +46,11 @@ class RecentCampaigns
                     ->where('needs_manual_review', true),
             ])
             ->where('status', '!=', CampaignStatus::Archived)
-            ->orderByRaw($this->attentionOrderSql())
             ->orderByDesc('updated_at')
-            ->limit($limit)
             ->get()
+            ->sort(fn (Campaign $left, Campaign $right): int => $this->compareAttention($left, $right))
+            ->take($limit)
+            ->values()
             ->map(fn (Campaign $campaign): array => [
                 'id' => $campaign->id,
                 'title' => $campaign->title,
@@ -65,22 +66,32 @@ class RecentCampaigns
             ->all();
     }
 
-    private function attentionOrderSql(): string
+    private function compareAttention(Campaign $left, Campaign $right): int
     {
-        $active = CampaignStatus::Active->value;
-        $questionReview = CampaignStatus::QuestionReview->value;
-        $draft = CampaignStatus::Draft->value;
+        $priority = $this->attentionPriority($left) <=> $this->attentionPriority($right);
 
-        return <<<SQL
-            case
-                when status = '{$active}'
-                    and (pending_approval_count > 0 or needs_manual_review_count > 0)
-                    then 0
-                when status = '{$questionReview}' then 1
-                when status = '{$draft}' then 2
-                when status = '{$active}' then 3
-                else 4
-            end
-            SQL;
+        if ($priority !== 0) {
+            return $priority;
+        }
+
+        return ($right->updated_at?->getTimestamp() ?? 0)
+            <=> ($left->updated_at?->getTimestamp() ?? 0);
+    }
+
+    private function attentionPriority(Campaign $campaign): int
+    {
+        $needsReview = (int) $campaign->pending_approval_count > 0
+            || (int) $campaign->needs_manual_review_count > 0;
+
+        if ($campaign->status === CampaignStatus::Active && $needsReview) {
+            return 0;
+        }
+
+        return match ($campaign->status) {
+            CampaignStatus::QuestionReview => 1,
+            CampaignStatus::Draft => 2,
+            CampaignStatus::Active => 3,
+            default => 4,
+        };
     }
 }
