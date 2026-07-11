@@ -181,6 +181,8 @@ test('candidate can finalize a secure exam session into an assessment', function
         ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]), [
             'resume' => resumePdfUpload(),
         ]);
+    $response->assertSessionHasNoErrors();
+    $response->assertRedirect();
 
     $assessment = Assessment::query()->whereBelongsTo($candidate)->sole();
 

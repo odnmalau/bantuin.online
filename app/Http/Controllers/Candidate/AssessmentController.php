@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Candidate;
 
+use App\CampaignStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
 use App\Models\Campaign;
 use App\QuestionStatus;
 use App\Services\CampaignInvitationService;
 use App\Services\CandidateExamPage;
+use App\TeamStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -49,9 +51,12 @@ class AssessmentController extends Controller
      */
     public function show(Request $request, Assessment $assessment): Response
     {
-        abort_unless($assessment->user_id === $request->user()->id, 403);
-
-        $assessment->loadMissing('campaign:id,title,role_title');
+        $assessment = Assessment::query()
+            ->whereKey($assessment->id)
+            ->whereBelongsTo($request->user())
+            ->whereHas('campaign.invitations', fn ($query) => $query->acceptedForUser($request->user()))
+            ->with('campaign:id,team_id,title,role_title', 'campaign.team:id,name')
+            ->firstOrFail();
 
         return Inertia::render('candidate/assessments/show', [
             'assessment' => [
@@ -80,17 +85,14 @@ class AssessmentController extends Controller
 
     private function accessibleCampaignForExam(Request $request, Campaign $campaign): Campaign
     {
-        abort_unless($this->invitations->userCanAccessCampaignExam($request->user(), $campaign), 403);
-
-        return $this->campaignForExam($campaign);
-    }
-
-    private function campaignForExam(Campaign $campaign): Campaign
-    {
         return Campaign::query()
             ->whereKey($campaign->id)
+            ->where('status', CampaignStatus::Active->value)
+            ->whereHas('team', fn ($query) => $query->where('status', TeamStatus::Active->value))
+            ->whereHas('invitations', fn ($query) => $query->acceptedForUser($request->user()))
             ->whereHas('questions', fn ($query) => $query->where('status', QuestionStatus::Approved->value))
             ->with([
+                'team:id,name',
                 'sections' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
                 'sections.questions' => fn ($query) => $query
                     ->where('status', QuestionStatus::Approved->value)
@@ -113,7 +115,7 @@ class AssessmentController extends Controller
     }
 
     /**
-     * @return array{title: string, role_title: string}|null
+     * @return array{title: string, role_title: string, team: array{name: string}}|null
      */
     private function campaignSummaryForAssessment(Assessment $assessment): ?array
     {
@@ -124,6 +126,9 @@ class AssessmentController extends Controller
         return [
             'title' => $assessment->campaign->title,
             'role_title' => $assessment->campaign->role_title,
+            'team' => [
+                'name' => $assessment->campaign->team->name,
+            ],
         ];
     }
 }

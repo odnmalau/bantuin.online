@@ -24,7 +24,6 @@ test('authenticated users can visit the dashboard', function () {
                 'name' => $user->name,
                 'email' => $user->email,
                 'avatar' => $user->avatar,
-                'role' => $user->role->value,
             ]),
         );
 });

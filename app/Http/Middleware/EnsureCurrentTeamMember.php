@@ -51,10 +51,10 @@ class EnsureCurrentTeamMember
         if ($campaign instanceof Campaign) {
             $ability = $request->isMethodSafe() ? 'view' : ($request->isMethod('delete') ? 'delete' : 'update');
             Gate::authorize($ability, $campaign);
+        } elseif ($assessment instanceof Assessment) {
+            Gate::authorize($request->isMethodSafe() ? 'view' : 'update', $assessment);
         } elseif ($assessment === null) {
             Gate::authorize($request->isMethodSafe() ? 'viewAny' : 'create', Campaign::class);
-        } elseif (! $request->isMethodSafe()) {
-            Gate::authorize('create', Campaign::class);
         }
 
         return $next($request);

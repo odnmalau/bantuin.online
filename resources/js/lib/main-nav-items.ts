@@ -53,14 +53,17 @@ export function resolveMainNavItems(
     auth: Auth,
     surface: NavigationSurface,
 ): NavItem[] {
-    if (auth.capabilities.viewCampaigns) {
-        return surface === 'header'
+    const teamItems = auth.capabilities.viewCampaigns
+        ? surface === 'header'
             ? adminHeaderNavItems
-            : adminSidebarNavItems;
-    }
+            : adminSidebarNavItems
+        : [];
+    const candidateItems = auth.capabilities.candidateWork
+        ? candidateNavItems
+        : [];
 
-    if (auth.capabilities.candidateWork) {
-        return candidateNavItems;
+    if (teamItems.length > 0 || candidateItems.length > 0) {
+        return [...teamItems, ...candidateItems];
     }
 
     return defaultNavItems;

@@ -64,6 +64,9 @@ type Campaign = {
     id: number;
     title: string;
     role_title: string;
+    team: {
+        name: string;
+    };
     seniority: string | null;
     threshold_score: number;
 };
@@ -122,7 +125,8 @@ export default function CandidateExam(props: Props) {
             <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
                 {props.campaign ? (
                     <p className="text-sm text-muted-foreground">
-                        {props.campaign.title} - {props.campaign.role_title}
+                        {props.campaign.team.name} / {props.campaign.title} -{' '}
+                        {props.campaign.role_title}
                         {props.campaign.seniority
                             ? `, ${props.campaign.seniority}`
                             : ''}

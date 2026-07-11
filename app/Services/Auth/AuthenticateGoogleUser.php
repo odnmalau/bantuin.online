@@ -21,10 +21,12 @@ class AuthenticateGoogleUser
             throw new GoogleAuthenticationException(__('Google did not return an email address for this account.'));
         }
 
+        $email = mb_strtolower(trim($email));
+
         $user = User::query()->where('google_id', $googleId)->first();
 
         if ($user === null) {
-            $user = User::query()->where('email', $email)->first();
+            $user = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
         }
 
         $avatar = $googleUser->getAvatar();

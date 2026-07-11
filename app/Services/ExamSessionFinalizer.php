@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\AssessmentStatus;
+use App\CampaignInvitationStatus;
+use App\CampaignStatus;
 use App\ExamSessionStatus;
 use App\Jobs\EvaluateAssessmentWithAi;
 use App\Jobs\ScreenResumeWithAi;
@@ -11,11 +13,14 @@ use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
 use App\Models\ExamSession;
+use App\Models\Team;
 use App\Models\User;
 use App\QuestionStatus;
+use App\TeamStatus;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ExamSessionFinalizer
@@ -32,6 +37,51 @@ class ExamSessionFinalizer
         ?string $submissionReason = null,
         ExamSessionStatus $status = ExamSessionStatus::Finalized,
         bool $allowIncompleteAnswers = false,
+    ): Assessment {
+        [$assessment, $shouldQueueProcessing] = DB::transaction(function () use ($session, $campaign, $resume, $submissionReason, $status, $allowIncompleteAnswers): array {
+            $lockedSession = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+            Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedSession->campaign_id !== $lockedCampaign->id
+                || $lockedCampaign->status !== CampaignStatus::Active
+                || $lockedCampaign->team->status !== TeamStatus::Active
+                || $lockedCampaign->invitations()
+                    ->where('user_id', $lockedSession->user_id)
+                    ->where('status', CampaignInvitationStatus::Accepted)
+                    ->doesntExist()) {
+                throw ValidationException::withMessages([
+                    'session' => __('This exam session is no longer available.'),
+                ]);
+            }
+
+            $shouldQueueProcessing = $lockedSession->isActive();
+            $assessment = $this->finalizeLocked(
+                $lockedSession,
+                $lockedCampaign,
+                $resume,
+                $submissionReason,
+                $status,
+                $allowIncompleteAnswers,
+            );
+
+            return [$assessment, $shouldQueueProcessing];
+        }, attempts: 3);
+
+        if ($shouldQueueProcessing) {
+            $this->queueAssessmentProcessing($assessment);
+        }
+
+        return $assessment;
+    }
+
+    private function finalizeLocked(
+        ExamSession $session,
+        Campaign $campaign,
+        ?UploadedFile $resume,
+        ?string $submissionReason,
+        ExamSessionStatus $status,
+        bool $allowIncompleteAnswers,
     ): Assessment {
         if (! $session->isActive()) {
             if ($session->assessment_id !== null) {
@@ -94,7 +144,6 @@ class ExamSessionFinalizer
         ]);
 
         $this->recordSubmissionEvents($assessment, $campaign, $session->fresh(), $questions, $submissionReason);
-        $this->queueAssessmentProcessing($assessment);
 
         return $assessment;
     }

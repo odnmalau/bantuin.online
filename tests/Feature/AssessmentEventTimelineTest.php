@@ -191,6 +191,7 @@ test('assessment event timeline stays internal and is not exposed on review page
 
     expect($assessment->refresh()->events()->pluck('type')->all())
         ->toContain('internal_audit_event');
+    assignCandidateToCampaignExam($candidate, $assessment->campaign);
 
     $this->actingAs($admin)
         ->get(route('admin.assessments.show', $assessment))

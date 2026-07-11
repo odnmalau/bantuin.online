@@ -83,6 +83,27 @@ test('resume screening job stores extracted text and qwen result', function () {
         && str_contains($prompt->prompt, 'protected_attributes'));
 });
 
+test('resume screening job does not mutate an assessment after team deactivation', function () {
+    Storage::fake('local');
+    Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Laravel experience'));
+    $campaign = Campaign::factory()->create();
+    $assessment = Assessment::factory()->for($campaign)->create([
+        'resume_path' => 'resumes/resume.pdf',
+        'status' => AssessmentStatus::Submitted,
+    ]);
+    $job = new ScreenResumeWithAi($assessment);
+    $assessment->campaign->team->update([
+        'status' => 'deactivated',
+        'deactivated_at' => now(),
+    ]);
+
+    app()->call([$job, 'handle']);
+
+    expect($assessment->fresh())
+        ->status->toBe(AssessmentStatus::Submitted)
+        ->resume_text->toBeNull();
+});
+
 test('resume screening job marks low confidence for manual review', function () {
     Storage::fake('local');
     Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Sparse resume text only'));
@@ -218,8 +239,10 @@ test('candidate assessment response does not expose resume path or qwen key', fu
     config()->set('ai.providers.qwen.key', 'secret-qwen-token');
 
     $candidate = User::factory()->candidate()->create();
+    $campaign = Campaign::factory()->create();
     $assessment = Assessment::factory()
         ->for($candidate)
+        ->for($campaign)
         ->create([
             'resume_path' => 'resumes/private-resume.pdf',
             'resume_original_name' => 'resume.pdf',
@@ -227,6 +250,7 @@ test('candidate assessment response does not expose resume path or qwen key', fu
             'resume_score' => 84,
             'status' => AssessmentStatus::Submitted,
         ]);
+    assignCandidateToCampaignExam($candidate, $assessment->campaign);
 
     $this->actingAs($candidate)
         ->get(route('candidate.assessments.show', $assessment))

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Campaign;
+use App\Models\CampaignInvitation;
 use App\Models\Team;
 use App\Models\User;
 use App\TeamStatus;
@@ -51,7 +52,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array{id: int, name: string, email: string, avatar: ?string, role: string}|null
+     * @return array{id: int, name: string, email: string, avatar: ?string}|null
      */
     private function sharedUser(Request $request): ?array
     {
@@ -61,10 +62,7 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
-        return [
-            ...$user->only(['id', 'name', 'email', 'avatar']),
-            'role' => $user->role->value,
-        ];
+        return $user->only(['id', 'name', 'email', 'avatar']);
     }
 
     /**
@@ -138,7 +136,9 @@ class HandleInertiaRequests extends Middleware
             'viewCampaigns' => $user?->can('viewAny', Campaign::class) ?? false,
             'manageCampaigns' => $user?->can('create', Campaign::class) ?? false,
             'renameTeam' => $team instanceof Team && ($user?->can('update', $team) ?? false),
-            'candidateWork' => $user !== null,
+            'candidateWork' => $user instanceof User && CampaignInvitation::query()
+                ->acceptedForUser($user)
+                ->exists(),
         ];
     }
 

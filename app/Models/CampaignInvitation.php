@@ -69,11 +69,7 @@ class CampaignInvitation extends Model
 
     public function isRedeemable(): bool
     {
-        if ($this->status === CampaignInvitationStatus::Revoked) {
-            return false;
-        }
-
-        if ($this->status === CampaignInvitationStatus::Expired) {
+        if ($this->status !== CampaignInvitationStatus::Pending) {
             return false;
         }
 
@@ -81,8 +77,7 @@ class CampaignInvitation extends Model
             return false;
         }
 
-        return $this->status === CampaignInvitationStatus::Pending
-            || $this->status === CampaignInvitationStatus::Accepted;
+        return true;
     }
 
     public function matchesEmail(string $email): bool

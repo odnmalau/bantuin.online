@@ -5,9 +5,12 @@ namespace App\Jobs;
 use App\AssessmentStatus;
 use App\Mail\InterviewInvitationMail;
 use App\Models\Assessment;
+use App\Models\Team;
 use App\Services\AssessmentEventRecorder;
+use App\TeamStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
@@ -20,17 +23,36 @@ class SendInterviewInvitationEmail implements ShouldQueue
 
     public int $timeout = 30;
 
-    public function __construct(public Assessment $assessment) {}
+    public readonly ?int $teamId;
+
+    public function __construct(public Assessment $assessment)
+    {
+        $teamId = $assessment->campaign()->value('team_id');
+        $this->teamId = $teamId === null ? null : (int) $teamId;
+    }
 
     /**
      * Execute the job.
      */
     public function handle(?AssessmentEventRecorder $events = null): void
     {
-        $events ??= app(AssessmentEventRecorder::class);
-        $assessment = $this->assessment->fresh(['user']);
+        DB::transaction(function () use ($events): void {
+            if ($this->teamId !== null) {
+                Team::query()->whereKey($this->teamId)->lockForUpdate()->firstOrFail();
+            }
 
-        if ($assessment === null) {
+            $this->send($events);
+        }, attempts: 3);
+    }
+
+    private function send(?AssessmentEventRecorder $events): void
+    {
+        $events ??= app(AssessmentEventRecorder::class);
+        $assessment = $this->assessment->fresh(['user', 'campaign.team']);
+
+        if ($assessment === null
+            || ($this->teamId !== null && ($assessment->campaign?->team_id !== $this->teamId
+                || $assessment->campaign->team?->status !== TeamStatus::Active))) {
             return;
         }
 

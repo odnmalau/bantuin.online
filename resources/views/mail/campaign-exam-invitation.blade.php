@@ -1,7 +1,8 @@
 <x-mail::message>
 # {{ __('Assessment invitation') }}
 
-{{ __('You have been invited to complete the :campaign assessment for the :role role.', [
+{{ __(':team has invited you to complete the :campaign assessment for the :role role.', [
+    'team' => $teamName,
     'campaign' => $campaignTitle,
     'role' => $roleTitle,
 ]) }}

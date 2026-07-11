@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Candidate;
 
+use App\CampaignStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Candidate\FinalizeExamSessionRequest;
 use App\Http\Requests\Candidate\RecordExamViolationRequest;
@@ -9,15 +10,14 @@ use App\Http\Requests\Candidate\SaveExamSectionRequest;
 use App\Models\Campaign;
 use App\Models\ExamSession;
 use App\QuestionStatus;
-use App\Services\CampaignInvitationService;
 use App\Services\ExamSessionService;
+use App\TeamStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class ExamSessionController extends Controller
 {
     public function __construct(
-        private CampaignInvitationService $invitations,
         private ExamSessionService $sessions,
     ) {}
 
@@ -87,17 +87,21 @@ class ExamSessionController extends Controller
 
     private function accessibleCampaign(Request $request, Campaign $campaign): Campaign
     {
-        abort_unless($this->invitations->userCanAccessCampaignExam($request->user(), $campaign), 403);
-
         return Campaign::query()
             ->whereKey($campaign->id)
+            ->where('status', CampaignStatus::Active->value)
+            ->whereHas('team', fn ($query) => $query->where('status', TeamStatus::Active->value))
+            ->whereHas('invitations', fn ($query) => $query->acceptedForUser($request->user()))
             ->whereHas('questions', fn ($query) => $query->where('status', QuestionStatus::Approved->value))
             ->firstOrFail();
     }
 
     private function assertSessionOwnership(Request $request, ExamSession $examSession, Campaign $campaign): void
     {
-        abort_unless($examSession->user_id === $request->user()->id, 403);
-        abort_unless($examSession->campaign_id === $campaign->id, 404);
+        abort_unless(
+            $examSession->user_id === $request->user()->id
+                && $examSession->campaign_id === $campaign->id,
+            404,
+        );
     }
 }

@@ -251,5 +251,5 @@ test('guest recipients complete team invitation acceptance after google sign in'
         ->assertRedirect(route('team-settings.edit'));
 
     expect($invitation->fresh()->status)->toBe(TeamInvitationStatus::Accepted)
-        ->and($invitation->fresh()->acceptedBy->email)->toBe('MEMBER@example.com');
+        ->and($invitation->fresh()->acceptedBy->email)->toBe('member@example.com');
 });

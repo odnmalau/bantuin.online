@@ -181,3 +181,24 @@ test('assessment review rejects a cross team identifier', function () {
         ->get(route('admin.assessments.show', $assessment))
         ->assertNotFound();
 });
+
+test('assessment decisions and recovery reject cross team identifiers', function (string $routeName) {
+    $currentTeam = Team::factory()->create();
+    $otherCampaign = Campaign::factory()->create();
+    $assessment = Assessment::factory()->for($otherCampaign)->create();
+    $original = $assessment->fresh()->toArray();
+    $user = User::factory()->teamCollaborator($currentTeam)->withCurrentTeam($currentTeam)->create();
+
+    $this->actingAs($user)
+        ->post(route($routeName, $assessment))
+        ->assertNotFound();
+
+    expect($assessment->fresh()->toArray())->toBe($original);
+})->with([
+    'retry evaluation' => 'admin.assessments.retry-evaluation',
+    'retry email' => 'admin.assessments.retry-email',
+    'promote' => 'admin.assessments.promote',
+    'override score' => 'admin.assessments.override-score',
+    'approve' => 'admin.assessments.approve',
+    'reject' => 'admin.assessments.reject',
+]);

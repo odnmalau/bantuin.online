@@ -65,7 +65,13 @@ class TeamInvitationService
             }
 
             $hasCandidateHistory = $lockedTeam->campaigns()
-                ->whereHas('invitations', fn ($query) => $query->whereRaw('LOWER(email) = ?', [$normalizedEmail]))
+                ->whereHas('invitations', function ($query) use ($normalizedEmail, $existingUser): void {
+                    $query->whereRaw('LOWER(email) = ?', [$normalizedEmail]);
+
+                    if ($existingUser !== null) {
+                        $query->orWhere('user_id', $existingUser->id);
+                    }
+                })
                 ->exists();
 
             if ($hasCandidateHistory) {

@@ -4,11 +4,14 @@ namespace App\Jobs;
 
 use App\AssessmentStatus;
 use App\Models\Assessment;
+use App\Models\Team;
 use App\Services\Ai\QwenResumeScreener;
 use App\Services\AssessmentEventRecorder;
 use App\Services\ResumeTextExtractor;
+use App\TeamStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -20,7 +23,13 @@ class ScreenResumeWithAi implements ShouldQueue
 
     public int $timeout = 45;
 
-    public function __construct(public Assessment $assessment) {}
+    public readonly ?int $teamId;
+
+    public function __construct(public Assessment $assessment)
+    {
+        $teamId = $assessment->campaign()->value('team_id');
+        $this->teamId = $teamId === null ? null : (int) $teamId;
+    }
 
     /**
      * Execute the job.
@@ -30,9 +39,26 @@ class ScreenResumeWithAi implements ShouldQueue
         QwenResumeScreener $screener,
         AssessmentEventRecorder $events,
     ): void {
-        $assessment = $this->assessment->fresh(['user', 'campaign']);
+        DB::transaction(function () use ($extractor, $screener, $events): void {
+            if ($this->teamId !== null) {
+                Team::query()->whereKey($this->teamId)->lockForUpdate()->firstOrFail();
+            }
 
-        if ($assessment === null || blank($assessment->resume_path)) {
+            $this->process($extractor, $screener, $events);
+        }, attempts: 3);
+    }
+
+    private function process(
+        ResumeTextExtractor $extractor,
+        QwenResumeScreener $screener,
+        AssessmentEventRecorder $events,
+    ): void {
+        $assessment = $this->assessment->fresh(['user', 'campaign.team']);
+
+        if ($assessment === null
+            || ($this->teamId !== null && ($assessment->campaign?->team_id !== $this->teamId
+                || $assessment->campaign->team?->status !== TeamStatus::Active))
+            || blank($assessment->resume_path)) {
             return;
         }
 

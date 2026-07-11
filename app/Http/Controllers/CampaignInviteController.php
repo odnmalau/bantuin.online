@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\CampaignInvitationService;
-use App\UserRole;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,10 +33,6 @@ class CampaignInviteController extends Controller
             return $this->redirectToLogin(__('Sign in with Google using :email to start your assessment.', [
                 'email' => $invitation->email,
             ]));
-        }
-
-        if ($user->role !== UserRole::Candidate) {
-            return $this->redirectToLogin(__('Sign in with the invited candidate Google account to continue.'));
         }
 
         try {

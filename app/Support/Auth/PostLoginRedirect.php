@@ -56,7 +56,8 @@ class PostLoginRedirect
         }
 
         if (str_starts_with($path, '/candidate')) {
-            return true;
+            return $user->current_team_id === null
+                && $user->campaignInvitations()->acceptedForUser($user)->exists();
         }
 
         return true;

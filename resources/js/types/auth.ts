@@ -2,7 +2,6 @@ export type User = {
     id: number;
     name: string;
     email: string;
-    role: 'admin' | 'candidate';
     avatar?: string;
 };
 

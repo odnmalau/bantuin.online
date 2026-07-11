@@ -39,9 +39,18 @@ class CampaignInvitationService
         $invitation = DB::transaction(function () use ($campaign, $normalizedEmail, $plainToken, $invitedBy): CampaignInvitation {
             Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
 
+            $existingUserId = User::query()
+                ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
+                ->value('id');
             $hasMembershipHistory = TeamMembership::query()
                 ->where('team_id', $campaign->team_id)
-                ->whereHas('user', fn ($query) => $query->whereRaw('LOWER(email) = ?', [$normalizedEmail]))
+                ->where(function ($query) use ($normalizedEmail, $existingUserId): void {
+                    $query->whereHas('user', fn ($userQuery) => $userQuery->whereRaw('LOWER(email) = ?', [$normalizedEmail]));
+
+                    if ($existingUserId !== null) {
+                        $query->orWhere('user_id', $existingUserId);
+                    }
+                })
                 ->exists();
 
             if ($hasMembershipHistory) {
@@ -50,21 +59,45 @@ class CampaignInvitationService
                 ]);
             }
 
-            return CampaignInvitation::query()->updateOrCreate(
-                [
-                    'campaign_id' => $campaign->id,
-                    'email' => $normalizedEmail,
-                ],
-                [
-                    'user_id' => null,
-                    'token_hash' => hash('sha256', $plainToken),
-                    'invited_by' => $invitedBy->id,
-                    'sent_at' => null,
-                    'accepted_at' => null,
-                    'expires_at' => now()->addDays(14),
-                    'status' => CampaignInvitationStatus::Pending,
-                ],
-            );
+            $existingInvitation = CampaignInvitation::query()
+                ->where('campaign_id', $campaign->id)
+                ->where(function ($query) use ($normalizedEmail, $existingUserId): void {
+                    $query->whereRaw('LOWER(email) = ?', [$normalizedEmail]);
+
+                    if ($existingUserId !== null) {
+                        $query->orWhere('user_id', $existingUserId);
+                    }
+                })
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingInvitation?->status === CampaignInvitationStatus::Accepted) {
+                throw ValidationException::withMessages([
+                    'email' => __('This person already has Candidate history for this Campaign.'),
+                ]);
+            }
+
+            $attributes = [
+                'email' => $normalizedEmail,
+                'user_id' => null,
+                'token_hash' => hash('sha256', $plainToken),
+                'invited_by' => $invitedBy->id,
+                'sent_at' => null,
+                'accepted_at' => null,
+                'expires_at' => now()->addDays(14),
+                'status' => CampaignInvitationStatus::Pending,
+            ];
+
+            if ($existingInvitation !== null) {
+                $existingInvitation->update($attributes);
+
+                return $existingInvitation;
+            }
+
+            return CampaignInvitation::query()->create([
+                ...$attributes,
+                'campaign_id' => $campaign->id,
+            ]);
         });
 
         $invitation = $invitation->fresh();
@@ -145,11 +178,6 @@ class CampaignInvitationService
                 ]);
             }
 
-            if ($lockedInvitation->status === CampaignInvitationStatus::Accepted
-                && $lockedInvitation->user_id === $user->id) {
-                return $lockedInvitation;
-            }
-
             if ($lockedInvitation->status !== CampaignInvitationStatus::Pending) {
                 throw ValidationException::withMessages([
                     'invitation' => __('This invitation is no longer available.'),
@@ -201,6 +229,10 @@ class CampaignInvitationService
             return false;
         }
 
+        if ($campaign->team()->where('status', TeamStatus::Active)->doesntExist()) {
+            return false;
+        }
+
         if (! $campaign->questions()->where('status', QuestionStatus::Approved->value)->exists()) {
             return false;
         }
@@ -218,6 +250,7 @@ class CampaignInvitationService
     {
         return Campaign::query()
             ->where('status', CampaignStatus::Active->value)
+            ->whereHas('team', fn ($query) => $query->where('status', TeamStatus::Active->value))
             ->whereHas('questions', fn ($query) => $query->where('status', QuestionStatus::Approved->value))
             ->whereHas('invitations', fn ($query) => $query->acceptedForUser($user))
             ->orderByDesc('activated_at')

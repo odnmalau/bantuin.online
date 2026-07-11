@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Campaign;
+use App\Models\CampaignInvitation;
 use App\Models\Team;
 use App\Models\User;
 use App\TeamMembershipRole;
@@ -13,6 +15,8 @@ test('authenticated experience exposes valid current team identity', function ()
         ->withCurrentTeam($team)
         ->platformOperator()
         ->create();
+    $candidateCampaign = Campaign::factory()->active()->create();
+    CampaignInvitation::factory()->for($candidateCampaign)->accepted($user)->create();
 
     $this->actingAs($user)
         ->get(route('dashboard'))
@@ -25,7 +29,8 @@ test('authenticated experience exposes valid current team identity', function ()
                 'role' => TeamMembershipRole::Administrator->value,
             ])
             ->where('auth.platformOperator', true)
-            ->where('auth.user.role', 'admin'));
+            ->where('auth.capabilities.candidateWork', true)
+            ->missing('auth.user.role'));
 });
 
 test('authenticated experience rejects a stale current team selection', function () {
@@ -37,5 +42,6 @@ test('authenticated experience rejects a stale current team selection', function
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('auth.currentTeam', null)
+            ->where('auth.capabilities.candidateWork', false)
             ->where('auth.platformOperator', false));
 });

@@ -105,6 +105,24 @@ test('evaluation job marks passing score as pending approval', function () {
     AssessmentEvaluatorAgent::assertPrompted(fn ($prompt): bool => str_contains($prompt->prompt, 'Explain indexes.'));
 });
 
+test('evaluation job does not mutate an assessment after team deactivation', function () {
+    $campaign = Campaign::factory()->create();
+    $assessment = Assessment::factory()->for($campaign)->create([
+        'status' => AssessmentStatus::Submitted,
+    ]);
+    $job = new EvaluateAssessmentWithAi($assessment);
+    $assessment->campaign->team->update([
+        'status' => 'deactivated',
+        'deactivated_at' => now(),
+    ]);
+
+    app()->call([$job, 'handle']);
+
+    expect($assessment->fresh())
+        ->status->toBe(AssessmentStatus::Submitted)
+        ->ai_score->toBeNull();
+});
+
 test('assessment evaluation pipeline marks passing score as pending approval', function () {
     AssessmentEvaluatorAgent::fake([
         [
@@ -450,8 +468,10 @@ test('qwen secret is not included in prompt payload or candidate response', func
     config()->set('ai.providers.qwen.key', 'secret-qwen-token');
 
     $candidate = User::factory()->candidate()->create();
+    $campaign = Campaign::factory()->create();
     $assessment = Assessment::factory()
         ->for($candidate)
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::PendingApproval,
             'ai_score' => 82,
@@ -459,6 +479,7 @@ test('qwen secret is not included in prompt payload or candidate response', func
         ]);
 
     $payload = app(QwenAssessmentEvaluator::class)->promptPayload($assessment);
+    assignCandidateToCampaignExam($candidate, $assessment->campaign);
 
     expect(json_encode($payload))->not->toContain('secret-qwen-token');
 

@@ -68,7 +68,10 @@ test('exam invite email job sends mailable with invite link', function () {
     (new SendCampaignExamInvitationEmail($invitation, $plainToken))
         ->handle(app(CampaignInvitationService::class));
 
-    Mail::assertSent(CampaignExamInvitationMail::class);
+    Mail::assertSent(
+        CampaignExamInvitationMail::class,
+        fn (CampaignExamInvitationMail $mail): bool => str_contains($mail->render(), $campaign->team->name),
+    );
 });
 
 test('exam invite email job rechecks its campaign team boundary', function () {
@@ -183,6 +186,76 @@ test('authenticated candidate can redeem invite link directly', function () {
     $this->actingAs($candidate)
         ->get(route('invites.show', $plainToken))
         ->assertRedirect(route('candidate.campaigns.exam', $campaign));
+});
+
+test('team member can redeem a campaign invitation owned by another team', function () {
+    $teamMember = User::factory()->admin()->create([
+        'email' => 'candidate@example.com',
+    ]);
+    $otherTeamOwner = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($otherTeamOwner->currentTeam)->active()->create([
+        'created_by' => $otherTeamOwner->id,
+    ]);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create();
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()
+        ->for($campaign)
+        ->forCandidate($teamMember)
+        ->createWithPlainToken();
+
+    expect($teamMember->current_team_id)->not->toBe($campaign->team_id);
+
+    $this->actingAs($teamMember)
+        ->get(route('invites.show', $plainToken))
+        ->assertRedirect(route('candidate.campaigns.exam', $campaign));
+
+    expect($invitation->fresh())
+        ->status->toBe(CampaignInvitationStatus::Accepted)
+        ->user_id->toBe($teamMember->id);
+});
+
+test('accepted campaign invitation links cannot be replayed', function () {
+    $candidate = User::factory()->candidate()->create([
+        'email' => 'candidate@example.com',
+    ]);
+    $campaign = Campaign::factory()->active()->create();
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()
+        ->for($campaign)
+        ->accepted($candidate)
+        ->createWithPlainToken();
+
+    $this->actingAs($candidate)
+        ->get(route('invites.show', $plainToken))
+        ->assertRedirect(route('login'));
+
+    expect($invitation->fresh())
+        ->status->toBe(CampaignInvitationStatus::Accepted)
+        ->user_id->toBe($candidate->id);
+});
+
+test('issuing another invitation does not reset accepted candidate history', function () {
+    $owner = User::factory()->admin()->create();
+    $campaign = Campaign::factory()->for($owner->currentTeam)->active()->create([
+        'created_by' => $owner->id,
+    ]);
+    $candidate = User::factory()->candidate()->create([
+        'email' => 'candidate@example.com',
+    ]);
+    $invitation = CampaignInvitation::factory()->for($campaign)->accepted($candidate)->create();
+    $originalTokenHash = $invitation->token_hash;
+
+    $this->actingAs($owner)
+        ->post(route('admin.campaigns.invitations.store', $campaign), [
+            'email' => 'CANDIDATE@example.com',
+            'send_email' => false,
+        ])
+        ->assertSessionHasErrors('email');
+
+    expect($invitation->fresh())
+        ->status->toBe(CampaignInvitationStatus::Accepted)
+        ->user_id->toBe($candidate->id)
+        ->token_hash->toBe($originalTokenHash)
+        ->and(CampaignInvitation::query()->whereBelongsTo($campaign)->count())->toBe(1);
 });
 
 test('candidate cannot create invitations', function () {

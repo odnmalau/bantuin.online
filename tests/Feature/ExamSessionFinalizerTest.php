@@ -21,6 +21,7 @@ test('exam session finalizer creates the assessment and queues processing', func
 
     $candidate = User::factory()->candidate()->create();
     $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
         'title' => 'Knowledge Check',
     ]);
@@ -77,6 +78,14 @@ test('exam session finalizer creates the assessment and queues processing', func
         ScreenResumeWithAi::class,
         EvaluateAssessmentWithAi::class,
     ]);
+
+    $replayed = app(ExamSessionFinalizer::class)->finalize(
+        session: $session->fresh(),
+        campaign: $campaign,
+    );
+
+    expect($replayed->is($assessment))->toBeTrue()
+        ->and($assessment->events()->where('type', 'assessment_queued')->count())->toBe(1);
 });
 
 test('exam session finalizer can force submit incomplete answers', function () {
@@ -85,6 +94,7 @@ test('exam session finalizer can force submit incomplete answers', function () {
 
     $candidate = User::factory()->candidate()->create();
     $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
     $answeredQuestion = CampaignQuestion::factory()
         ->for($campaign)

@@ -61,6 +61,7 @@ test('candidate can view active campaign questions when assigned', function () {
             ->component('candidate/exam')
             ->where('state', 'ready_to_start')
             ->where('campaign.id', $campaign->id)
+            ->where('campaign.team.name', $campaign->team->name)
             ->has('sections', 1)
             ->where('sections.0.id', $section->id)
             ->where('sections.0.title', 'Knowledge Check')
@@ -130,7 +131,27 @@ test('unassigned candidate cannot open a campaign exam', function () {
 
     $this->actingAs($candidate)
         ->get(route('candidate.campaigns.exam', $campaign))
-        ->assertForbidden();
+        ->assertNotFound();
+});
+
+test('candidate cannot open or mutate an exam after its team is deactivated', function () {
+    $candidate = User::factory()->candidate()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create();
+    $campaign->team->update([
+        'status' => 'deactivated',
+        'deactivated_at' => now(),
+    ]);
+
+    $this->actingAs($candidate)
+        ->get(route('candidate.campaigns.exam', $campaign))
+        ->assertNotFound();
+
+    $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.store', $campaign))
+        ->assertNotFound();
 });
 
 test('candidate sees submitted state only for the assigned campaign', function () {
@@ -390,7 +411,7 @@ test('candidate cannot submit an inactive campaign', function () {
 
     $this->actingAs($candidate)
         ->post(route('candidate.campaigns.exam-sessions.store', $campaign))
-        ->assertForbidden();
+        ->assertNotFound();
 
     expect(Assessment::query()->whereBelongsTo($candidate)->exists())->toBeFalse();
     Bus::assertNothingDispatched();
@@ -411,6 +432,7 @@ test('candidate can view their own assessment', function () {
             ],
         ],
     ]);
+    assignCandidateToCampaignExam($candidate, $campaign);
 
     $this->actingAs($candidate)
         ->get(route('candidate.assessments.show', $assessment))
@@ -419,6 +441,7 @@ test('candidate can view their own assessment', function () {
             ->component('candidate/assessments/show')
             ->where('assessment.id', $assessment->id)
             ->where('assessment.campaign.title', $campaign->title)
+            ->where('assessment.campaign.team.name', $campaign->team->name)
             ->where('assessment.status', AssessmentStatus::Submitted->value)
             ->where('assessment.answers_payload.0.question_id', 7)
             ->where('assessment.answers_payload.0.question', 'Which datastore supports relational constraints?')
@@ -436,5 +459,14 @@ test('candidate cannot view another candidates assessment', function () {
 
     $this->actingAs($candidate)
         ->get(route('candidate.assessments.show', $assessment))
-        ->assertForbidden();
+        ->assertNotFound();
+});
+
+test('candidate assessment access requires accepted campaign participation', function () {
+    $candidate = User::factory()->candidate()->create();
+    $assessment = Assessment::factory()->for($candidate)->create();
+
+    $this->actingAs($candidate)
+        ->get(route('candidate.assessments.show', $assessment))
+        ->assertNotFound();
 });

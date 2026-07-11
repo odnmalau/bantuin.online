@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Campaign;
+use App\Models\CampaignInvitation;
 use App\Models\Team;
 use App\Models\User;
 use App\UserRole;
@@ -73,6 +75,27 @@ test('google callback links an existing admin without changing role', function (
         ->and($admin->role)->toBe(UserRole::Admin);
 });
 
+test('google callback matches an existing account by normalized email', function () {
+    fakeGoogleAuthConfig();
+    $user = User::factory()->create([
+        'email' => 'Person@Example.com',
+        'google_id' => null,
+    ]);
+
+    fakeGoogleUserAuthentication(
+        id: 'google-normalized-email',
+        email: 'person@example.com',
+        name: 'Person',
+    );
+
+    $this->get(route('auth.google.callback'))
+        ->assertRedirect(route('dashboard', absolute: false));
+
+    expect(User::query()->count())->toBe(1)
+        ->and($user->fresh()->google_id)->toBe('google-normalized-email')
+        ->and($user->fresh()->email)->toBe('person@example.com');
+});
+
 test('google callback preserves current team and accepts contextual campaign urls', function () {
     fakeGoogleAuthConfig();
 
@@ -97,6 +120,31 @@ test('google callback preserves current team and accepts contextual campaign url
         ->assertRedirect('http://localhost/admin/campaigns');
 
     expect($user->fresh()->current_team_id)->toBe($team->id);
+});
+
+test('normal dual context sign in opens current team instead of an intended candidate url', function () {
+    fakeGoogleAuthConfig();
+    $team = Team::factory()->create();
+    $user = User::factory()
+        ->teamCollaborator($team)
+        ->withCurrentTeam($team)
+        ->create([
+            'email' => 'dual-context@example.com',
+            'google_id' => null,
+        ]);
+    $campaign = Campaign::factory()->active()->create();
+    CampaignInvitation::factory()->for($campaign)->accepted($user)->create();
+
+    fakeGoogleUserAuthentication(
+        id: 'google-dual-context',
+        email: 'dual-context@example.com',
+        name: 'Dual Context User',
+    );
+
+    $this->withSession([
+        'url.intended' => route('candidate.campaigns.exam', $campaign),
+    ])->get(route('auth.google.callback'))
+        ->assertRedirect(route('dashboard', absolute: false));
 });
 
 test('google callback syncs email and avatar from google for returning users', function () {

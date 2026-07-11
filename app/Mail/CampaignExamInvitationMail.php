@@ -29,7 +29,8 @@ class CampaignExamInvitationMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: __('You are invited to complete the :campaign assessment', [
+            subject: __(':team invited you to complete the :campaign assessment', [
+                'team' => $this->campaign->team->name,
                 'campaign' => $this->campaign->title,
             ]),
         );
@@ -45,6 +46,7 @@ class CampaignExamInvitationMail extends Mailable
             with: [
                 'campaignTitle' => $this->campaign->title,
                 'roleTitle' => $this->campaign->role_title,
+                'teamName' => $this->campaign->team->name,
                 'inviteUrl' => $this->inviteUrl,
                 'expiresAt' => $this->invitation->expires_at,
             ],

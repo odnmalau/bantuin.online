@@ -137,6 +137,9 @@ class CandidateExamPage
             'id' => $campaign->id,
             'title' => $campaign->title,
             'role_title' => $campaign->role_title,
+            'team' => [
+                'name' => $campaign->team->name,
+            ],
             'seniority' => $campaign->seniority,
             'threshold_score' => $campaign->threshold_score,
         ];

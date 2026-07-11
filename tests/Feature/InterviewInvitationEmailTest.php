@@ -54,6 +54,26 @@ test('successful email job marks assessment as email sent', function () {
         ->email_sent_at->not->toBeNull();
 });
 
+test('interview email job does not send or mutate after team deactivation', function () {
+    Mail::fake();
+    $assessment = Assessment::factory()
+        ->approved()
+        ->for(User::factory()->candidate())
+        ->create();
+    $job = new SendInterviewInvitationEmail($assessment);
+    $assessment->campaign->team->update([
+        'status' => 'deactivated',
+        'deactivated_at' => now(),
+    ]);
+
+    $job->handle();
+
+    Mail::assertNothingSent();
+    expect($assessment->fresh())
+        ->status->toBe(AssessmentStatus::Approved)
+        ->email_sent_at->toBeNull();
+});
+
 test('email failure marks assessment as email failed', function () {
     Log::spy();
 

@@ -16,6 +16,9 @@ type Assessment = {
     campaign: {
         title: string;
         role_title: string;
+        team: {
+            name: string;
+        };
     } | null;
     answers_payload: AnswerSnapshot[];
     resume_original_name: string | null;
@@ -64,6 +67,7 @@ export default function CandidateAssessmentShow({ assessment }: Props) {
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     {assessment.campaign ? (
                         <p className="text-sm text-muted-foreground">
+                            {assessment.campaign.team.name} /{' '}
                             {assessment.campaign.title} -{' '}
                             {assessment.campaign.role_title}
                         </p>
