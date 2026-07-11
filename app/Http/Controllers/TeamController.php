@@ -5,14 +5,16 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreTeamRequest;
 use App\Http\Requests\UpdateTeamRequest;
 use App\Models\Team;
-use App\Models\TeamActivity;
 use App\Models\User;
+use App\Services\TeamActivityRecorder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class TeamController extends Controller
 {
+    public function __construct(private TeamActivityRecorder $activities) {}
+
     public function store(StoreTeamRequest $request): RedirectResponse
     {
         DB::transaction(function () use ($request): void {
@@ -20,7 +22,7 @@ class TeamController extends Controller
             $team = Team::createForOwner($user, $request->validated('name'));
 
             $user->selectCurrentTeam($team);
-            $this->recordActivity($team, $user, 'team_created', null, ['name' => $team->name]);
+            $this->activities->record($team, $user, 'team_created', $team, after: ['name' => $team->name]);
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Team created.')]);
@@ -35,30 +37,18 @@ class TeamController extends Controller
             $before = ['name' => $lockedTeam->name];
             $lockedTeam->update($request->validated());
 
-            $this->recordActivity($lockedTeam, $request->user(), 'team_renamed', $before, ['name' => $lockedTeam->name]);
+            $this->activities->record(
+                $lockedTeam,
+                $request->user(),
+                'team_renamed',
+                $lockedTeam,
+                before: $before,
+                after: ['name' => $lockedTeam->name],
+            );
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Team renamed.')]);
 
         return back();
-    }
-
-    /**
-     * @param  array<string, mixed>|null  $before
-     * @param  array<string, mixed>  $after
-     */
-    private function recordActivity(Team $team, User $actor, string $action, ?array $before, array $after): void
-    {
-        TeamActivity::query()->create([
-            'team_id' => $team->id,
-            'actor_id' => $actor->id,
-            'actor_context' => 'team_member',
-            'action' => $action,
-            'subject_type' => Team::class,
-            'subject_id' => $team->id,
-            'before_state' => $before,
-            'after_state' => $after,
-            'occurred_at' => now(),
-        ]);
     }
 }

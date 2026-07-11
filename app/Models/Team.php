@@ -73,6 +73,18 @@ class Team extends Model
         return $this->hasMany(TeamActivity::class);
     }
 
+    /** @return HasMany<TeamInvitation, $this> */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(TeamInvitation::class);
+    }
+
+    /** @return HasMany<OwnershipTransfer, $this> */
+    public function ownershipTransfers(): HasMany
+    {
+        return $this->hasMany(OwnershipTransfer::class);
+    }
+
     protected static function booted(): void
     {
         static::creating(function (Team $team): void {

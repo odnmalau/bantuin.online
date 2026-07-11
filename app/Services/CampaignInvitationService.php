@@ -7,11 +7,15 @@ use App\CampaignStatus;
 use App\Jobs\SendCampaignExamInvitationEmail;
 use App\Models\Campaign;
 use App\Models\CampaignInvitation;
+use App\Models\Team;
+use App\Models\TeamMembership;
 use App\Models\User;
 use App\QuestionStatus;
+use App\TeamStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -32,21 +36,36 @@ class CampaignInvitationService
         $normalizedEmail = strtolower(trim($email));
         $plainToken = Str::random(64);
 
-        $invitation = CampaignInvitation::query()->updateOrCreate(
-            [
-                'campaign_id' => $campaign->id,
-                'email' => $normalizedEmail,
-            ],
-            [
-                'user_id' => null,
-                'token_hash' => hash('sha256', $plainToken),
-                'invited_by' => $invitedBy->id,
-                'sent_at' => null,
-                'accepted_at' => null,
-                'expires_at' => now()->addDays(14),
-                'status' => CampaignInvitationStatus::Pending,
-            ],
-        );
+        $invitation = DB::transaction(function () use ($campaign, $normalizedEmail, $plainToken, $invitedBy): CampaignInvitation {
+            Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
+
+            $hasMembershipHistory = TeamMembership::query()
+                ->where('team_id', $campaign->team_id)
+                ->whereHas('user', fn ($query) => $query->whereRaw('LOWER(email) = ?', [$normalizedEmail]))
+                ->exists();
+
+            if ($hasMembershipHistory) {
+                throw ValidationException::withMessages([
+                    'email' => __('Team Membership history prevents candidacy in this Team.'),
+                ]);
+            }
+
+            return CampaignInvitation::query()->updateOrCreate(
+                [
+                    'campaign_id' => $campaign->id,
+                    'email' => $normalizedEmail,
+                ],
+                [
+                    'user_id' => null,
+                    'token_hash' => hash('sha256', $plainToken),
+                    'invited_by' => $invitedBy->id,
+                    'sent_at' => null,
+                    'accepted_at' => null,
+                    'expires_at' => now()->addDays(14),
+                    'status' => CampaignInvitationStatus::Pending,
+                ],
+            );
+        });
 
         $invitation = $invitation->fresh();
 
@@ -98,27 +117,61 @@ class CampaignInvitationService
 
     public function acceptForUser(CampaignInvitation $invitation, User $user): CampaignInvitation
     {
-        $this->ensureInvitationMatchesUser($invitation, $user);
-        $this->refreshInvitationExpiry($invitation);
+        $accepted = DB::transaction(function () use ($invitation, $user): ?CampaignInvitation {
+            $lockedInvitation = CampaignInvitation::query()->whereKey($invitation->id)->lockForUpdate()->firstOrFail();
+            $team = Team::query()
+                ->whereKey($lockedInvitation->campaign()->value('team_id'))
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if ($invitation->status === CampaignInvitationStatus::Accepted
-            && $invitation->user_id === $user->id) {
-            return $invitation;
-        }
+            $this->ensureInvitationMatchesUser($lockedInvitation, $user);
 
-        if ($invitation->status !== CampaignInvitationStatus::Pending) {
+            if ($lockedInvitation->status === CampaignInvitationStatus::Pending
+                && $lockedInvitation->expires_at?->isPast()) {
+                $lockedInvitation->update(['status' => CampaignInvitationStatus::Expired]);
+
+                return null;
+            }
+
+            if ($team->status !== TeamStatus::Active) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('This Team is not accepting Candidate Invitations.'),
+                ]);
+            }
+
+            if (TeamMembership::query()->whereBelongsTo($team)->whereBelongsTo($user)->exists()) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('Team Membership history prevents candidacy in this Team.'),
+                ]);
+            }
+
+            if ($lockedInvitation->status === CampaignInvitationStatus::Accepted
+                && $lockedInvitation->user_id === $user->id) {
+                return $lockedInvitation;
+            }
+
+            if ($lockedInvitation->status !== CampaignInvitationStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('This invitation is no longer available.'),
+                ]);
+            }
+
+            $lockedInvitation->update([
+                'user_id' => $user->id,
+                'accepted_at' => now(),
+                'status' => CampaignInvitationStatus::Accepted,
+            ]);
+
+            return $lockedInvitation->fresh();
+        });
+
+        if ($accepted === null) {
             throw ValidationException::withMessages([
-                'invitation' => __('This invitation is no longer available.'),
+                'invitation' => __('This invitation has expired.'),
             ]);
         }
 
-        $invitation->update([
-            'user_id' => $user->id,
-            'accepted_at' => now(),
-            'status' => CampaignInvitationStatus::Accepted,
-        ]);
-
-        return $invitation->fresh();
+        return $accepted;
     }
 
     public function completePendingRedemption(Request $request, User $user): ?RedirectResponse
@@ -194,27 +247,6 @@ class CampaignInvitationService
         if (! $invitation->matchesEmail($user->email)) {
             throw ValidationException::withMessages([
                 'invitation' => __('This invitation was sent to a different email address.'),
-            ]);
-        }
-    }
-
-    private function refreshInvitationExpiry(CampaignInvitation $invitation): void
-    {
-        if ($invitation->status === CampaignInvitationStatus::Revoked) {
-            throw ValidationException::withMessages([
-                'invitation' => __('This invitation has been revoked.'),
-            ]);
-        }
-
-        if ($invitation->expires_at !== null && $invitation->expires_at->isPast()) {
-            if ($invitation->status === CampaignInvitationStatus::Pending) {
-                $invitation->update([
-                    'status' => CampaignInvitationStatus::Expired,
-                ]);
-            }
-
-            throw ValidationException::withMessages([
-                'invitation' => __('This invitation has expired.'),
             ]);
         }
     }

@@ -4,19 +4,27 @@ namespace App\Support\Auth;
 
 use App\Models\User;
 use App\Services\CampaignInvitationService;
+use App\Services\OwnershipTransferService;
+use App\Services\TeamInvitationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class PostLoginRedirect
 {
-    public function __construct(private CampaignInvitationService $invitations) {}
+    public function __construct(
+        private CampaignInvitationService $campaignInvitations,
+        private TeamInvitationService $teamInvitations,
+        private OwnershipTransferService $ownershipTransfers,
+    ) {}
 
     /**
      * Redirect after authentication, avoiding role-protected URLs the user cannot access.
      */
     public function toResponse(Request $request, User $user): RedirectResponse
     {
-        $invitationRedirect = $this->invitations->completePendingRedemption($request, $user);
+        $invitationRedirect = $this->ownershipTransfers->completePendingRedemption($request, $user)
+            ?? $this->teamInvitations->completePendingRedemption($request, $user)
+            ?? $this->campaignInvitations->completePendingRedemption($request, $user);
 
         if ($invitationRedirect !== null) {
             return $invitationRedirect;

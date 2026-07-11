@@ -108,6 +108,27 @@ class User extends Authenticatable
         });
     }
 
+    public function replaceCurrentTeamAfterMembershipEnds(int $endedTeamId): void
+    {
+        if ($this->current_team_id !== $endedTeamId) {
+            return;
+        }
+
+        $fallback = $this->activeTeamMemberships()
+            ->where('team_id', '!=', $endedTeamId)
+            ->orderByRaw('last_used_at IS NULL')
+            ->orderByDesc('last_used_at')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first();
+
+        if ($fallback !== null) {
+            $fallback->update(['last_used_at' => now()]);
+        }
+
+        $this->forceFill(['current_team_id' => $fallback?->team_id])->save();
+    }
+
     public function homePath(): string
     {
         return ($this->role ?? UserRole::Candidate)->homePath();

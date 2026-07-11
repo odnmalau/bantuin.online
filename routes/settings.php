@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\TeamController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,4 +19,8 @@ Route::middleware('auth')
 Route::middleware('auth')->group(function () {
     Route::get('settings/appearance', fn (): Response => Inertia::render('settings/appearance'))
         ->name('appearance.edit');
+});
+
+Route::middleware(['auth', 'current-team'])->group(function () {
+    Route::get('settings/team', [TeamController::class, 'edit'])->name('team-settings.edit');
 });

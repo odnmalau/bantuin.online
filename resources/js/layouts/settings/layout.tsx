@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import type { PropsWithChildren } from 'react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -6,7 +6,8 @@ import { useCurrentUrl } from '@/hooks/use-current-url';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit } from '@/routes/profile';
-import type { NavItem } from '@/types';
+import { edit as editTeam } from '@/routes/team-settings';
+import type { NavItem, SharedData } from '@/types';
 
 const sidebarNavItems: NavItem[] = [
     {
@@ -23,6 +24,17 @@ const sidebarNavItems: NavItem[] = [
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
+    const { auth } = usePage<SharedData>().props;
+    const navigationItems = auth.currentTeam
+        ? [
+              ...sidebarNavItems,
+              {
+                  title: 'Team',
+                  href: editTeam(),
+                  icon: null,
+              },
+          ]
+        : sidebarNavItems;
 
     return (
         <div className="px-4 py-6">
@@ -32,7 +44,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                         className="flex flex-col space-y-1 space-x-0"
                         aria-label="Settings"
                     >
-                        {sidebarNavItems.map((item, index) => (
+                        {navigationItems.map((item, index) => (
                             <Button
                                 key={`${toUrl(item.href)}-${index}`}
                                 size="sm"

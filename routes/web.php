@@ -17,7 +17,10 @@ use App\Http\Controllers\Candidate\AssessmentController;
 use App\Http\Controllers\Candidate\ExamSessionController;
 use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\OwnershipTransferController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\TeamInvitationController;
+use App\Http\Controllers\TeamMembershipController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
@@ -30,6 +33,8 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::get('invites/{token}', [CampaignInviteController::class, 'show'])->name('invites.show');
+Route::get('team-invitations/{token}', [TeamInvitationController::class, 'show'])->name('team-invitations.show');
+Route::get('ownership-transfers/{token}', [OwnershipTransferController::class, 'show'])->name('ownership-transfers.show');
 
 Route::middleware('auth')->group(function () {
     Route::post('logout', [LogoutController::class, 'destroy'])->name('logout');
@@ -38,6 +43,14 @@ Route::middleware('auth')->group(function () {
     Route::post('teams', [TeamController::class, 'store'])->name('teams.store');
     Route::patch('teams/{team}', [TeamController::class, 'update'])->name('teams.update');
     Route::put('current-team', CurrentTeamController::class)->name('current-team.update');
+    Route::post('team-invitations', [TeamInvitationController::class, 'store'])->name('team-invitations.store');
+    Route::delete('team-invitations/{teamInvitation}', [TeamInvitationController::class, 'destroy'])->name('team-invitations.destroy');
+    Route::post('team-invitations/{teamInvitation}/resend', [TeamInvitationController::class, 'resend'])->name('team-invitations.resend');
+    Route::delete('team-memberships/current', [TeamMembershipController::class, 'leave'])->name('team-memberships.leave');
+    Route::patch('team-memberships/{teamMembership}', [TeamMembershipController::class, 'update'])->name('team-memberships.update');
+    Route::delete('team-memberships/{teamMembership}', [TeamMembershipController::class, 'destroy'])->name('team-memberships.destroy');
+    Route::post('ownership-transfers', [OwnershipTransferController::class, 'store'])->name('ownership-transfers.store');
+    Route::delete('ownership-transfers/{ownershipTransfer}', [OwnershipTransferController::class, 'destroy'])->name('ownership-transfers.destroy');
 });
 
 Route::middleware(['auth', 'current-team'])
