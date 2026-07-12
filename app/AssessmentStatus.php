@@ -38,6 +38,16 @@ enum AssessmentStatus: string
         };
     }
 
+    public function isEvaluationClaimable(): bool
+    {
+        return $this === self::Submitted;
+    }
+
+    public function isEvaluationProcessing(): bool
+    {
+        return $this === self::Evaluating;
+    }
+
     public function label(): string
     {
         return match ($this) {

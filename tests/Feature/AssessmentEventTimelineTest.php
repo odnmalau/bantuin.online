@@ -270,9 +270,9 @@ test('unsendable interview email job records email failed timeline event', funct
     Mail::fake();
 
     $assessment = Assessment::factory()
+        ->approved()
         ->for(User::factory())
         ->create([
-            'status' => AssessmentStatus::PendingApproval,
             'approved_email_subject' => null,
             'approved_email_body' => null,
         ]);

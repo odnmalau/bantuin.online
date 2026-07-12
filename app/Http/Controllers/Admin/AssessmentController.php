@@ -10,14 +10,10 @@ use App\Http\Requests\Admin\PromoteAssessmentRequest;
 use App\Http\Requests\Admin\RejectAssessmentRequest;
 use App\Http\Requests\Admin\RetryAssessmentEvaluationRequest;
 use App\Http\Requests\Admin\RetryInterviewEmailRequest;
-use App\Jobs\EvaluateAssessmentWithAi;
-use App\Jobs\SendInterviewInvitationEmail;
 use App\Models\Assessment;
-use App\Models\User;
-use App\Services\AssessmentEventRecorder;
+use App\Services\AssessmentWorkflowService;
 use App\TeamStatus;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -115,31 +111,9 @@ class AssessmentController extends Controller
     public function retryEvaluation(
         RetryAssessmentEvaluationRequest $request,
         Assessment $assessment,
-        AssessmentEventRecorder $events,
+        AssessmentWorkflowService $workflow,
     ): RedirectResponse {
-        $this->denyUnless(
-            $this->canRetry($assessment),
-            'Only failed evaluations can be retried.',
-        );
-
-        $previousStatus = $assessment->status;
-        $validated = $request->validated();
-
-        $assessment->resetEvaluationForRetry();
-
-        $this->recordStatusTransition(
-            events: $events,
-            assessment: $assessment,
-            actor: $request->user(),
-            type: 'admin_retried_evaluation',
-            title: __('Admin retried evaluation'),
-            description: __('Admin queued a fresh assessment evaluation job.'),
-            fromStatus: $previousStatus,
-            toStatus: AssessmentStatus::Submitted,
-            payload: ['reason' => $validated['reason'] ?? null],
-        );
-
-        EvaluateAssessmentWithAi::dispatch($assessment);
+        $workflow->retryEvaluation($assessment, $request->user(), $request->validated());
 
         return to_route('admin.assessments.show', $assessment);
     }
@@ -150,33 +124,9 @@ class AssessmentController extends Controller
     public function retryEmail(
         RetryInterviewEmailRequest $request,
         Assessment $assessment,
-        AssessmentEventRecorder $events,
+        AssessmentWorkflowService $workflow,
     ): RedirectResponse {
-        $this->denyUnless(
-            $this->canRetryEmail($assessment),
-            'Only failed email deliveries can be retried.',
-        );
-
-        $validated = $request->validated();
-        $previousStatus = $assessment->status;
-
-        $assessment->update([
-            'status' => AssessmentStatus::Approved,
-        ]);
-
-        $this->recordStatusTransition(
-            events: $events,
-            assessment: $assessment,
-            actor: $request->user(),
-            type: 'admin_retried_email',
-            title: __('Admin retried interview email'),
-            description: __('Admin queued a fresh interview invitation email job.'),
-            fromStatus: $previousStatus,
-            toStatus: AssessmentStatus::Approved,
-            payload: ['reason' => $validated['reason'] ?? null],
-        );
-
-        SendInterviewInvitationEmail::dispatch($assessment);
+        $workflow->retryEmail($assessment, $request->user(), $request->validated());
 
         return to_route('admin.assessments.show', $assessment);
     }
@@ -187,36 +137,9 @@ class AssessmentController extends Controller
     public function promote(
         PromoteAssessmentRequest $request,
         Assessment $assessment,
-        AssessmentEventRecorder $events,
+        AssessmentWorkflowService $workflow,
     ): RedirectResponse {
-        $this->denyUnless(
-            $this->canPromote($assessment),
-            'Only evaluated assessments can be promoted to interview review.',
-        );
-
-        $validated = $request->validated();
-        $promotion = $this->promotionDetails(
-            $assessment,
-            $validated,
-        );
-
-        $previousStatus = $assessment->status;
-        $assessment->update($promotion['updates']);
-
-        $this->recordStatusTransition(
-            events: $events,
-            assessment: $assessment,
-            actor: $request->user(),
-            type: 'admin_promoted',
-            title: __('Admin promoted assessment'),
-            description: __('Admin promoted a candidate to interview review.'),
-            fromStatus: $previousStatus,
-            toStatus: AssessmentStatus::PendingApproval,
-            payload: [
-                'reason' => $validated['reason'],
-                'manual_email_supplied' => $promotion['manual_email_supplied'],
-            ],
-        );
+        $workflow->promote($assessment, $request->user(), $request->validated());
 
         return to_route('admin.assessments.show', $assessment);
     }
@@ -227,44 +150,9 @@ class AssessmentController extends Controller
     public function overrideScore(
         OverrideAssessmentScoreRequest $request,
         Assessment $assessment,
-        AssessmentEventRecorder $events,
+        AssessmentWorkflowService $workflow,
     ): RedirectResponse {
-        $this->denyUnless(
-            $this->canReview($assessment),
-            'Only reviewable assessments can have their ranking score overridden.',
-        );
-
-        $validated = $request->validated();
-        $previousStatus = $assessment->status;
-        $previousScore = $assessment->ranking_score;
-        $override = [
-            'from_score' => $previousScore,
-            'to_score' => (int) $validated['ranking_score'],
-            'reason' => $validated['reason'],
-            'actor_id' => $request->user()->id,
-            'occurred_at' => now()->toISOString(),
-        ];
-
-        $assessment->update([
-            'ranking_score' => (int) $validated['ranking_score'],
-            'ranking_payload' => [
-                ...($assessment->ranking_payload ?? []),
-                'override' => $override,
-            ],
-            'status' => AssessmentStatus::Overridden,
-        ]);
-
-        $this->recordStatusTransition(
-            events: $events,
-            assessment: $assessment,
-            actor: $request->user(),
-            type: 'admin_overrode_ranking_score',
-            title: __('Admin overrode ranking score'),
-            description: __('Admin replaced the backend ranking score with a manual override.'),
-            fromStatus: $previousStatus,
-            toStatus: AssessmentStatus::Overridden,
-            payload: $override,
-        );
+        $workflow->overrideScore($assessment, $request->user(), $request->validated());
 
         return to_route('admin.assessments.show', $assessment);
     }
@@ -275,34 +163,9 @@ class AssessmentController extends Controller
     public function approve(
         ApproveAssessmentRequest $request,
         Assessment $assessment,
-        AssessmentEventRecorder $events,
+        AssessmentWorkflowService $workflow,
     ): RedirectResponse {
-        $this->ensureReviewable($assessment);
-        $previousStatus = $assessment->status;
-        $validated = $request->validated();
-
-        $assessment->update([
-            'approved_email_subject' => $validated['email_subject'],
-            'approved_email_body' => $validated['email_body'],
-            'approved_by' => $request->user()->id,
-            'approved_at' => now(),
-            'rejected_at' => null,
-            'status' => AssessmentStatus::Approved,
-        ]);
-
-        $this->recordStatusTransition(
-            events: $events,
-            assessment: $assessment,
-            actor: $request->user(),
-            type: 'admin_approved',
-            title: __('Admin approved assessment'),
-            description: __('Admin approved the candidate for interview and queued the email job.'),
-            fromStatus: $previousStatus,
-            toStatus: AssessmentStatus::Approved,
-            payload: ['email_subject' => $validated['email_subject']],
-        );
-
-        SendInterviewInvitationEmail::dispatch($assessment);
+        $workflow->approve($assessment, $request->user(), $request->validated());
 
         return to_route('admin.assessments.show', $assessment);
     }
@@ -313,38 +176,11 @@ class AssessmentController extends Controller
     public function reject(
         RejectAssessmentRequest $request,
         Assessment $assessment,
-        AssessmentEventRecorder $events,
+        AssessmentWorkflowService $workflow,
     ): RedirectResponse {
-        $this->ensureReviewable($assessment);
-        $previousStatus = $assessment->status;
-        $validated = $request->validated();
-
-        $assessment->update([
-            'status' => AssessmentStatus::Rejected,
-            'rejected_at' => now(),
-        ]);
-
-        $this->recordStatusTransition(
-            events: $events,
-            assessment: $assessment,
-            actor: $request->user(),
-            type: 'admin_rejected',
-            title: __('Admin rejected assessment'),
-            description: __('Admin rejected the assessment without sending an interview email.'),
-            fromStatus: $previousStatus,
-            toStatus: AssessmentStatus::Rejected,
-            payload: ['reason' => $validated['reason']],
-        );
+        $workflow->reject($assessment, $request->user(), $request->validated());
 
         return to_route('admin.assessments.show', $assessment);
-    }
-
-    private function ensureReviewable(Assessment $assessment): void
-    {
-        $this->denyUnless(
-            $this->canReview($assessment),
-            'Only reviewable assessments can be approved or rejected.',
-        );
     }
 
     private function canReview(Assessment $assessment): bool
@@ -374,97 +210,5 @@ class AssessmentController extends Controller
     private function campaignTeamIsWritable(Assessment $assessment): bool
     {
         return $assessment->campaign?->team?->status === TeamStatus::Active;
-    }
-
-    /**
-     * @param  array<string, mixed>  $validated
-     * @return array{
-     *     updates: array<string, mixed>,
-     *     manual_email_supplied: bool
-     * }
-     */
-    private function promotionDetails(Assessment $assessment, array $validated): array
-    {
-        $manualSubject = trim((string) ($validated['email_subject'] ?? ''));
-        $manualBody = trim((string) ($validated['email_body'] ?? ''));
-        $manualEmailSupplied = $manualSubject !== '' && $manualBody !== '';
-        $hasExistingDraft = filled($assessment->ai_email_subject) && filled($assessment->ai_email_body);
-
-        if (($manualSubject !== '') !== ($manualBody !== '')) {
-            throw ValidationException::withMessages([
-                'email_subject' => __('Provide both subject and body for the manual email draft.'),
-                'email_body' => __('Provide both subject and body for the manual email draft.'),
-            ]);
-        }
-
-        if (! $hasExistingDraft && ! $manualEmailSupplied) {
-            throw ValidationException::withMessages([
-                'email_subject' => __('A manual email subject is required because no AI draft exists.'),
-                'email_body' => __('A manual email body is required because no AI draft exists.'),
-            ]);
-        }
-
-        $updates = [
-            'status' => AssessmentStatus::PendingApproval,
-        ];
-
-        if ($manualEmailSupplied) {
-            $updates['ai_email_subject'] = $manualSubject;
-            $updates['ai_email_body'] = $manualBody;
-        }
-
-        return [
-            'updates' => $updates,
-            'manual_email_supplied' => $manualEmailSupplied,
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function recordStatusTransition(
-        AssessmentEventRecorder $events,
-        Assessment $assessment,
-        ?User $actor,
-        string $type,
-        string $title,
-        string $description,
-        AssessmentStatus $fromStatus,
-        AssessmentStatus $toStatus,
-        array $payload = [],
-    ): void {
-        $events->record(
-            assessment: $assessment,
-            type: $type,
-            title: $title,
-            description: $description,
-            payload: $this->statusTransitionPayload($fromStatus, $toStatus, $payload),
-            actor: $actor,
-        );
-    }
-
-    private function denyUnless(bool $condition, string $message): void
-    {
-        if (! $condition) {
-            throw ValidationException::withMessages([
-                'assessment' => __($message),
-            ]);
-        }
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     * @return array<string, mixed>
-     */
-    private function statusTransitionPayload(
-        AssessmentStatus $fromStatus,
-        AssessmentStatus $toStatus,
-        array $payload = [],
-    ): array {
-        return [
-            ...$payload,
-            'from_status' => $fromStatus->value,
-            'to_status' => $toStatus->value,
-        ];
     }
 }

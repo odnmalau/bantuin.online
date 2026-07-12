@@ -138,7 +138,7 @@ test('assessment evaluation pipeline marks passing score as pending approval', f
     $assessment = Assessment::factory()
         ->for(User::factory())
         ->create([
-            'status' => AssessmentStatus::Submitted,
+            'status' => AssessmentStatus::Evaluating,
             'answers_payload' => [
                 [
                     'question_id' => 1,

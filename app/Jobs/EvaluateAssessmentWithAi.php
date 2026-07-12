@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\AssessmentStatus;
 use App\Models\Assessment;
 use App\Models\Team;
 use App\Services\AssessmentEvaluationPipeline;
@@ -36,13 +37,22 @@ class EvaluateAssessmentWithAi implements ShouldQueue
                 Team::query()->whereKey($this->teamId)->lockForUpdate()->firstOrFail();
             }
 
-            $assessment = $this->assessment->fresh('campaign.team');
+            $assessment = Assessment::query()
+                ->whereKey($this->assessment->id)
+                ->lockForUpdate()
+                ->with('campaign.team')
+                ->first();
 
             if ($assessment === null
                 || ($this->teamId !== null && ($assessment->campaign?->team_id !== $this->teamId
-                    || $assessment->campaign->team?->status !== TeamStatus::Active))) {
+                    || $assessment->campaign->team?->status !== TeamStatus::Active))
+                || ! $assessment->status->isEvaluationClaimable()) {
                 return;
             }
+
+            $assessment->update([
+                'status' => AssessmentStatus::Evaluating,
+            ]);
 
             $pipeline->evaluate($assessment);
         }, attempts: 3);

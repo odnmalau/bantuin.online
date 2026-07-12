@@ -118,7 +118,7 @@ test('email is not sent before explicit admin approval', function () {
     Mail::assertNothingSent();
 
     expect($assessment->refresh())
-        ->status->toBe(AssessmentStatus::EmailFailed)
+        ->status->toBe(AssessmentStatus::PendingApproval)
         ->email_sent_at->toBeNull();
 
     Log::shouldHaveReceived('warning')

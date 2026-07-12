@@ -26,15 +26,11 @@ class AssessmentEvaluationPipeline
     {
         $assessment = $assessment->fresh(['campaign']);
 
-        if ($assessment === null) {
+        if ($assessment === null || ! $assessment->status->isEvaluationProcessing()) {
             return null;
         }
 
         $passingScore = $this->threshold->passingScoreFor($assessment);
-
-        $assessment->update([
-            'status' => AssessmentStatus::Evaluating,
-        ]);
 
         $this->events->record(
             assessment: $assessment,
@@ -53,9 +49,11 @@ class AssessmentEvaluationPipeline
                 'exception' => $exception::class,
             ]);
 
-            $assessment->update([
+            if (! $this->persistWhileEvaluating($assessment, [
                 'status' => AssessmentStatus::EvaluationFailed,
-            ]);
+            ])) {
+                return $assessment->fresh();
+            }
 
             $this->events->record(
                 assessment: $assessment,
@@ -170,7 +168,7 @@ class AssessmentEvaluationPipeline
             $criticBlocksAutopilotApproval,
         );
 
-        $assessment->update([
+        if (! $this->persistWhileEvaluating($assessment, [
             'ai_score' => $result->score,
             'essay_score' => $result->score,
             'mcq_score' => $mcqScore,
@@ -183,7 +181,9 @@ class AssessmentEvaluationPipeline
             'ai_email_body' => $emailBody,
             'evaluated_at' => now(),
             'status' => $status,
-        ]);
+        ])) {
+            return $assessment->fresh();
+        }
 
         if (filled($emailSubject) && filled($emailBody)) {
             $this->events->record(
@@ -212,6 +212,22 @@ class AssessmentEvaluationPipeline
         );
 
         return $assessment->fresh();
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function persistWhileEvaluating(Assessment $assessment, array $attributes): bool
+    {
+        $assessment->refresh();
+
+        if (! $assessment->status->isEvaluationProcessing()) {
+            return false;
+        }
+
+        $assessment->update($attributes);
+
+        return true;
     }
 
     /**

@@ -48,7 +48,11 @@ class SendInterviewInvitationEmail implements ShouldQueue
     private function send(?AssessmentEventRecorder $events): void
     {
         $events ??= app(AssessmentEventRecorder::class);
-        $assessment = $this->assessment->fresh(['user', 'campaign.team']);
+        $assessment = Assessment::query()
+            ->whereKey($this->assessment->id)
+            ->lockForUpdate()
+            ->with(['user', 'campaign.team'])
+            ->first();
 
         if ($assessment === null
             || ($this->teamId !== null && ($assessment->campaign?->team_id !== $this->teamId
@@ -56,7 +60,17 @@ class SendInterviewInvitationEmail implements ShouldQueue
             return;
         }
 
-        if (! $this->assessmentIsSendable($assessment)) {
+        if ($assessment->status !== AssessmentStatus::Approved) {
+            Log::warning('Interview invitation email skipped because assessment is not sendable.', [
+                'assessment_id' => $assessment->id,
+                'candidate_id' => $assessment->user_id,
+                'status' => $assessment->status->value,
+            ]);
+
+            return;
+        }
+
+        if (! $this->assessmentHasCompleteDeliveryData($assessment)) {
             Log::warning('Interview invitation email skipped because assessment is not sendable.', [
                 'assessment_id' => $assessment->id,
                 'candidate_id' => $assessment->user_id,
@@ -128,10 +142,9 @@ class SendInterviewInvitationEmail implements ShouldQueue
         return [1, 5, 10];
     }
 
-    private function assessmentIsSendable(Assessment $assessment): bool
+    private function assessmentHasCompleteDeliveryData(Assessment $assessment): bool
     {
-        return $assessment->status === AssessmentStatus::Approved
-            && filled($assessment->approved_email_subject)
+        return filled($assessment->approved_email_subject)
             && filled($assessment->approved_email_body)
             && filled($assessment->user?->email);
     }
