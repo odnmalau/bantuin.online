@@ -115,6 +115,49 @@ class CampaignInvitationService
         ];
     }
 
+    public function revoke(CampaignInvitation $invitation): void
+    {
+        DB::transaction(function () use ($invitation): void {
+            $lockedInvitation = CampaignInvitation::query()->whereKey($invitation->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedInvitation->status !== CampaignInvitationStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('Only pending Campaign Invitations may be revoked.'),
+                ]);
+            }
+
+            $lockedInvitation->update([
+                'status' => CampaignInvitationStatus::Revoked,
+            ]);
+        });
+    }
+
+    public function resend(CampaignInvitation $invitation): void
+    {
+        $plainToken = Str::random(64);
+
+        $lockedInvitation = DB::transaction(function () use ($invitation, $plainToken): CampaignInvitation {
+            $lockedInvitation = CampaignInvitation::query()->whereKey($invitation->id)->lockForUpdate()->firstOrFail();
+
+            if (! in_array($lockedInvitation->status, [CampaignInvitationStatus::Pending, CampaignInvitationStatus::Expired], true)) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('This Campaign Invitation cannot be resent.'),
+                ]);
+            }
+
+            $lockedInvitation->update([
+                'token_hash' => hash('sha256', $plainToken),
+                'status' => CampaignInvitationStatus::Pending,
+                'expires_at' => now()->addDays(14),
+                'sent_at' => null,
+            ]);
+
+            return $lockedInvitation;
+        });
+
+        SendCampaignExamInvitationEmail::dispatch($lockedInvitation, $plainToken);
+    }
+
     public function inviteUrlForToken(string $plainToken): string
     {
         return URL::route('invites.show', ['token' => $plainToken]);
@@ -272,6 +315,11 @@ class CampaignInvitationService
             'accepted_at' => $invitation->accepted_at,
             'expires_at' => $invitation->expires_at,
             'invite_url' => $inviteUrl,
+            'can_revoke' => $invitation->status === CampaignInvitationStatus::Pending,
+            'can_resend' => in_array($invitation->status, [
+                CampaignInvitationStatus::Pending,
+                CampaignInvitationStatus::Expired,
+            ], true),
         ];
     }
 

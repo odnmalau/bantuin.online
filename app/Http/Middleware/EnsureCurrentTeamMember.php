@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Assessment;
 use App\Models\Campaign;
+use App\Models\CampaignInvitation;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
 use Closure;
@@ -39,12 +40,17 @@ class EnsureCurrentTeamMember
 
         $section = $request->route('section');
         $question = $request->route('question');
+        $invitation = $request->route('invitation');
 
         if ($section instanceof CampaignSection && (! $campaign instanceof Campaign || $section->campaign_id !== $campaign->id)) {
             abort(404);
         }
 
         if ($question instanceof CampaignQuestion && (! $campaign instanceof Campaign || $question->campaign_id !== $campaign->id)) {
+            abort(404);
+        }
+
+        if ($invitation instanceof CampaignInvitation && (! $campaign instanceof Campaign || $invitation->campaign_id !== $campaign->id)) {
             abort(404);
         }
 

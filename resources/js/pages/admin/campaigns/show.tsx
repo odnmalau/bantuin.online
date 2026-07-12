@@ -191,6 +191,8 @@ type CampaignInvitationRow = {
     accepted_at: string | null;
     expires_at: string | null;
     invite_url: string | null;
+    can_revoke: boolean;
+    can_resend: boolean;
 };
 
 type Props = {
@@ -1790,13 +1792,16 @@ function CandidateInvitationsDialog({
                 ) : null}
 
                 <div className="overflow-x-auto">
-                    <Table className="min-w-[640px]">
+                    <Table className="min-w-[720px]">
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Email</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Sent</TableHead>
                                 <TableHead>Accepted</TableHead>
+                                <TableHead className="text-right">
+                                    Actions
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1804,7 +1809,7 @@ function CandidateInvitationsDialog({
                                 <TableRow>
                                     <TableCell
                                         className="text-muted-foreground"
-                                        colSpan={4}
+                                        colSpan={5}
                                     >
                                         No invitations yet.
                                     </TableCell>
@@ -1833,6 +1838,72 @@ function CandidateInvitationsDialog({
                                                       invitation.accepted_at,
                                                   ).toLocaleString()
                                                 : '—'}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex justify-end gap-2">
+                                                {invitation.can_resend ? (
+                                                    <Form
+                                                        {...admin.campaigns.invitations.resend.form(
+                                                            {
+                                                                campaign:
+                                                                    campaign.id,
+                                                                invitation:
+                                                                    invitation.id,
+                                                            },
+                                                        )}
+                                                        options={{
+                                                            preserveScroll: true,
+                                                        }}
+                                                    >
+                                                        {({ processing }) => (
+                                                            <Button
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                                size="sm"
+                                                                type="submit"
+                                                                variant="outline"
+                                                            >
+                                                                {processing && (
+                                                                    <Spinner />
+                                                                )}
+                                                                Resend
+                                                            </Button>
+                                                        )}
+                                                    </Form>
+                                                ) : null}
+                                                {invitation.can_revoke ? (
+                                                    <Form
+                                                        {...admin.campaigns.invitations.destroy.form(
+                                                            {
+                                                                campaign:
+                                                                    campaign.id,
+                                                                invitation:
+                                                                    invitation.id,
+                                                            },
+                                                        )}
+                                                        options={{
+                                                            preserveScroll: true,
+                                                        }}
+                                                    >
+                                                        {({ processing }) => (
+                                                            <Button
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                                size="sm"
+                                                                type="submit"
+                                                                variant="destructive"
+                                                            >
+                                                                {processing && (
+                                                                    <Spinner />
+                                                                )}
+                                                                Revoke
+                                                            </Button>
+                                                        )}
+                                                    </Form>
+                                                ) : null}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))

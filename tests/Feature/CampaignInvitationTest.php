@@ -129,6 +129,104 @@ test('campaign exam invitation email job ignores a stale token', function () {
     Mail::assertSent(CampaignExamInvitationMail::class, 1);
 });
 
+test('owner can revoke a pending Campaign Invitation', function () {
+    $owner = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($owner->currentTeam)->active()->create([
+        'created_by' => $owner->id,
+    ]);
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()
+        ->for($campaign)
+        ->createWithPlainToken([
+            'email' => 'candidate@example.com',
+            'invited_by' => $owner->id,
+        ]);
+
+    $this->actingAs($owner)
+        ->delete(route('admin.campaigns.invitations.destroy', [$campaign, $invitation]))
+        ->assertRedirect();
+
+    expect($invitation->fresh()->status)->toBe(CampaignInvitationStatus::Revoked);
+
+    $this->get(route('invites.show', $plainToken))
+        ->assertRedirect(route('login'))
+        ->assertSessionHas('status');
+});
+
+test('owner can resend a pending Campaign Invitation and rotate its token', function () {
+    Queue::fake();
+
+    $owner = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($owner->currentTeam)->active()->create([
+        'created_by' => $owner->id,
+    ]);
+    ['invitation' => $invitation, 'plain_token' => $oldToken] = CampaignInvitation::factory()
+        ->for($campaign)
+        ->createWithPlainToken([
+            'email' => 'candidate@example.com',
+            'invited_by' => $owner->id,
+        ]);
+    $oldTokenHash = $invitation->token_hash;
+
+    $this->actingAs($owner)
+        ->post(route('admin.campaigns.invitations.resend', [$campaign, $invitation]))
+        ->assertRedirect();
+
+    $invitation = $invitation->fresh();
+
+    expect($invitation)
+        ->status->toBe(CampaignInvitationStatus::Pending)
+        ->token_hash->not->toBe($oldTokenHash)
+        ->expires_at->isFuture()->toBeTrue()
+        ->sent_at->toBeNull();
+
+    Queue::assertPushed(SendCampaignExamInvitationEmail::class);
+
+    $this->get(route('invites.show', $oldToken))
+        ->assertRedirect(route('login'))
+        ->assertSessionHas('status');
+});
+
+test('accepted Campaign Invitations cannot be revoked', function () {
+    $owner = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create([
+        'email' => 'candidate@example.com',
+    ]);
+    $campaign = Campaign::factory()->for($owner->currentTeam)->active()->create([
+        'created_by' => $owner->id,
+    ]);
+    $invitation = CampaignInvitation::factory()->for($campaign)->accepted($candidate)->create([
+        'invited_by' => $owner->id,
+    ]);
+
+    $this->actingAs($owner)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->delete(route('admin.campaigns.invitations.destroy', [$campaign, $invitation]))
+        ->assertRedirect(route('admin.campaigns.show', $campaign))
+        ->assertSessionHasErrors('invitation');
+
+    expect($invitation->fresh()->status)->toBe(CampaignInvitationStatus::Accepted);
+});
+
+test('user without campaign permission cannot resend a Campaign Invitation', function () {
+    Queue::fake();
+
+    $owner = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($owner->currentTeam)->active()->create([
+        'created_by' => $owner->id,
+    ]);
+    $invitation = CampaignInvitation::factory()->for($campaign)->create([
+        'email' => 'candidate@example.com',
+        'invited_by' => $owner->id,
+    ]);
+    $outsider = User::factory()->create();
+
+    $this->actingAs($outsider)
+        ->post(route('admin.campaigns.invitations.resend', [$campaign, $invitation]))
+        ->assertForbidden();
+
+    Queue::assertNothingPushed();
+});
+
 test('invite link stores pending redemption and redirects to login', function () {
     $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->active()->create();

@@ -69,6 +69,12 @@ Route::middleware(['auth', 'current-team'])
         Route::post('campaigns/{campaign}/clone', [CampaignCloneController::class, 'store'])->name('campaigns.clone');
         Route::post('campaigns/{campaign}/archive', [CampaignStatusController::class, 'archive'])->name('campaigns.archive');
         Route::post('campaigns/{campaign}/invitations', [CampaignInvitationController::class, 'store'])->name('campaigns.invitations.store');
+        Route::delete('campaigns/{campaign}/invitations/{invitation}', [CampaignInvitationController::class, 'destroy'])
+            ->scopeBindings()
+            ->name('campaigns.invitations.destroy');
+        Route::post('campaigns/{campaign}/invitations/{invitation}/resend', [CampaignInvitationController::class, 'resend'])
+            ->scopeBindings()
+            ->name('campaigns.invitations.resend');
 
         Route::middleware('campaign-definition-editable')->group(function () {
             Route::get('campaigns/{campaign}/edit', [CampaignController::class, 'edit'])->name('campaigns.edit');
