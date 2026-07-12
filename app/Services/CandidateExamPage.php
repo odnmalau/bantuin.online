@@ -59,6 +59,17 @@ class CandidateExamPage
         }
 
         $examSession = $this->examSessions->sessionPayloadForInertia($session, $campaign);
+
+        $assessment = $this->currentAssessment($user, $campaign);
+
+        if ($assessment !== null) {
+            return [
+                'state' => 'submitted',
+                'campaign' => $this->campaignSummary($campaign),
+                'assessment' => $this->assessmentSummary($assessment),
+            ];
+        }
+
         $session = $session->fresh();
 
         if ($examSession['ready_to_finalize'] === true) {

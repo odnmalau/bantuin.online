@@ -14,6 +14,7 @@ use App\Services\ExamSessionFinalizer;
 use App\Services\ExamSessionService;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 test('exam session finalizer creates the assessment and queues processing', function () {
     Bus::fake();
@@ -152,4 +153,91 @@ test('exam session finalizer can force submit incomplete answers', function () {
         ScreenResumeWithAi::class,
         EvaluateAssessmentWithAi::class,
     ]);
+});
+
+test('exam session finalizer auto-submits expired incomplete sessions without a resume', function () {
+    Bus::fake();
+    Storage::fake('local');
+
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create([
+        'duration_minutes' => 5,
+    ]);
+    $answeredQuestion = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create([
+            'status' => QuestionStatus::Approved,
+            'prompt' => 'Answered question',
+        ]);
+    $unansweredQuestion = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create([
+            'status' => QuestionStatus::Approved,
+            'prompt' => 'Unanswered question',
+        ]);
+    $session = app(ExamSessionService::class)->startSession($candidate, $campaign);
+    $session->update([
+        'current_section_expires_at' => now()->subMinute(),
+        'answer_drafts' => [
+            (string) $answeredQuestion->id => 'Only one answer.',
+        ],
+    ]);
+
+    $assessment = app(ExamSessionFinalizer::class)->finalize(
+        session: $session->fresh(),
+        campaign: $campaign,
+        submissionReason: 'section_timer_expired',
+        status: ExamSessionStatus::AutoSubmitted,
+        allowIncompleteAnswers: true,
+    );
+
+    expect($assessment)
+        ->resume_path->toBeNull()
+        ->and(collect($assessment->answers_payload)->firstWhere('question_id', $answeredQuestion->id)['answer'])
+        ->toBe('Only one answer.')
+        ->and(collect($assessment->answers_payload)->firstWhere('question_id', $unansweredQuestion->id)['answer'])
+        ->toBe('')
+        ->and($session->fresh())
+        ->status->toBe(ExamSessionStatus::AutoSubmitted)
+        ->submission_reason->toBe('section_timer_expired')
+        ->and($assessment->events()->pluck('type')->all())
+        ->toBe([
+            'candidate_submitted',
+            'assessment_queued',
+        ])
+        ->and($assessment->events()->where('type', 'candidate_submitted')->value('payload'))
+        ->toMatchArray(['resume_uploaded' => false]);
+
+    Bus::assertChained([
+        ScreenResumeWithAi::class,
+        EvaluateAssessmentWithAi::class,
+    ]);
+});
+
+test('exam session finalizer still requires a resume for manual submissions', function () {
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $question = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create([
+            'status' => QuestionStatus::Approved,
+        ]);
+    $sessions = app(ExamSessionService::class);
+    $session = $sessions->startSession($candidate, $campaign);
+    $session = $sessions->saveCurrentSectionAnswers($session, $campaign, [
+        $question->id => 'Complete answer.',
+    ]);
+    $sessions->advanceSection($session, $campaign);
+
+    expect(fn () => app(ExamSessionFinalizer::class)->finalize(
+        session: $session->fresh(),
+        campaign: $campaign,
+    ))->toThrow(ValidationException::class);
 });

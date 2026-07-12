@@ -89,7 +89,11 @@ class ExamSessionService
     public function saveCurrentSectionAnswers(ExamSession $session, Campaign $campaign, array $answers): ExamSession
     {
         $this->assertSessionActive($session, $campaign);
-        $this->syncSectionExpiry($session, $campaign);
+        $result = $this->syncSectionExpiry($session, $campaign);
+
+        if ($result['finalized'] || $result['advanced']) {
+            return $session->fresh();
+        }
 
         $section = $this->currentSectionOrFail($session, $campaign);
         $questions = $this->approvedQuestionsForSection($section);
@@ -116,7 +120,24 @@ class ExamSessionService
     public function advanceSection(ExamSession $session, Campaign $campaign): array
     {
         $this->assertSessionActive($session, $campaign);
-        $this->syncSectionExpiry($session, $campaign);
+        $result = $this->syncSectionExpiry($session, $campaign);
+
+        if ($result['finalized']) {
+            return [
+                'session' => $session->fresh(),
+                'completed' => true,
+            ];
+        }
+
+        if ($result['advanced']) {
+            $session = $session->fresh();
+
+            return [
+                'session' => $session,
+                'completed' => $session->current_section_id === null,
+            ];
+        }
+
         $this->assertCurrentSectionNotExpired($session);
 
         $section = $this->currentSectionOrFail($session, $campaign);
@@ -201,6 +222,7 @@ class ExamSessionService
     public function sessionPayloadForInertia(ExamSession $session, Campaign $campaign): array
     {
         $this->syncSectionExpiry($session, $campaign);
+        $session = $session->fresh();
 
         return [
             'id' => $session->id,
@@ -212,7 +234,8 @@ class ExamSessionService
             'warning_count' => $session->warning_count,
             'max_warnings' => $this->maxIntegrityWarnings(),
             'answer_drafts' => $session->answer_drafts ?? [],
-            'ready_to_finalize' => $session->current_section_id === null
+            'ready_to_finalize' => $session->isActive()
+                && $session->current_section_id === null
                 && count($session->completed_section_ids ?? []) === $this->orderedExamSections($campaign)->count(),
             'secure_exam' => [
                 'require_fullscreen' => (bool) config('assessment.secure_exam.require_fullscreen', true),
@@ -249,33 +272,59 @@ class ExamSessionService
             ->values();
     }
 
-    public function syncSectionExpiry(ExamSession $session, Campaign $campaign): void
+    /**
+     * Past section timers advance a complete section, or auto-finalize the Exam Session
+     * when answers are incomplete. Incomplete expiry never soft-locks the session.
+     *
+     * @return array{advanced: bool, finalized: bool, assessment: ?Assessment}
+     */
+    public function syncSectionExpiry(ExamSession $session, Campaign $campaign): array
     {
+        $noop = [
+            'advanced' => false,
+            'finalized' => false,
+            'assessment' => null,
+        ];
+
         if (! $session->isActive() || $session->current_section_id === null) {
-            return;
+            return $noop;
         }
 
         if (! (bool) config('assessment.secure_exam.enforce_section_timers', true)) {
-            return;
+            return $noop;
         }
 
         $expiresAt = $session->current_section_expires_at;
 
         if ($expiresAt === null || $expiresAt->isFuture()) {
-            return;
+            return $noop;
         }
 
         $section = $this->currentSectionOrFail($session, $campaign);
 
-        try {
-            $this->assertSectionAnswersComplete($session, $section);
-        } catch (ValidationException) {
-            throw ValidationException::withMessages([
-                'session' => __('Time expired for this section. Answer every question before the timer ends.'),
-            ]);
+        if ($this->sectionAnswersAreComplete($session, $section)) {
+            $this->completeSectionAndAdvance($session, $campaign, $section);
+
+            return [
+                'advanced' => true,
+                'finalized' => false,
+                'assessment' => null,
+            ];
         }
 
-        $this->completeSectionAndAdvance($session, $campaign, $section);
+        $assessment = $this->finalizeSession(
+            $session,
+            $campaign,
+            submissionReason: 'section_timer_expired',
+            status: ExamSessionStatus::AutoSubmitted,
+            allowIncompleteAnswers: true,
+        );
+
+        return [
+            'advanced' => false,
+            'finalized' => true,
+            'assessment' => $assessment,
+        ];
     }
 
     /**
@@ -394,6 +443,21 @@ class ExamSessionService
         ]);
 
         return $section->questions->values();
+    }
+
+    private function sectionAnswersAreComplete(ExamSession $session, CampaignSection $section): bool
+    {
+        $drafts = $session->answer_drafts ?? [];
+
+        foreach ($this->approvedQuestionsForSection($section) as $question) {
+            $answer = $drafts[(string) $question->id] ?? null;
+
+            if (! is_string($answer) || trim($answer) === '') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function assertSectionAnswersComplete(ExamSession $session, CampaignSection $section): void

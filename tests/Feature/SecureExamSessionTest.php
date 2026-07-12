@@ -119,14 +119,93 @@ test('candidate cannot save an exam answer that exceeds the configured max lengt
         ->assertSessionHasErrors("answers.{$question->id}");
 });
 
-test('candidate cannot advance after the section timer expires', function () {
+test('incomplete section timer expiry auto-finalizes the exam session', function () {
+    Bus::fake();
+    Storage::fake('local');
+
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
         'duration_minutes' => 5,
     ]);
-    $question = CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+    CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+
+    $session = startCandidateExamSession($candidate, $campaign);
+    $session->update([
+        'current_section_expires_at' => now()->subMinute(),
+        'answer_drafts' => [],
+    ]);
+
+    $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.exam-sessions.advance', [$campaign, $session]))
+        ->assertRedirect();
+
+    $session = $session->fresh();
+    $assessment = Assessment::query()->whereBelongsTo($candidate)->sole();
+
+    expect($session)
+        ->status->toBe(ExamSessionStatus::AutoSubmitted)
+        ->submission_reason->toBe('section_timer_expired')
+        ->assessment_id->toBe($assessment->id)
+        ->and($assessment->resume_path)->toBeNull()
+        ->and($assessment->events()->where('type', 'candidate_submitted')->value('payload'))
+        ->toMatchArray(['resume_uploaded' => false]);
+});
+
+test('exam page loads after incomplete section timer expiry', function () {
+    Bus::fake();
+    Storage::fake('local');
+
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create([
+        'duration_minutes' => 5,
+    ]);
+    CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+
+    $session = startCandidateExamSession($candidate, $campaign);
+    $session->update([
+        'current_section_expires_at' => now()->subMinute(),
+        'answer_drafts' => [],
+    ]);
+
+    $this->actingAs($candidate)
+        ->get(route('candidate.campaigns.exam', $campaign))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('candidate/exam')
+            ->where('state', 'submitted')
+            ->has('assessment.id')
+            ->missing('examSession'),
+        );
+
+    expect($session->fresh())
+        ->status->toBe(ExamSessionStatus::AutoSubmitted)
+        ->submission_reason->toBe('section_timer_expired');
+});
+
+test('complete section timer expiry advances only to the next section', function () {
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $firstSection = CampaignSection::factory()->for($campaign)->create([
+        'duration_minutes' => 5,
+        'sort_order' => 1,
+    ]);
+    $secondSection = CampaignSection::factory()->for($campaign)->create([
+        'duration_minutes' => 10,
+        'sort_order' => 2,
+    ]);
+    $firstQuestion = CampaignQuestion::factory()->for($campaign)->for($firstSection, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+    CampaignQuestion::factory()->for($campaign)->for($secondSection, 'section')->create([
         'status' => QuestionStatus::Approved,
     ]);
 
@@ -134,14 +213,23 @@ test('candidate cannot advance after the section timer expires', function () {
     $session->update([
         'current_section_expires_at' => now()->subMinute(),
         'answer_drafts' => [
-            (string) $question->id => 'Answered before expiry.',
+            (string) $firstQuestion->id => 'Answered before expiry.',
         ],
     ]);
 
     $this->actingAs($candidate)
         ->from(route('candidate.campaigns.exam', $campaign))
         ->post(route('candidate.campaigns.exam-sessions.advance', [$campaign, $session]))
-        ->assertSessionHasErrors('section');
+        ->assertRedirect(route('candidate.campaigns.exam', $campaign))
+        ->assertSessionHasNoErrors();
+
+    $session = $session->fresh();
+
+    expect($session)
+        ->status->toBe(ExamSessionStatus::InProgress)
+        ->current_section_id->toBe($secondSection->id)
+        ->completed_section_ids->toBe([$firstSection->id])
+        ->and(Assessment::query()->whereBelongsTo($candidate)->exists())->toBeFalse();
 });
 
 test('integrity violations increment warning count on the session', function () {
