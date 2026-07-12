@@ -96,6 +96,16 @@ class Campaign extends Model
     }
 
     /**
+     * Get exam sessions for this campaign.
+     *
+     * @return HasMany<ExamSession, $this>
+     */
+    public function examSessions(): HasMany
+    {
+        return $this->hasMany(ExamSession::class);
+    }
+
+    /**
      * @return array{resume_score: int, essay_score: int, mcq_score: int}
      */
     public static function defaultRankingWeights(): array

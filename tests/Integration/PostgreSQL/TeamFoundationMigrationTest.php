@@ -350,3 +350,163 @@ test('postgresql backfill fails when the legacy campaign count is not four', fun
         dropTeamFoundationPostgresSchema($connection, $schema);
     }
 });
+
+/**
+ * @return list<string>
+ */
+function allDatabaseMigrationPaths(): array
+{
+    $paths = glob(database_path('migrations/*.php')) ?: [];
+    sort($paths);
+
+    return array_values($paths);
+}
+
+/**
+ * @return array{user_id: int, team_id: int, campaign_id: int}
+ */
+function seedModernTeamCampaign(string $connection, string $emailSuffix = 'history'): array
+{
+    $database = DB::connection($connection);
+    $now = now();
+
+    return $database->transaction(function () use ($database, $now, $emailSuffix): array {
+        $userId = $database->table('users')->insertGetId([
+            'name' => 'History Owner',
+            'email' => "owner-{$emailSuffix}@example.com",
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $teamId = $database->table('teams')->insertGetId([
+            'name' => "History Team {$emailSuffix}",
+            'status' => 'active',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $database->table('team_memberships')->insert([
+            'team_id' => $teamId,
+            'user_id' => $userId,
+            'role' => 'owner',
+            'started_at' => $now,
+            'last_used_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $database->table('users')->where('id', $userId)->update([
+            'current_team_id' => $teamId,
+        ]);
+
+        $campaignId = $database->table('campaigns')->insertGetId([
+            'team_id' => $teamId,
+            'created_by' => $userId,
+            'title' => "History Campaign {$emailSuffix}",
+            'role_title' => 'Engineer',
+            'status' => 'draft',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return [
+            'user_id' => $userId,
+            'team_id' => $teamId,
+            'campaign_id' => $campaignId,
+        ];
+    });
+}
+
+test('postgresql restricts campaign deletion when invitations or exam sessions exist', function () {
+    ['connection' => $connection, 'schema' => $schema] = createTeamFoundationPostgresSchema();
+    $migrationPath = database_path('migrations/2026_07_12_125254_restrict_campaign_history_deletion.php');
+    $previousDefault = config('database.default');
+
+    try {
+        migrateTeamFoundationPaths($connection, allDatabaseMigrationPaths());
+        $database = DB::connection($connection);
+
+        $withInvitation = seedModernTeamCampaign($connection, 'invitation');
+        $invitationId = $database->table('campaign_invitations')->insertGetId([
+            'campaign_id' => $withInvitation['campaign_id'],
+            'email' => 'candidate-invitation@example.com',
+            'token_hash' => hash('sha256', 'invitation-token'),
+            'invited_by' => $withInvitation['user_id'],
+            'status' => CampaignInvitationStatus::Pending->value,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        expect(fn () => $database->table('campaigns')->where('id', $withInvitation['campaign_id'])->delete())
+            ->toThrow(QueryException::class)
+            ->and($database->table('campaigns')->where('id', $withInvitation['campaign_id'])->exists())->toBeTrue()
+            ->and($database->table('campaign_invitations')->where('id', $invitationId)->exists())->toBeTrue();
+
+        $withSession = seedModernTeamCampaign($connection, 'session');
+        $candidateId = $database->table('users')->insertGetId([
+            'name' => 'History Candidate',
+            'email' => 'candidate-session@example.com',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $sessionId = $database->table('exam_sessions')->insertGetId([
+            'user_id' => $candidateId,
+            'campaign_id' => $withSession['campaign_id'],
+            'status' => ExamSessionStatus::InProgress->value,
+            'warning_count' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        expect(fn () => $database->table('campaigns')->where('id', $withSession['campaign_id'])->delete())
+            ->toThrow(QueryException::class)
+            ->and($database->table('campaigns')->where('id', $withSession['campaign_id'])->exists())->toBeTrue()
+            ->and($database->table('exam_sessions')->where('id', $sessionId)->exists())->toBeTrue();
+
+        $pristine = seedModernTeamCampaign($connection, 'pristine');
+        $database->table('campaigns')->where('id', $pristine['campaign_id'])->delete();
+        expect($database->table('campaigns')->where('id', $pristine['campaign_id'])->exists())->toBeFalse();
+
+        config(['database.default' => $connection]);
+        DB::purge($connection);
+        /** @var object{up: callable, down: callable} $migration */
+        $migration = require $migrationPath;
+        $migration->down();
+
+        $cascaded = seedModernTeamCampaign($connection, 'cascade');
+        $cascadedInvitationId = DB::connection($connection)->table('campaign_invitations')->insertGetId([
+            'campaign_id' => $cascaded['campaign_id'],
+            'email' => 'candidate-cascade@example.com',
+            'token_hash' => hash('sha256', 'cascade-token'),
+            'invited_by' => $cascaded['user_id'],
+            'status' => CampaignInvitationStatus::Pending->value,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::connection($connection)->table('campaigns')->where('id', $cascaded['campaign_id'])->delete();
+        expect(DB::connection($connection)->table('campaigns')->where('id', $cascaded['campaign_id'])->exists())->toBeFalse()
+            ->and(DB::connection($connection)->table('campaign_invitations')->where('id', $cascadedInvitationId)->exists())->toBeFalse();
+
+        $migration->up();
+
+        $restrictedAgain = seedModernTeamCampaign($connection, 'restrict-again');
+        DB::connection($connection)->table('campaign_invitations')->insert([
+            'campaign_id' => $restrictedAgain['campaign_id'],
+            'email' => 'candidate-restrict-again@example.com',
+            'token_hash' => hash('sha256', 'restrict-again-token'),
+            'invited_by' => $restrictedAgain['user_id'],
+            'status' => CampaignInvitationStatus::Pending->value,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        expect(fn () => DB::connection($connection)->table('campaigns')->where('id', $restrictedAgain['campaign_id'])->delete())
+            ->toThrow(QueryException::class)
+            ->and(DB::connection($connection)->table('campaigns')->where('id', $restrictedAgain['campaign_id'])->exists())->toBeTrue();
+    } finally {
+        config(['database.default' => $previousDefault]);
+        DB::purge($connection);
+        dropTeamFoundationPostgresSchema($connection, $schema);
+    }
+});

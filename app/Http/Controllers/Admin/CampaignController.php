@@ -235,13 +235,19 @@ class CampaignController extends Controller
      */
     public function destroy(Campaign $campaign): RedirectResponse
     {
-        if ($campaign->assessments()->exists()) {
-            throw ValidationException::withMessages([
-                'campaign' => __('Campaigns with submitted assessments cannot be deleted. Archive the campaign instead.'),
-            ]);
-        }
+        DB::transaction(function () use ($campaign): void {
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
 
-        $campaign->delete();
+            if ($lockedCampaign->assessments()->exists()
+                || $lockedCampaign->invitations()->exists()
+                || $lockedCampaign->examSessions()->exists()) {
+                throw ValidationException::withMessages([
+                    'campaign' => __('Campaigns with invitations, exam attempts, or assessments cannot be deleted. Archive the campaign instead.'),
+                ]);
+            }
+
+            $lockedCampaign->delete();
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign deleted.')]);
 

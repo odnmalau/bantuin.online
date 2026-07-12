@@ -488,7 +488,8 @@ function DeleteCampaignDialog({
 
                 {!canDelete && (
                     <p className="text-sm text-destructive">
-                        Campaigns with submitted assessments cannot be deleted.
+                        Campaigns with invitations, exam attempts, or
+                        assessments cannot be deleted.
                     </p>
                 )}
 

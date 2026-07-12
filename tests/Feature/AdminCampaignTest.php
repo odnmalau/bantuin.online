@@ -1,10 +1,14 @@
 <?php
 
+use App\CampaignInvitationStatus;
 use App\CampaignStatus;
+use App\ExamSessionStatus;
 use App\Models\Assessment;
 use App\Models\Campaign;
+use App\Models\CampaignInvitation;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\ExamSession;
 use App\Models\User;
 use App\QuestionGradingMode;
 use App\QuestionStatus;
@@ -603,7 +607,7 @@ test('admin can update campaign ranking weights from the detail page', function 
         ->and($campaign->hasConfiguredRankingWeights())->toBeTrue();
 });
 
-test('admin can delete a campaign without submitted assessments', function () {
+test('admin can delete a pristine campaign without invitations sessions or assessments', function () {
     $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
@@ -621,8 +625,83 @@ test('campaign index requires confirmation before deleting a campaign', function
     expect($source)
         ->toContain('DialogTitle')
         ->toContain('Delete campaign?')
-        ->toContain('Campaigns with submitted assessments cannot be deleted.')
+        ->toContain('Campaigns with invitations, exam attempts, or assessments cannot be deleted.')
         ->toContain('CampaignController.destroy.form.delete');
+});
+
+test('admin cannot delete a campaign that has a pending invitation', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+    $invitation = CampaignInvitation::factory()->for($campaign)->create([
+        'invited_by' => $admin->id,
+        'status' => CampaignInvitationStatus::Pending,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->delete(route('admin.campaigns.destroy', $campaign))
+        ->assertSessionHasErrors('campaign')
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    expect(Campaign::query()->whereKey($campaign->id)->exists())->toBeTrue()
+        ->and(CampaignInvitation::query()->whereKey($invitation->id)->exists())->toBeTrue();
+});
+
+test('admin cannot delete a campaign that has an accepted invitation', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+    $invitation = CampaignInvitation::factory()->for($campaign)->accepted($candidate)->create([
+        'invited_by' => $admin->id,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->delete(route('admin.campaigns.destroy', $campaign))
+        ->assertSessionHasErrors('campaign')
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    expect(Campaign::query()->whereKey($campaign->id)->exists())->toBeTrue()
+        ->and(CampaignInvitation::query()->whereKey($invitation->id)->exists())->toBeTrue();
+});
+
+test('admin cannot delete a campaign that has an in-progress exam session', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+    $session = ExamSession::factory()->for($campaign)->for($candidate)->create([
+        'status' => ExamSessionStatus::InProgress,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->delete(route('admin.campaigns.destroy', $campaign))
+        ->assertSessionHasErrors('campaign')
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    expect(Campaign::query()->whereKey($campaign->id)->exists())->toBeTrue()
+        ->and(ExamSession::query()->whereKey($session->id)->exists())->toBeTrue();
+});
+
+test('admin cannot delete a campaign that has a finalized exam session without an assessment', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+    $session = ExamSession::factory()->for($campaign)->for($candidate)->create([
+        'status' => ExamSessionStatus::Finalized,
+        'assessment_id' => null,
+        'finalized_at' => now(),
+        'submission_reason' => 'candidate_submitted',
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->delete(route('admin.campaigns.destroy', $campaign))
+        ->assertSessionHasErrors('campaign')
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    expect(Campaign::query()->whereKey($campaign->id)->exists())->toBeTrue()
+        ->and(ExamSession::query()->whereKey($session->id)->exists())->toBeTrue();
 });
 
 test('admin cannot delete a campaign that already has assessments', function () {
