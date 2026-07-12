@@ -6,16 +6,14 @@ on:
       - develop
       - main
       - master
-      - workos
   pull_request:
     branches:
       - develop
       - main
       - master
-      - workos
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   quality:
@@ -29,6 +27,7 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: '8.4'
+          tools: composer:v2
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6.0.8
@@ -45,17 +44,20 @@ jobs:
       - name: Install Node Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run Pint
-        run: composer lint
+      - name: Copy Environment File
+        run: cp .env.example .env
 
-      - name: Format Frontend
-        run: pnpm run format
+      - name: Generate Application Key
+        run: php artisan key:generate
 
-      - name: Lint Frontend
-        run: pnpm run lint
+      - name: Check PHP style
+        run: composer lint:check
 
-      # - name: Commit Changes
-      #   uses: stefanzweifel/git-auto-commit-action@v7
-      #   with:
-      #     commit_message: fix code style
-      #     commit_options: '--no-verify'
+      - name: Check Frontend Format
+        run: pnpm run format:check
+
+      - name: Check Frontend Lint
+        run: pnpm run lint:check
+
+      - name: Check Types
+        run: pnpm run types:check
