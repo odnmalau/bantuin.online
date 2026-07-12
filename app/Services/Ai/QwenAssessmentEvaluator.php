@@ -51,7 +51,7 @@ class QwenAssessmentEvaluator
      */
     public function promptPayload(Assessment $assessment): array
     {
-        $assessment->loadMissing(['campaign', 'user']);
+        $assessment->loadMissing(['campaign']);
 
         $answers = collect($assessment->answers_payload);
 
@@ -77,10 +77,7 @@ class QwenAssessmentEvaluator
                 ->values()
                 ->all(),
             'untrusted_candidate_data' => [
-                'candidate' => [
-                    'name' => $assessment->user?->name,
-                    'email' => $assessment->user?->email,
-                ],
+                'assessment_id' => $assessment->id,
                 'answers' => $answers
                     ->map(fn (array $answer): array => [
                         'question_id' => $answer['question_id'] ?? null,

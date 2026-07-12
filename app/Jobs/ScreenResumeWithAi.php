@@ -47,11 +47,20 @@ class ScreenResumeWithAi implements ShouldQueue
         $assessment = $claimed->assessment;
 
         try {
-            $resumeText = $extractor->extract($assessment->resume_path);
+            $extraction = $extractor->extract($assessment->resume_path);
+            $resumeText = $extraction->text;
 
             $assessment->resume_text = $resumeText;
             $result = $screener->screen($assessment);
-            $needsManualReview = $result->confidence < 50 || ! empty($result->riskFlags);
+            $needsManualReview = $extraction->wasTruncated
+                || $result->confidence < 50
+                || ! empty($result->riskFlags);
+
+            $resumePayload = $result->payload();
+
+            if ($extraction->wasTruncated) {
+                $resumePayload['input_truncated'] = true;
+            }
 
             $coordinator->finalizeResumeScreening(
                 assessment: $assessment,
@@ -60,7 +69,7 @@ class ScreenResumeWithAi implements ShouldQueue
                     'resume_text' => $resumeText,
                     'resume_score' => $result->score,
                     'resume_justification' => $result->justification,
-                    'resume_payload' => $result->payload(),
+                    'resume_payload' => $resumePayload,
                     'needs_manual_review' => $needsManualReview,
                     'status' => AssessmentStatus::Submitted,
                 ],
@@ -70,7 +79,9 @@ class ScreenResumeWithAi implements ShouldQueue
                         title: __('Resume text extracted'),
                         description: __('Resume text extraction completed.'),
                         payload: [
-                            'character_count' => mb_strlen($resumeText),
+                            'original_character_count' => $extraction->originalCharacterCount,
+                            'retained_character_count' => $extraction->retainedCharacterCount,
+                            'was_truncated' => $extraction->wasTruncated,
                             'has_text' => filled($resumeText),
                         ],
                     ),
@@ -85,6 +96,7 @@ class ScreenResumeWithAi implements ShouldQueue
                             'missing_skills_count' => count($result->missingSkills),
                             'risk_flags_count' => count($result->riskFlags),
                             'needs_manual_review' => $needsManualReview,
+                            'was_truncated' => $extraction->wasTruncated,
                         ],
                     ),
                 ],

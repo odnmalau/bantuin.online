@@ -21,6 +21,7 @@ return [
 
     'resume' => [
         'max_kilobytes' => (int) env('ASSESSMENT_RESUME_MAX_KB', 5120),
+        'max_extracted_characters' => (int) env('ASSESSMENT_RESUME_MAX_EXTRACTED_CHARACTERS', 30000),
         'pdftotext_bin' => env('ASSESSMENT_PDFTOTEXT_BIN'),
     ],
 

@@ -15,7 +15,7 @@ class QwenResumeScreener
      */
     public function screen(Assessment $assessment): ResumeScreeningResult
     {
-        $assessment->loadMissing('user', 'campaign');
+        $assessment->loadMissing('campaign');
 
         $this->assertQwenApiKeyConfigured(ResumeScreeningException::class);
 
@@ -70,12 +70,8 @@ class QwenResumeScreener
                 'human_review_required' => true,
             ],
             'untrusted_candidate_data' => [
-                'candidate' => [
-                    'name' => $assessment->user?->name,
-                    'email' => $assessment->user?->email,
-                ],
+                'assessment_id' => $assessment->id,
                 'resume' => [
-                    'original_name' => $assessment->resume_original_name,
                     'text' => $assessment->resume_text,
                 ],
             ],

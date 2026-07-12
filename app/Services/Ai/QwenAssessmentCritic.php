@@ -21,7 +21,7 @@ class QwenAssessmentCritic
         int $reviewScore,
         int $passingScore,
     ): AssessmentCriticResult {
-        $assessment->loadMissing('user', 'campaign');
+        $assessment->loadMissing('campaign');
 
         $this->assertQwenApiKeyConfigured(AssessmentCriticException::class);
 
@@ -50,10 +50,7 @@ class QwenAssessmentCritic
             'instruction' => 'Critic-check this assessment package. Output JSON matching the structured schema.',
             'threshold' => $passingScore,
             'review_score' => $reviewScore,
-            'candidate' => [
-                'name' => $assessment->user?->name,
-                'email' => $assessment->user?->email,
-            ],
+            'assessment_id' => $assessment->id,
             'campaign' => [
                 'title' => $assessment->campaign?->title,
                 'role_title' => $assessment->campaign?->role_title,

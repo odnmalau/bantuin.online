@@ -16,6 +16,7 @@ use App\Services\AssessmentEvaluationOutcome;
 use App\Services\AssessmentEvaluationPipeline;
 use App\Services\AssessmentExternalWorkCoordinator;
 use App\Services\ClaimedAssessmentWork;
+use App\Services\ResumeTextExtractionResult;
 use App\Services\ResumeTextExtractor;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -42,10 +43,10 @@ test('resume screening extractor and screener do not open nested transactions', 
     $extractor = Mockery::mock(ResumeTextExtractor::class);
     $extractor->shouldReceive('extract')
         ->once()
-        ->andReturnUsing(function () use (&$extractorSeenLevel): string {
+        ->andReturnUsing(function () use (&$extractorSeenLevel): ResumeTextExtractionResult {
             $extractorSeenLevel = DB::transactionLevel();
 
-            return 'Laravel experience';
+            return ResumeTextExtractionResult::fromNormalizedText('Laravel experience');
         });
 
     $screener = Mockery::mock(QwenResumeScreener::class);
