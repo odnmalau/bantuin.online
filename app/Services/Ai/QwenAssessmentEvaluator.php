@@ -53,11 +53,9 @@ class QwenAssessmentEvaluator
     {
         $assessment->loadMissing(['campaign', 'user']);
 
+        $answers = collect($assessment->answers_payload);
+
         return [
-            'candidate' => [
-                'name' => $assessment->user?->name,
-                'email' => $assessment->user?->email,
-            ],
             'campaign' => $assessment->campaign === null ? null : [
                 'title' => $assessment->campaign->title,
                 'role_title' => $assessment->campaign->role_title,
@@ -66,7 +64,7 @@ class QwenAssessmentEvaluator
                 'required_skills' => $assessment->campaign->required_skills ?? [],
             ],
             'threshold' => $this->threshold->passingScoreFor($assessment),
-            'answers' => collect($assessment->answers_payload)
+            'questions' => $answers
                 ->map(fn (array $answer): array => [
                     'question_id' => $answer['question_id'] ?? null,
                     'question' => $answer['question'] ?? '',
@@ -75,10 +73,22 @@ class QwenAssessmentEvaluator
                     'grading_mode' => $answer['grading_mode'] ?? null,
                     'points' => $answer['points'] ?? null,
                     'skill_tags' => $answer['skill_tags'] ?? [],
-                    'answer' => $answer['answer'] ?? '',
                 ])
                 ->values()
                 ->all(),
+            'untrusted_candidate_data' => [
+                'candidate' => [
+                    'name' => $assessment->user?->name,
+                    'email' => $assessment->user?->email,
+                ],
+                'answers' => $answers
+                    ->map(fn (array $answer): array => [
+                        'question_id' => $answer['question_id'] ?? null,
+                        'answer' => $answer['answer'] ?? '',
+                    ])
+                    ->values()
+                    ->all(),
+            ],
         ];
     }
 
