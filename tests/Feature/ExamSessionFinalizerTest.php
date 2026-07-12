@@ -19,7 +19,7 @@ test('exam session finalizer creates the assessment and queues processing', func
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
@@ -92,7 +92,7 @@ test('exam session finalizer can force submit incomplete answers', function () {
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();

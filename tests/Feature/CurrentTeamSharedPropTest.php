@@ -10,7 +10,6 @@ use Inertia\Testing\AssertableInertia as Assert;
 test('authenticated experience exposes valid current team identity', function () {
     $team = Team::factory()->create(['name' => 'Hiring Team']);
     $user = User::factory()
-        ->admin()
         ->teamAdministrator($team)
         ->withCurrentTeam($team)
         ->platformOperator()

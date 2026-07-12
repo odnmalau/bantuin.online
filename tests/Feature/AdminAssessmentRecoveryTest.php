@@ -4,6 +4,7 @@ use App\AssessmentStatus;
 use App\Jobs\EvaluateAssessmentWithAi;
 use App\Jobs\SendInterviewInvitationEmail;
 use App\Models\Assessment;
+use App\Models\Campaign;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 
@@ -14,9 +15,11 @@ beforeEach(function () {
 test('admin can retry failed evaluation without creating a duplicate assessment', function () {
     Queue::fake();
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::EvaluationFailed,
             'ai_score' => 42,
@@ -59,9 +62,11 @@ test('admin can retry failed evaluation without creating a duplicate assessment'
 test('retry evaluation is rejected for non failed statuses', function () {
     Queue::fake();
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::Evaluated,
         ]);
@@ -79,10 +84,12 @@ test('retry evaluation is rejected for non failed statuses', function () {
 test('admin can retry failed interview email delivery', function () {
     Queue::fake();
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
         ->approved()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::EmailFailed,
             'approved_email_subject' => 'Interview invitation',
@@ -114,10 +121,12 @@ test('admin can retry failed interview email delivery', function () {
 test('retry email is rejected for non failed email statuses', function () {
     Queue::fake();
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
         ->approved()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::EmailSent,
         ]);
@@ -132,9 +141,11 @@ test('retry email is rejected for non failed email statuses', function () {
 });
 
 test('admin can promote a false negative with manual email draft', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::Evaluated,
             'ai_email_subject' => null,
@@ -165,9 +176,11 @@ test('admin can promote a false negative with manual email draft', function () {
 });
 
 test('promote requires manual email draft when no ai draft exists', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::Evaluated,
             'ai_email_subject' => null,
@@ -186,9 +199,11 @@ test('promote requires manual email draft when no ai draft exists', function () 
 });
 
 test('admin can promote needs manual review assessment to pending approval', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::NeedsManualReview,
             'needs_manual_review' => true,
@@ -217,9 +232,11 @@ test('admin can promote needs manual review assessment to pending approval', fun
 });
 
 test('admin can promote using existing ai email draft without manual email fields', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::Evaluated,
             'ai_email_subject' => 'Interview Invitation - Backend',
@@ -239,9 +256,11 @@ test('admin can promote using existing ai email draft without manual email field
 });
 
 test('admin can override ranking score with reason', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::Evaluated,
             'ranking_score' => 62,
@@ -277,9 +296,11 @@ test('admin can override ranking score with reason', function () {
 });
 
 test('override score requires a reason', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::Evaluated,
             'ranking_score' => 62,
@@ -300,9 +321,11 @@ test('override score requires a reason', function () {
 });
 
 test('admin reject requires and records a reason', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::Evaluated,
         ]);
@@ -325,9 +348,9 @@ test('admin reject requires and records a reason', function () {
 });
 
 test('candidate cannot run recovery or override actions', function (string $route) {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'status' => AssessmentStatus::EvaluationFailed,
         ]);

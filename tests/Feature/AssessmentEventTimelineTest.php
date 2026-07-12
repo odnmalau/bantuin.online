@@ -45,7 +45,7 @@ beforeEach(function () {
 
 test('assessment event recorder redacts sensitive payload keys', function () {
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
 
     $event = app(AssessmentEventRecorder::class)->record(
@@ -102,7 +102,7 @@ test('evaluation job records agent activity timeline events', function () {
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'resume_score' => 84,
             'answers_payload' => [
@@ -133,12 +133,14 @@ test('admin approval and email job record human and delivery events', function (
     Queue::fake();
     Mail::fake();
 
-    $admin = User::factory()->admin()->create();
-    $candidate = User::factory()->candidate()->create([
+    $admin = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create([
         'email' => 'candidate@example.com',
     ]);
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
         ->for($candidate)
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::PendingApproval,
             'ai_email_subject' => 'AI subject',
@@ -167,10 +169,12 @@ test('admin approval and email job record human and delivery events', function (
 });
 
 test('assessment event timeline stays internal and is not exposed on review page', function () {
-    $admin = User::factory()->admin()->create();
-    $candidate = User::factory()->candidate()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
         ->for($candidate)
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::PendingApproval,
             'ranking_payload' => [
@@ -217,7 +221,7 @@ test('candidate submission and resume screening record timeline events', functio
     Storage::fake('local');
     config()->set('ai.providers.qwen.key', 'test-qwen-key');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -266,7 +270,7 @@ test('unsendable interview email job records email failed timeline event', funct
     Mail::fake();
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'status' => AssessmentStatus::PendingApproval,
             'approved_email_subject' => null,

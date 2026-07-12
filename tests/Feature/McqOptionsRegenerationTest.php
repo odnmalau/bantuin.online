@@ -24,7 +24,7 @@ test('admin can regenerate mcq options for draft campaign question', function ()
         ],
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'role_title' => 'Backend Engineer',
         'required_skills' => ['Laravel'],
@@ -63,7 +63,7 @@ test('regenerate mcq options is rejected for approved campaign questions', funct
         ],
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)
@@ -87,7 +87,7 @@ test('regenerate mcq options is rejected for non multiple choice campaign questi
         ],
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)
@@ -109,7 +109,7 @@ test('invalid regenerated mcq output is rejected without updating question', fun
         ],
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)
@@ -137,7 +137,7 @@ test('candidate cannot regenerate mcq options', function () {
         ],
     ]);
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)

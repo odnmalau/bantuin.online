@@ -47,8 +47,8 @@ test('assessment autopilot product flow works end to end', function () {
         ],
     ]);
 
-    $admin = User::factory()->admin()->create();
-    $candidate = User::factory()->candidate()->create([
+    $admin = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create([
         'name' => 'Candidate One',
         'email' => 'candidate-one@example.com',
     ]);

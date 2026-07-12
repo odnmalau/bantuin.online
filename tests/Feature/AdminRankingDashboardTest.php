@@ -11,16 +11,18 @@ beforeEach(function () {
 });
 
 test('admin can view candidate ranking leaderboard ordered by ranking score within a campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Backend Hiring',
         'role_title' => 'Backend Engineer',
     ]);
-    $topCandidate = User::factory()->candidate()->create([
+    $topCandidate = User::factory()->create([
         'name' => 'Top Candidate',
         'email' => 'top@example.com',
     ]);
-    $secondCandidate = User::factory()->candidate()->create([
+    $secondCandidate = User::factory()->create([
         'name' => 'Second Candidate',
         'email' => 'second@example.com',
     ]);
@@ -78,16 +80,20 @@ test('admin can view candidate ranking leaderboard ordered by ranking score with
 });
 
 test('admin rankings are scoped per campaign and default to the first available campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $backendCampaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Backend Hiring',
     ]);
     $frontendCampaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Frontend Hiring',
     ]);
 
     $backendTop = Assessment::factory()
-        ->for(User::factory()->candidate()->create(['name' => 'Backend Top']))
+        ->for(User::factory()->create(['name' => 'Backend Top']))
         ->for($backendCampaign)
         ->create([
             'ranking_score' => 80,
@@ -95,7 +101,7 @@ test('admin rankings are scoped per campaign and default to the first available 
             'evaluated_at' => now(),
         ]);
     Assessment::factory()
-        ->for(User::factory()->candidate()->create(['name' => 'Backend Second']))
+        ->for(User::factory()->create(['name' => 'Backend Second']))
         ->for($backendCampaign)
         ->create([
             'ranking_score' => 70,
@@ -104,7 +110,7 @@ test('admin rankings are scoped per campaign and default to the first available 
         ]);
 
     $frontendTop = Assessment::factory()
-        ->for(User::factory()->candidate()->create(['name' => 'Frontend Top']))
+        ->for(User::factory()->create(['name' => 'Frontend Top']))
         ->for($frontendCampaign)
         ->create([
             'ranking_score' => 95,
@@ -140,13 +146,15 @@ test('admin rankings are scoped per campaign and default to the first available 
 });
 
 test('admin ranking numbers stay stable when search status or date filters are applied', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Stable Rank Campaign',
     ]);
 
     $first = Assessment::factory()
-        ->for(User::factory()->candidate()->create([
+        ->for(User::factory()->create([
             'name' => 'Ada Lovelace',
             'email' => 'ada@example.com',
         ]))
@@ -157,7 +165,7 @@ test('admin ranking numbers stay stable when search status or date filters are a
             'evaluated_at' => now()->subDays(2),
         ]);
     Assessment::factory()
-        ->for(User::factory()->candidate()->create([
+        ->for(User::factory()->create([
             'name' => 'Grace Hopper',
             'email' => 'grace@example.com',
         ]))
@@ -168,7 +176,7 @@ test('admin ranking numbers stay stable when search status or date filters are a
             'evaluated_at' => now()->subDays(2),
         ]);
     $third = Assessment::factory()
-        ->for(User::factory()->candidate()->create([
+        ->for(User::factory()->create([
             'name' => 'Alan Turing',
             'email' => 'alan@example.com',
         ]))
@@ -214,16 +222,18 @@ test('admin ranking numbers stay stable when search status or date filters are a
 });
 
 test('admin can search and filter candidate rankings within a campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Backend Hiring',
         'role_title' => 'Backend Engineer',
     ]);
-    $matchingCandidate = User::factory()->candidate()->create([
+    $matchingCandidate = User::factory()->create([
         'name' => 'Ada Lovelace',
         'email' => 'ada@example.com',
     ]);
-    $otherCandidate = User::factory()->candidate()->create([
+    $otherCandidate = User::factory()->create([
         'name' => 'Grace Hopper',
         'email' => 'grace@example.com',
     ]);
@@ -269,12 +279,15 @@ test('admin can search and filter candidate rankings within a campaign', functio
 });
 
 test('admin can filter candidate rankings by date range', function () {
-    $admin = User::factory()->admin()->create();
-    $campaign = Campaign::factory()->create();
-    $recentCandidate = User::factory()->candidate()->create([
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
+    ]);
+    $recentCandidate = User::factory()->create([
         'name' => 'Recent Candidate',
     ]);
-    $olderCandidate = User::factory()->candidate()->create([
+    $olderCandidate = User::factory()->create([
         'name' => 'Older Candidate',
     ]);
 
@@ -312,7 +325,7 @@ test('admin can filter candidate rankings by date range', function () {
 });
 
 test('candidate cannot access candidate ranking leaderboard', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
 
     $this->actingAs($candidate)
         ->get(route('admin.rankings.index'))

@@ -101,7 +101,7 @@ function resumePdfUpload(string $text = 'Laravel PostgreSQL queue worker experie
 
 function assignCandidateToCampaignExam(User $candidate, Campaign $campaign, ?User $invitedBy = null): CampaignInvitation
 {
-    $admin = $invitedBy ?? User::factory()->admin()->create();
+    $admin = $invitedBy ?? $campaign->creator;
 
     return CampaignInvitation::factory()
         ->for($campaign)

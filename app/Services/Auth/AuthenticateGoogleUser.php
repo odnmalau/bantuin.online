@@ -3,7 +3,6 @@
 namespace App\Services\Auth;
 
 use App\Models\User;
-use App\UserRole;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
 
@@ -52,7 +51,6 @@ class AuthenticateGoogleUser
             'email' => $email,
             'google_id' => $googleId,
             'avatar' => filled($avatar) ? $avatar : null,
-            'role' => UserRole::Candidate,
         ]);
     }
 }

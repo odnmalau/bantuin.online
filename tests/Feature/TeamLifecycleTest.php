@@ -270,7 +270,7 @@ test('a deactivated team rejects the complete hiring and assessment mutation mat
 test('a deactivated team rejects every candidate Exam Session mutation', function () {
     $team = Team::factory()->create();
     $campaign = Campaign::factory()->for($team)->active()->create();
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     CampaignInvitation::factory()->for($campaign)->accepted($candidate)->create();
     $examSession = ExamSession::factory()->for($campaign)->for($candidate)->create();
     $team->update(['status' => TeamStatus::Deactivated, 'deactivated_at' => now()]);

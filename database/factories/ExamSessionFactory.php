@@ -21,7 +21,7 @@ class ExamSessionFactory extends Factory
     public function definition(): array
     {
         return [
-            'user_id' => User::factory()->candidate(),
+            'user_id' => User::factory(),
             'campaign_id' => Campaign::factory()->active(),
             'assessment_id' => null,
             'status' => ExamSessionStatus::InProgress,

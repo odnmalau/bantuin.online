@@ -27,7 +27,9 @@ class CampaignInvitationFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'user_id' => null,
             'token_hash' => hash('sha256', $plainToken),
-            'invited_by' => User::factory()->admin(),
+            'invited_by' => fn (array $attributes): int => Campaign::query()
+                ->findOrFail($attributes['campaign_id'])
+                ->created_by,
             'sent_at' => now(),
             'accepted_at' => null,
             'expires_at' => now()->addDays(14),

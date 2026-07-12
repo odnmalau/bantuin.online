@@ -55,7 +55,7 @@ test('qwen critic requires configured api key', function () {
     config()->set('ai.providers.qwen.key', null);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
 
     $evaluation = new AssessmentEvaluationResult(
@@ -98,7 +98,7 @@ test('qwen critic uses structured output through qwen provider', function () {
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'resume_score' => 80,
             'resume_payload' => [
@@ -167,7 +167,7 @@ test('evaluation job stores critic payload and repaired email', function () {
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
 
     app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
@@ -208,7 +208,7 @@ test('evaluation job routes risky critic outcome to manual review', function () 
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
 
     app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
@@ -246,7 +246,7 @@ test('evaluation job stores critic failure and keeps assessment reviewable', fun
     });
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
 
     app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);

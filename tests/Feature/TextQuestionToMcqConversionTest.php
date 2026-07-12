@@ -26,7 +26,7 @@ test('admin can convert draft long text campaign question to multiple choice', f
         ],
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'role_title' => 'Backend Engineer',
     ]);
@@ -65,7 +65,7 @@ test('convert to mcq is rejected for approved campaign questions', function () {
         convertedMcqOutput(),
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)
@@ -88,7 +88,7 @@ test('convert to mcq is rejected for multiple choice campaign questions', functi
         convertedMcqOutput(),
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)
@@ -111,7 +111,7 @@ test('invalid mcq conversion output leaves question unchanged', function () {
         ],
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)
@@ -138,7 +138,7 @@ test('candidate cannot convert campaign questions to mcq', function () {
         convertedMcqOutput(),
     ]);
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)

@@ -16,7 +16,7 @@ beforeEach(function () {
     $this->withoutVite();
 });
 
-test('each contextual team role can manage campaigns independently of the legacy role', function (string $role) {
+test('each authorized Team membership can manage campaigns', function (string $role) {
     $team = Team::factory()->create();
     $user = match ($role) {
         'owner' => $team->ownerMembership->user,

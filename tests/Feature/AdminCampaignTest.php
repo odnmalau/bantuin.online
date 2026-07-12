@@ -16,7 +16,7 @@ beforeEach(function () {
 });
 
 test('admin can view campaigns', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'title' => 'Backend Engineer Screening',
         'role_title' => 'Backend Engineer',
@@ -40,7 +40,7 @@ test('admin can view campaigns', function () {
 });
 
 test('admin can search and filter campaigns', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $matchingCampaign = Campaign::factory()->for($admin, 'creator')->create([
         'title' => 'Frontend Engineer Screening',
         'role_title' => 'Frontend Engineer',
@@ -72,7 +72,7 @@ test('admin can search and filter campaigns', function () {
 });
 
 test('admin can create a campaign with a default section', function () {
-    $admin = User::factory()->admin()->teamOwner()->create();
+    $admin = User::factory()->teamOwner()->create();
     $currentTeam = $admin->currentTeam;
 
     $response = $this->actingAs($admin)
@@ -104,7 +104,7 @@ test('admin can create a campaign with a default section', function () {
 });
 
 test('admin cannot create a campaign for a deactivated current team', function () {
-    $admin = User::factory()->admin()->teamOwner()->create();
+    $admin = User::factory()->teamOwner()->create();
     $admin->currentTeam->update([
         'status' => 'deactivated',
         'deactivated_at' => now(),
@@ -123,7 +123,7 @@ test('admin cannot create a campaign for a deactivated current team', function (
 });
 
 test('legacy admin without a current team cannot create a campaign', function () {
-    $admin = User::factory()->create(['role' => 'admin']);
+    $admin = User::factory()->create();
 
     $this->actingAs($admin)
         ->from(route('admin.campaigns.create'))
@@ -138,7 +138,7 @@ test('legacy admin without a current team cannot create a campaign', function ()
 });
 
 test('admin can update a campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'status' => CampaignStatus::Draft,
         'activated_at' => null,
@@ -168,7 +168,7 @@ test('admin can update a campaign', function () {
 });
 
 test('admin can move a campaign from active back to draft', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'status' => CampaignStatus::Active,
         'activated_at' => now()->subDay(),
@@ -186,7 +186,7 @@ test('admin can move a campaign from active back to draft', function () {
 });
 
 test('admin can archive a campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'status' => CampaignStatus::Active,
         'activated_at' => now()->subDay(),
@@ -204,7 +204,7 @@ test('admin can archive a campaign', function () {
 });
 
 test('admin can approve a generated draft campaign question', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'status' => CampaignStatus::QuestionReview,
     ]);
@@ -227,7 +227,7 @@ test('admin can approve a generated draft campaign question', function () {
 });
 
 test('admin can approve all generated draft campaign questions', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'status' => CampaignStatus::QuestionReview,
     ]);
@@ -252,7 +252,7 @@ test('admin can approve all generated draft campaign questions', function () {
 });
 
 test('campaign cannot be published while generated questions are still drafts', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'status' => CampaignStatus::QuestionReview,
         'activated_at' => null,
@@ -278,7 +278,7 @@ test('campaign cannot be published while generated questions are still drafts', 
 });
 
 test('admin can publish a campaign after questions are approved', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'status' => CampaignStatus::QuestionReview,
         'activated_at' => null,
@@ -303,7 +303,7 @@ test('admin can publish a campaign after questions are approved', function () {
 });
 
 test('admin can add a campaign section', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
     $this->actingAs($admin)
@@ -328,7 +328,7 @@ test('admin can add a campaign section', function () {
 });
 
 test('campaign sections are ordered by sort order', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
     CampaignSection::factory()->for($campaign)->create([
@@ -357,7 +357,7 @@ test('campaign sections are ordered by sort order', function () {
 });
 
 test('admin can add an ai graded text question to a campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $section = CampaignSection::factory()->for($campaign)->create();
 
@@ -388,7 +388,7 @@ test('admin can add an ai graded text question to a campaign', function () {
 });
 
 test('admin can add an auto graded multiple choice question to a campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $section = CampaignSection::factory()->for($campaign)->create();
 
@@ -417,7 +417,7 @@ test('admin can add an auto graded multiple choice question to a campaign', func
 });
 
 test('campaign question section must belong to the campaign', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $otherCampaign = Campaign::factory()->for($admin, 'creator')->create();
     $otherSection = CampaignSection::factory()->for($otherCampaign)->create();
@@ -442,7 +442,7 @@ test('campaign question section must belong to the campaign', function () {
 });
 
 test('candidate cannot access campaign management', function (string $route, string $method) {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create();
 
     $url = match ($route) {
@@ -469,7 +469,7 @@ test('candidate cannot access campaign management', function (string $route, str
 ]);
 
 test('candidate cannot approve campaign questions', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create();
     $section = CampaignSection::factory()->for($campaign)->create();
     $question = CampaignQuestion::factory()
@@ -485,7 +485,7 @@ test('candidate cannot approve campaign questions', function () {
 });
 
 test('candidate cannot update campaign questions', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create();
     $section = CampaignSection::factory()->for($campaign)->create();
     $question = CampaignQuestion::factory()
@@ -509,7 +509,7 @@ test('candidate cannot update campaign questions', function () {
 });
 
 test('campaign rejects ranking weights that do not total 100', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
     $this->actingAs($admin)
@@ -531,7 +531,7 @@ test('campaign rejects ranking weights that do not total 100', function () {
 });
 
 test('campaign stores language and required skills from the main form', function () {
-    $admin = User::factory()->admin()->teamOwner()->create();
+    $admin = User::factory()->teamOwner()->create();
 
     $this->actingAs($admin)
         ->from(route('admin.campaigns.create'))
@@ -553,7 +553,7 @@ test('campaign stores language and required skills from the main form', function
 });
 
 test('admin can update campaign ranking weights from the detail page', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
     $this->actingAs($admin)
@@ -578,7 +578,7 @@ test('admin can update campaign ranking weights from the detail page', function 
 });
 
 test('admin can delete a campaign without submitted assessments', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
     $this->actingAs($admin)
@@ -600,7 +600,7 @@ test('campaign index requires confirmation before deleting a campaign', function
 });
 
 test('admin cannot delete a campaign that already has assessments', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     Assessment::factory()->for($campaign)->create();
 

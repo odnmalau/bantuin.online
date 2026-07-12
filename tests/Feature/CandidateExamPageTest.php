@@ -10,7 +10,7 @@ use App\Services\CandidateExamPage;
 use App\Services\ExamSessionService;
 
 test('candidate exam page returns no campaign state', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
 
     $page = app(CandidateExamPage::class)->for($candidate, null);
 
@@ -25,7 +25,7 @@ test('candidate exam page returns no campaign state', function () {
 });
 
 test('candidate exam page returns ready to start state', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create([
         'title' => 'Backend Engineer Campaign',
         'role_title' => 'Backend Engineer',
@@ -57,7 +57,7 @@ test('candidate exam page returns ready to start state', function () {
 });
 
 test('candidate exam page returns active section state', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     $section = CampaignSection::factory()->for($campaign)->create([
         'title' => 'Knowledge Check',
@@ -88,7 +88,7 @@ test('candidate exam page returns active section state', function () {
 });
 
 test('candidate exam page returns ready to finalize state', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     $section = CampaignSection::factory()->for($campaign)->create();
     $question = CampaignQuestion::factory()
@@ -121,7 +121,7 @@ test('candidate exam page returns ready to finalize state', function () {
 });
 
 test('candidate exam page returns submitted state', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     $assessment = Assessment::factory()
         ->for($candidate)

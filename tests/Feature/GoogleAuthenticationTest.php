@@ -4,7 +4,6 @@ use App\Models\Campaign;
 use App\Models\CampaignInvitation;
 use App\Models\Team;
 use App\Models\User;
-use App\UserRole;
 
 test('google redirect sends the user to the oauth provider', function () {
     fakeGoogleAuthConfig();
@@ -29,7 +28,7 @@ test('google callback sends users without a team to their personal landing', fun
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
-test('google callback logs in a new candidate', function () {
+test('google callback logs in a new identity', function () {
     fakeGoogleAuthConfig();
     fakeGoogleUserAuthentication(
         id: 'google-user-123',
@@ -47,15 +46,16 @@ test('google callback logs in a new candidate', function () {
     expect($user)->not->toBeNull()
         ->and($user->google_id)->toBe('google-user-123')
         ->and($user->avatar)->toBe('https://lh3.googleusercontent.com/a/candidate-avatar')
-        ->and($user->role)->toBe(UserRole::Candidate);
+        ->and($user->activeTeamMemberships()->exists())->toBeFalse()
+        ->and($user->campaignInvitations()->exists())->toBeFalse();
 
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
-test('google callback links an existing admin without changing role', function () {
+test('google callback links an existing team owner without changing membership', function () {
     fakeGoogleAuthConfig();
 
-    $admin = User::factory()->admin()->create([
+    $admin = User::factory()->teamOwner()->create([
         'email' => 'admin@example.com',
         'google_id' => null,
     ]);
@@ -72,7 +72,7 @@ test('google callback links an existing admin without changing role', function (
     $admin->refresh();
 
     expect($admin->google_id)->toBe('google-admin-456')
-        ->and($admin->role)->toBe(UserRole::Admin);
+        ->and($admin->activeTeamMemberships()->where('team_id', $admin->current_team_id)->exists())->toBeTrue();
 });
 
 test('google callback matches an existing account by normalized email', function () {
@@ -150,7 +150,7 @@ test('normal dual context sign in opens current team instead of an intended cand
 test('google callback syncs email and avatar from google for returning users', function () {
     fakeGoogleAuthConfig();
 
-    $user = User::factory()->candidate()->create([
+    $user = User::factory()->create([
         'email' => 'old@example.com',
         'google_id' => 'google-sync-email',
         'avatar' => 'https://lh3.googleusercontent.com/a/old-avatar',
@@ -175,7 +175,7 @@ test('google callback syncs email and avatar from google for returning users', f
 test('google callback keeps existing avatar when google omits one', function () {
     fakeGoogleAuthConfig();
 
-    $user = User::factory()->candidate()->create([
+    $user = User::factory()->create([
         'email' => 'avatar@example.com',
         'google_id' => 'google-keep-avatar',
         'avatar' => 'https://lh3.googleusercontent.com/a/existing-avatar',

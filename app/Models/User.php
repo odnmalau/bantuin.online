@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\UserRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -16,7 +15,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 
-#[Fillable(['name', 'email', 'role', 'google_id', 'avatar'])]
+#[Fillable(['name', 'email', 'google_id', 'avatar'])]
 #[Hidden(['remember_token'])]
 class User extends Authenticatable
 {
@@ -129,22 +128,5 @@ class User extends Authenticatable
         }
 
         $this->forceFill(['current_team_id' => $fallback?->team_id])->save();
-    }
-
-    public function homePath(): string
-    {
-        return ($this->role ?? UserRole::Candidate)->homePath();
-    }
-
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'role' => UserRole::class,
-        ];
     }
 }

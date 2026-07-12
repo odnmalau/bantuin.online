@@ -11,12 +11,14 @@ beforeEach(function () {
 });
 
 test('admin dashboard includes last-7-day summary, two charts, and needs attention', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->active()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Dashboard Campaign',
     ]);
-    $olderCandidate = User::factory()->candidate()->create();
-    $newerCandidate = User::factory()->candidate()->create();
+    $olderCandidate = User::factory()->create();
+    $newerCandidate = User::factory()->create();
 
     Assessment::factory()
         ->for($olderCandidate)
@@ -41,7 +43,7 @@ test('admin dashboard includes last-7-day summary, two charts, and needs attenti
         ]);
 
     Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($campaign)
         ->create([
             'ranking_score' => null,
@@ -85,26 +87,36 @@ test('admin dashboard includes last-7-day summary, two charts, and needs attenti
 });
 
 test('admin dashboard needs attention prioritizes failures then pending then manual review and limits items', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
 
     $manualOnly = Campaign::factory()->active()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Manual Review Campaign',
     ]);
     $pending = Campaign::factory()->active()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Pending Campaign',
     ]);
     $failed = Campaign::factory()->active()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Failed Campaign',
     ]);
     $extraPending = Campaign::factory()->active()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Extra Pending Campaign',
     ]);
     $quiet = Campaign::factory()->active()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Quiet Campaign',
     ]);
 
     Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($manualOnly)
         ->create([
             'ranking_score' => 70,
@@ -114,7 +126,7 @@ test('admin dashboard needs attention prioritizes failures then pending then man
         ]);
 
     Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($pending)
         ->create([
             'ranking_score' => 85,
@@ -124,7 +136,7 @@ test('admin dashboard needs attention prioritizes failures then pending then man
         ]);
 
     Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($failed)
         ->create([
             'ranking_score' => null,
@@ -135,7 +147,7 @@ test('admin dashboard needs attention prioritizes failures then pending then man
         ]);
 
     Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($extraPending)
         ->create([
             'ranking_score' => 88,
@@ -145,7 +157,7 @@ test('admin dashboard needs attention prioritizes failures then pending then man
         ]);
 
     Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($quiet)
         ->create([
             'ranking_score' => 75,
@@ -176,11 +188,14 @@ test('admin dashboard needs attention prioritizes failures then pending then man
 });
 
 test('admin dashboard reports when ranked candidates exist but none in the current period', function () {
-    $admin = User::factory()->admin()->create();
-    $campaign = Campaign::factory()->active()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->active()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
+    ]);
 
     Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($campaign)
         ->create([
             'ranking_score' => 80,
@@ -206,7 +221,7 @@ test('admin dashboard reports when ranked candidates exist but none in the curre
 });
 
 test('admin dashboard reports when no candidates have ever been ranked', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
 
     $this->actingAs($admin)
         ->get(route('dashboard'))
@@ -221,7 +236,7 @@ test('admin dashboard reports when no candidates have ever been ranked', functio
 });
 
 test('non-admin dashboard does not include ranking overview', function () {
-    $candidate = User::factory()->candidate()->create([
+    $candidate = User::factory()->create([
         'google_id' => 'google-candidate-123',
     ]);
 

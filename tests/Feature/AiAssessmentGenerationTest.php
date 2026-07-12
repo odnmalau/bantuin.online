@@ -23,7 +23,7 @@ test('admin can generate draft assessment questions for a campaign', function ()
         generatedAssessmentOutput(),
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'title' => 'Backend Engineer Screening',
         'role_title' => 'Backend Engineer',
@@ -106,7 +106,7 @@ test('campaign assessment generation respects question_count limit', function ()
 
     AssessmentGeneratorAgent::fake([$output]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
     $this->actingAs($admin)
@@ -150,7 +150,7 @@ test('invalid generated answer keys are rejected without saving drafts', functio
         ],
     ]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
 
     $this->actingAs($admin)
@@ -244,7 +244,7 @@ test('assessment generation appends audit metadata for each successful run', fun
 });
 
 test('candidate cannot generate campaign assessments', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create();
 
     $this->actingAs($candidate)

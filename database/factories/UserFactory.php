@@ -6,7 +6,6 @@ use App\Models\PlatformOperatorAuthority;
 use App\Models\Team;
 use App\Models\TeamMembership;
 use App\Models\User;
-use App\UserRole;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -27,47 +26,8 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'google_id' => 'factory-'.Str::uuid()->toString(),
             'avatar' => null,
-            'role' => UserRole::Candidate,
             'remember_token' => Str::random(10),
         ];
-    }
-
-    /**
-     * Indicate that the user is an administrator.
-     */
-    public function admin(): static
-    {
-        return $this
-            ->state(fn () => [
-                'role' => UserRole::Admin,
-            ])
-            ->afterCreating(function (User $user): void {
-                if ($user->current_team_id !== null) {
-                    return;
-                }
-
-                $team = Team::query()
-                    ->whereHas('ownerMembership.user', fn ($query) => $query->where('role', UserRole::Admin))
-                    ->first();
-
-                if ($team === null) {
-                    $team = Team::factory()->ownedBy($user)->create();
-                } else {
-                    TeamMembership::factory()->for($team)->for($user)->administrator()->create();
-                }
-
-                $user->selectCurrentTeam($team);
-            });
-    }
-
-    /**
-     * Indicate that the user is a candidate.
-     */
-    public function candidate(): static
-    {
-        return $this->state(fn () => [
-            'role' => UserRole::Candidate,
-        ]);
     }
 
     public function teamOwner(): static

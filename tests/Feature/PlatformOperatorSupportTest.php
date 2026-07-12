@@ -18,6 +18,10 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 
+beforeEach(function () {
+    $this->withoutVite();
+});
+
 test('only platform operators enter the separate support area', function () {
     $team = Team::factory()->create();
 

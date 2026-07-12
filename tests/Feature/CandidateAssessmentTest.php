@@ -21,7 +21,7 @@ beforeEach(function () {
 });
 
 test('candidate can view active campaign questions when assigned', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create([
         'title' => 'Backend Engineer Campaign',
         'role_title' => 'Backend Engineer',
@@ -76,7 +76,7 @@ test('candidate can view active campaign questions when assigned', function () {
 });
 
 test('candidate exam exposes sanitized matching pairs prompts and choices', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -112,7 +112,7 @@ test('candidate exam exposes sanitized matching pairs prompts and choices', func
 });
 
 test('candidate exam entry redirects when only one assigned campaign is accessible', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -124,7 +124,7 @@ test('candidate exam entry redirects when only one assigned campaign is accessib
 });
 
 test('unassigned candidate cannot open a campaign exam', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     $section = CampaignSection::factory()->for($campaign)->create();
     CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create();
@@ -135,7 +135,7 @@ test('unassigned candidate cannot open a campaign exam', function () {
 });
 
 test('candidate cannot open or mutate an exam after its team is deactivated', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -155,7 +155,7 @@ test('candidate cannot open or mutate an exam after its team is deactivated', fu
 });
 
 test('candidate sees submitted state only for the assigned campaign', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $previousCampaign = Campaign::factory()->create([
         'status' => CampaignStatus::Archived,
     ]);
@@ -183,7 +183,7 @@ test('candidate can submit an assessment for an active campaign', function () {
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
@@ -287,7 +287,7 @@ test('candidate must answer every approved campaign question', function () {
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -325,7 +325,7 @@ test('candidate cannot submit more than one assessment for the same campaign', f
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -351,7 +351,7 @@ test('candidate can submit a different active campaign when assigned to both', f
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $previousCampaign = Campaign::factory()->active()->create([
         'activated_at' => now()->subDay(),
     ]);
@@ -395,7 +395,7 @@ test('candidate cannot submit an inactive campaign', function () {
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create([
         'status' => CampaignStatus::QuestionReview,
         'activated_at' => null,
@@ -418,7 +418,7 @@ test('candidate cannot submit an inactive campaign', function () {
 });
 
 test('candidate can view their own assessment', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     $assessment = Assessment::factory()->for($candidate)->for($campaign)->create([
         'answers_payload' => [
@@ -453,8 +453,8 @@ test('candidate can view their own assessment', function () {
 });
 
 test('candidate cannot view another candidates assessment', function () {
-    $candidate = User::factory()->candidate()->create();
-    $otherCandidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
+    $otherCandidate = User::factory()->create();
     $assessment = Assessment::factory()->for($otherCandidate)->create();
 
     $this->actingAs($candidate)
@@ -463,7 +463,7 @@ test('candidate cannot view another candidates assessment', function () {
 });
 
 test('candidate assessment access requires accepted campaign participation', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $assessment = Assessment::factory()->for($candidate)->create();
 
     $this->actingAs($candidate)

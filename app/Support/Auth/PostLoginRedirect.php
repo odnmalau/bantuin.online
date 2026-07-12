@@ -18,7 +18,7 @@ class PostLoginRedirect
     ) {}
 
     /**
-     * Redirect after authentication, avoiding role-protected URLs the user cannot access.
+     * Redirect after authentication, avoiding contextual URLs the user cannot access.
      */
     public function toResponse(Request $request, User $user): RedirectResponse
     {

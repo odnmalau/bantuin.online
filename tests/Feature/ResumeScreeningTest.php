@@ -41,7 +41,7 @@ test('resume screening job stores extracted text and qwen result', function () {
         resumeScreeningOutput(),
     ]);
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create([
         'role_title' => 'Backend Engineer',
         'required_skills' => ['Laravel', 'PostgreSQL', 'Queues'],
@@ -118,7 +118,7 @@ test('resume screening job marks low confidence for manual review', function () 
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for(Campaign::factory())
         ->create([
             'resume_path' => 'resumes/resume.pdf',
@@ -137,7 +137,7 @@ test('qwen resume screener requires configured api key', function () {
     config()->set('ai.providers.qwen.key', null);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for(Campaign::factory())
         ->create([
             'resume_original_name' => 'resume.pdf',
@@ -170,7 +170,7 @@ test('qwen resume screener uses json object mode through qwen provider', functio
         'required_skills' => ['Laravel', 'PostgreSQL'],
     ]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($campaign)
         ->create([
             'resume_original_name' => 'resume.pdf',
@@ -198,7 +198,7 @@ test('candidate resume upload must be a pdf', function () {
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -238,7 +238,7 @@ test('candidate resume upload must be a pdf', function () {
 test('candidate assessment response does not expose resume path or qwen key', function () {
     config()->set('ai.providers.qwen.key', 'secret-qwen-token');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create();
     $assessment = Assessment::factory()
         ->for($candidate)

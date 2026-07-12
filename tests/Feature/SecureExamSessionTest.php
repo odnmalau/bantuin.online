@@ -18,7 +18,7 @@ beforeEach(function () {
 });
 
 test('candidate must start a secure exam session before seeing section questions', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
@@ -45,7 +45,7 @@ test('candidate must start a secure exam session before seeing section questions
 });
 
 test('candidate can start an exam session and receive the first section timer', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
@@ -80,7 +80,7 @@ test('candidate can start an exam session and receive the first section timer', 
 });
 
 test('candidate cannot advance a section without answering every question', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -97,7 +97,7 @@ test('candidate cannot advance a section without answering every question', func
 });
 
 test('candidate cannot advance after the section timer expires', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
@@ -124,7 +124,7 @@ test('candidate cannot advance after the section timer expires', function () {
 test('integrity violations increment warning count on the session', function () {
     config()->set('assessment.secure_exam.max_integrity_warnings', 5);
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -148,7 +148,7 @@ test('candidate can finalize a secure exam session into an assessment', function
     Bus::fake();
     Storage::fake('local');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();

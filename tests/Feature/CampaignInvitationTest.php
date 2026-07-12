@@ -15,8 +15,8 @@ use Illuminate\Support\Facades\Queue;
 test('admin can create a campaign exam invitation', function () {
     Mail::fake();
 
-    $admin = User::factory()->admin()->create();
-    $campaign = Campaign::factory()->active()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->active()->create();
 
     $response = $this->actingAs($admin)
         ->post(route('admin.campaigns.invitations.store', $campaign), [
@@ -41,8 +41,8 @@ test('admin can create a campaign exam invitation', function () {
 test('creating an invitation queues the exam invite email job', function () {
     Queue::fake();
 
-    $admin = User::factory()->admin()->create();
-    $campaign = Campaign::factory()->active()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->active()->create();
 
     $this->actingAs($admin)
         ->post(route('admin.campaigns.invitations.store', $campaign), [
@@ -57,7 +57,7 @@ test('creating an invitation queues the exam invite email job', function () {
 test('exam invite email job sends mailable with invite link', function () {
     Mail::fake();
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->active()->create();
     ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()->createWithPlainToken([
         'campaign_id' => $campaign->id,
@@ -93,7 +93,7 @@ test('exam invite email job rechecks its campaign team boundary', function () {
 });
 
 test('invite link stores pending redemption and redirects to login', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->active()->create();
     $invitation = CampaignInvitation::factory()->for($campaign)->create([
         'email' => 'candidate@example.com',
@@ -109,7 +109,7 @@ test('invite link stores pending redemption and redirects to login', function ()
 test('google login after invite accepts assignment and opens campaign exam', function () {
     fakeGoogleAuthConfig();
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->active()->create();
     $section = CampaignSection::factory()->for($campaign)->create();
     CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create();
@@ -129,7 +129,9 @@ test('google login after invite accepts assignment and opens campaign exam', fun
         name: 'Candidate User',
     );
 
-    $this->get(route('auth.google.callback'))
+    $this->withSession([
+        'url.intended' => route('profile.edit'),
+    ])->get(route('auth.google.callback'))
         ->assertRedirect(route('candidate.campaigns.exam', $campaign));
 
     $invitation = CampaignInvitation::query()->sole();
@@ -142,7 +144,7 @@ test('google login after invite accepts assignment and opens campaign exam', fun
 test('invite redemption fails when google email does not match invitation', function () {
     fakeGoogleAuthConfig();
 
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->active()->create();
 
     $invitation = CampaignInvitation::factory()->for($campaign)->create([
@@ -167,8 +169,8 @@ test('invite redemption fails when google email does not match invitation', func
 });
 
 test('authenticated candidate can redeem invite link directly', function () {
-    $admin = User::factory()->admin()->create();
-    $candidate = User::factory()->candidate()->create([
+    $admin = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create([
         'email' => 'candidate@example.com',
     ]);
     $campaign = Campaign::factory()->active()->create();
@@ -189,7 +191,7 @@ test('authenticated candidate can redeem invite link directly', function () {
 });
 
 test('team member can redeem a campaign invitation owned by another team', function () {
-    $teamMember = User::factory()->admin()->create([
+    $teamMember = User::factory()->teamOwner()->create([
         'email' => 'candidate@example.com',
     ]);
     $otherTeamOwner = User::factory()->teamOwner()->create();
@@ -215,7 +217,7 @@ test('team member can redeem a campaign invitation owned by another team', funct
 });
 
 test('accepted campaign invitation links cannot be replayed', function () {
-    $candidate = User::factory()->candidate()->create([
+    $candidate = User::factory()->create([
         'email' => 'candidate@example.com',
     ]);
     $campaign = Campaign::factory()->active()->create();
@@ -234,11 +236,11 @@ test('accepted campaign invitation links cannot be replayed', function () {
 });
 
 test('issuing another invitation does not reset accepted candidate history', function () {
-    $owner = User::factory()->admin()->create();
+    $owner = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($owner->currentTeam)->active()->create([
         'created_by' => $owner->id,
     ]);
-    $candidate = User::factory()->candidate()->create([
+    $candidate = User::factory()->create([
         'email' => 'candidate@example.com',
     ]);
     $invitation = CampaignInvitation::factory()->for($campaign)->accepted($candidate)->create();
@@ -259,7 +261,7 @@ test('issuing another invitation does not reset accepted candidate history', fun
 });
 
 test('candidate cannot create invitations', function () {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
 
     $this->actingAs($candidate)

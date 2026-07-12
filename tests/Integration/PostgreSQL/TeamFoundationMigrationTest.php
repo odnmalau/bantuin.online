@@ -2,7 +2,6 @@
 
 use App\CampaignInvitationStatus;
 use App\ExamSessionStatus;
-use App\UserRole;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -93,7 +92,7 @@ function seedValidLegacyTeamData(string $connection): array
     $administrator = $database->table('users')->insertGetId([
         'name' => 'Legacy Administrator',
         'email' => 'administrator@example.com',
-        'role' => UserRole::Admin->value,
+        'role' => 'admin',
         'created_at' => $now,
         'updated_at' => $now,
     ]);
@@ -104,7 +103,7 @@ function seedValidLegacyTeamData(string $connection): array
         $candidates[] = $database->table('users')->insertGetId([
             'name' => "Candidate {$number}",
             'email' => "candidate{$number}@example.com",
-            'role' => UserRole::Candidate->value,
+            'role' => 'candidate',
             'created_at' => $now,
             'updated_at' => $now,
         ]);
@@ -189,6 +188,7 @@ test('postgresql migrates production-shaped legacy data and enforces team constr
             ->and($owner->user_id)->toBe($legacy['administrator'])
             ->and($operator->user_id)->toBe($legacy['administrator'])
             ->and($administrator->current_team_id)->toBe($team->id)
+            ->and($database->getSchemaBuilder()->hasColumn('users', 'role'))->toBeFalse()
             ->and($campaigns)->toHaveCount(4)
             ->and($campaigns->pluck('team_id')->unique()->all())->toBe([$team->id])
             ->and($campaigns->pluck('created_by')->unique()->all())->toBe([$legacy['administrator']])
@@ -289,7 +289,7 @@ test('postgresql backfill fails before assigning campaigns with invalid legacy o
         $administrator = $database->table('users')->insertGetId([
             'name' => 'Legacy Administrator',
             'email' => 'administrator@example.com',
-            'role' => UserRole::Admin->value,
+            'role' => 'admin',
             'created_at' => $now,
             'updated_at' => $now,
         ]);
@@ -327,7 +327,7 @@ test('postgresql backfill fails when the legacy campaign count is not four', fun
         $administrator = $database->table('users')->insertGetId([
             'name' => 'Legacy Administrator',
             'email' => 'administrator@example.com',
-            'role' => UserRole::Admin->value,
+            'role' => 'admin',
             'created_at' => $now,
             'updated_at' => $now,
         ]);

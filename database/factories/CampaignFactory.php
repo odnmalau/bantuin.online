@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\CampaignStatus;
 use App\Models\Campaign;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -20,8 +21,19 @@ class CampaignFactory extends Factory
     public function definition(): array
     {
         return [
-            'created_by' => User::factory()->admin(),
-            'team_id' => fn (array $attributes): int => User::query()->findOrFail($attributes['created_by'])->current_team_id,
+            'created_by' => User::factory(),
+            'team_id' => function (array $attributes): int {
+                $creator = User::query()->findOrFail($attributes['created_by']);
+
+                if ($creator->current_team_id !== null) {
+                    return $creator->current_team_id;
+                }
+
+                $team = Team::factory()->ownedBy($creator)->create();
+                $creator->selectCurrentTeam($team);
+
+                return $team->id;
+            },
             'title' => fake()->jobTitle().' Hiring Campaign',
             'role_title' => fake()->jobTitle(),
             'seniority' => fake()->randomElement(['junior', 'mid', 'senior']),

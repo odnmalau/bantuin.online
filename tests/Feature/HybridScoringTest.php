@@ -209,7 +209,7 @@ test('evaluation job persists hybrid scoring fields', function () {
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'resume_score' => 80,
             'answers_payload' => [

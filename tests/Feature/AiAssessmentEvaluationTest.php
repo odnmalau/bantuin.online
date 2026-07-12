@@ -77,7 +77,7 @@ test('evaluation job marks passing score as pending approval', function () {
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'status' => AssessmentStatus::Submitted,
             'answers_payload' => [
@@ -136,7 +136,7 @@ test('assessment evaluation pipeline marks passing score as pending approval', f
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'status' => AssessmentStatus::Submitted,
             'answers_payload' => [
@@ -193,7 +193,7 @@ test('qwen evaluator repairs invalid structured output with a follow up prompt',
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'answers_payload' => [
                 [
@@ -239,7 +239,7 @@ test('qwen evaluator fails when repair attempts are exhausted', function () {
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'answers_payload' => [
                 [
@@ -283,7 +283,7 @@ test('qwen evaluator sends prompt through laravel ai sdk qwen provider', functio
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate()->state([
+        ->for(User::factory()->state([
             'name' => 'Candidate One',
             'email' => 'candidate-one@example.com',
         ]))
@@ -328,7 +328,7 @@ test('evaluation job marks low score as evaluated for manual review', function (
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'answers_payload' => [
                 [
@@ -352,8 +352,7 @@ test('evaluation job marks low score as evaluated for manual review', function (
         ->evaluated_at->not->toBeNull();
 });
 
-test('evaluation job uses threshold config to determine review status', function () {
-    config()->set('assessment.threshold', 90);
+test('evaluation job uses configured campaign threshold to determine review status', function () {
 
     AssessmentEvaluatorAgent::fake([
         [
@@ -366,8 +365,10 @@ test('evaluation job uses threshold config to determine review status', function
         ],
     ]);
 
+    $campaign = Campaign::factory()->create(['threshold_score' => 90]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'answers_payload' => [
                 [
@@ -409,7 +410,7 @@ test('evaluation job uses campaign threshold when assessment belongs to a campai
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($campaign)
         ->create([
             'answers_payload' => [
@@ -445,7 +446,7 @@ test('evaluation job marks evaluator failure as evaluation failed', function () 
     });
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
 
     app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
@@ -467,7 +468,7 @@ test('evaluation job marks evaluator failure as evaluation failed', function () 
 test('qwen secret is not included in prompt payload or candidate response', function () {
     config()->set('ai.providers.qwen.key', 'secret-qwen-token');
 
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create();
     $assessment = Assessment::factory()
         ->for($candidate)
@@ -502,7 +503,7 @@ test('evaluation job records that processing started while in evaluating status'
     ]);
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'status' => AssessmentStatus::Submitted,
             'answers_payload' => [

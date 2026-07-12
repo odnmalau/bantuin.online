@@ -11,8 +11,8 @@ use App\TeamStatus;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
-test('contextual factory states establish team authority independently from legacy roles', function () {
-    $owner = User::factory()->admin()->teamOwner()->create();
+test('contextual factory states establish team membership authority', function () {
+    $owner = User::factory()->teamOwner()->create();
     $team = $owner->currentTeam()->sole();
     $administrator = User::factory()->teamAdministrator($team)->create();
     $collaborator = User::factory()->teamCollaborator($team)->create();
@@ -21,7 +21,7 @@ test('contextual factory states establish team authority independently from lega
         ->and($team->activeMemberships()->where('role', TeamMembershipRole::Owner)->sole()->user_id)->toBe($owner->id)
         ->and($administrator->activeTeamMemberships()->sole()->role)->toBe(TeamMembershipRole::Administrator)
         ->and($collaborator->activeTeamMemberships()->sole()->role)->toBe(TeamMembershipRole::Collaborator)
-        ->and($owner->role->value)->toBe('admin');
+        ->and($owner->current_team_id)->toBe($team->id);
 });
 
 test('a team prevents duplicate active memberships and effective owners', function () {
@@ -84,7 +84,7 @@ test('platform operator authority is independent from team membership', function
 
     expect($operator->platformOperatorAuthorities()->active()->count())->toBe(1)
         ->and($operator->teamMemberships()->count())->toBe(0)
-        ->and($operator->role->value)->toBe('candidate');
+        ->and($operator->isPlatformOperator())->toBeTrue();
 
     $authority = $operator->platformOperatorAuthorities()->sole();
     expect($authority)->toBeInstanceOf(PlatformOperatorAuthority::class);

@@ -13,7 +13,7 @@ beforeEach(function () {
 });
 
 test('admin campaign show defers campaign and invitations payloads', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
         'title' => 'Backend Engineer Screening',
         'role_title' => 'Backend Engineer',

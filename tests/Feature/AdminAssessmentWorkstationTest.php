@@ -13,9 +13,11 @@ beforeEach(function () {
 });
 
 test('admin can view assessment detail', function () {
-    $admin = User::factory()->admin()->create();
-    $candidate = User::factory()->candidate()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
         'title' => 'Backend Hiring',
         'role_title' => 'Backend Engineer',
     ]);
@@ -52,7 +54,7 @@ test('admin can view assessment detail', function () {
         ]);
 
     Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->for($campaign)
         ->create([
             'ranking_score' => 72,
@@ -80,9 +82,11 @@ test('admin can view assessment detail', function () {
 });
 
 test('admin can approve reviewable assessment', function (AssessmentStatus $status) {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => $status,
             'ai_score' => $status === AssessmentStatus::PendingApproval ? 82 : 60,
@@ -118,9 +122,11 @@ test('admin can approve reviewable assessment', function (AssessmentStatus $stat
 ]);
 
 test('admin can reject reviewable assessment', function (AssessmentStatus $status) {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => $status,
         ]);
@@ -144,9 +150,9 @@ test('admin can reject reviewable assessment', function (AssessmentStatus $statu
 ]);
 
 test('candidate cannot access assessment review actions', function (string $route, string $method) {
-    $candidate = User::factory()->candidate()->create();
+    $candidate = User::factory()->create();
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'status' => AssessmentStatus::PendingApproval,
         ]);
@@ -161,9 +167,11 @@ test('candidate cannot access assessment review actions', function (string $rout
 ]);
 
 test('approve and reject are rejected for invalid statuses', function (AssessmentStatus $status, string $route) {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => $status,
         ]);
@@ -189,9 +197,11 @@ test('approve and reject are rejected for invalid statuses', function (Assessmen
 ]);
 
 test('approve validation requires final email subject and body', function () {
-    $admin = User::factory()->admin()->create();
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create(['team_id' => $admin->current_team_id, 'created_by' => $admin->id]);
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
+        ->for($campaign)
         ->create([
             'status' => AssessmentStatus::PendingApproval,
         ]);

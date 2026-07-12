@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Mail;
 test('approved assessment sends interview invitation email to candidate', function () {
     Mail::fake();
 
-    $candidate = User::factory()->candidate()->create([
+    $candidate = User::factory()->create([
         'email' => 'candidate@example.com',
     ]);
     $assessment = Assessment::factory()
@@ -44,7 +44,7 @@ test('successful email job marks assessment as email sent', function () {
 
     $assessment = Assessment::factory()
         ->approved()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
 
     (new SendInterviewInvitationEmail($assessment))->handle();
@@ -58,7 +58,7 @@ test('interview email job does not send or mutate after team deactivation', func
     Mail::fake();
     $assessment = Assessment::factory()
         ->approved()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
     $job = new SendInterviewInvitationEmail($assessment);
     $assessment->campaign->team->update([
@@ -83,7 +83,7 @@ test('email failure marks assessment as email failed', function () {
 
     $assessment = Assessment::factory()
         ->approved()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create();
 
     (new SendInterviewInvitationEmail($assessment))->handle();
@@ -104,7 +104,7 @@ test('email is not sent before explicit admin approval', function () {
     Mail::fake();
 
     $assessment = Assessment::factory()
-        ->for(User::factory()->candidate())
+        ->for(User::factory())
         ->create([
             'status' => AssessmentStatus::PendingApproval,
             'approved_email_subject' => null,
