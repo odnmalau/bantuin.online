@@ -255,6 +255,96 @@ test('integrity violations increment warning count on the session', function () 
     expect($session->fresh()->warning_count)->toBe(1);
 });
 
+test('sequential draft saves merge answers under the locked session row', function () {
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $firstQuestion = CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+        'sort_order' => 1,
+    ]);
+    $secondQuestion = CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+        'sort_order' => 2,
+    ]);
+
+    $session = startCandidateExamSession($candidate, $campaign);
+
+    $this->actingAs($candidate)
+        ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session]), [
+            'answers' => [
+                $firstQuestion->id => 'First answer.',
+            ],
+        ])
+        ->assertRedirect();
+
+    $this->actingAs($candidate)
+        ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session->fresh()]), [
+            'answers' => [
+                $secondQuestion->id => 'Second answer.',
+            ],
+        ])
+        ->assertRedirect();
+
+    expect($session->fresh()->answer_drafts)->toMatchArray([
+        (string) $firstQuestion->id => 'First answer.',
+        (string) $secondQuestion->id => 'Second answer.',
+    ]);
+});
+
+test('reaching max integrity warnings auto-submits once', function () {
+    Bus::fake();
+    Storage::fake('local');
+    config()->set('assessment.secure_exam.max_integrity_warnings', 2);
+    config()->set('assessment.secure_exam.auto_submit_on_max_warnings', true);
+
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+
+    $session = startCandidateExamSession($candidate, $campaign);
+
+    $this->actingAs($candidate)
+        ->from(route('candidate.campaigns.exam', $campaign))
+        ->post(route('candidate.campaigns.exam-sessions.violations.store', [$campaign, $session]), [
+            'type' => 'tab_hidden',
+        ])
+        ->assertRedirect(route('candidate.campaigns.exam', $campaign));
+
+    expect($session->fresh()->warning_count)->toBe(1);
+
+    $response = $this->actingAs($candidate)
+        ->from(route('candidate.campaigns.exam', $campaign))
+        ->post(route('candidate.campaigns.exam-sessions.violations.store', [$campaign, $session->fresh()]), [
+            'type' => 'window_blur',
+        ]);
+
+    $assessment = Assessment::query()->whereBelongsTo($candidate)->sole();
+
+    $response->assertRedirect(route('candidate.assessments.show', $assessment));
+
+    expect($session->fresh())
+        ->status->toBe(ExamSessionStatus::AutoSubmitted)
+        ->warning_count->toBe(2)
+        ->submission_reason->toBe('integrity_max_warnings')
+        ->assessment_id->toBe($assessment->id)
+        ->and(Assessment::query()->whereBelongsTo($candidate)->count())->toBe(1);
+
+    $this->actingAs($candidate)
+        ->from(route('candidate.campaigns.exam', $campaign))
+        ->post(route('candidate.campaigns.exam-sessions.violations.store', [$campaign, $session->fresh()]), [
+            'type' => 'tab_hidden',
+        ])
+        ->assertSessionHasErrors('session');
+
+    expect(Assessment::query()->whereBelongsTo($candidate)->count())->toBe(1);
+});
+
 test('candidate can finalize a secure exam session into an assessment', function () {
     Bus::fake();
     Storage::fake('local');

@@ -88,30 +88,46 @@ class ExamSessionService
      */
     public function saveCurrentSectionAnswers(ExamSession $session, Campaign $campaign, array $answers): ExamSession
     {
-        $this->assertSessionActive($session, $campaign);
-        $result = $this->syncSectionExpiry($session, $campaign);
+        $decision = DB::transaction(function () use ($session, $campaign, $answers): array {
+            $locked = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
+            $this->assertSessionActive($locked, $campaign);
 
-        if ($result['finalized'] || $result['advanced']) {
-            return $session->fresh();
-        }
-
-        $section = $this->currentSectionOrFail($session, $campaign);
-        $questions = $this->approvedQuestionsForSection($section);
-        $drafts = $session->answer_drafts ?? [];
-
-        foreach ($questions as $question) {
-            $key = (string) $question->id;
-
-            if (array_key_exists($key, $answers)) {
-                $drafts[$key] = $answers[$key];
+            if ($this->sectionExpiryIsDue($locked)) {
+                return [
+                    'needs_expiry_sync' => true,
+                    'session' => $locked,
+                ];
             }
+
+            $section = $this->currentSectionOrFail($locked, $campaign);
+            $questions = $this->approvedQuestionsForSection($section);
+            $drafts = $locked->answer_drafts ?? [];
+
+            foreach ($questions as $question) {
+                $key = (string) $question->id;
+
+                if (array_key_exists($key, $answers)) {
+                    $drafts[$key] = $answers[$key];
+                }
+            }
+
+            $locked->update([
+                'answer_drafts' => $drafts,
+            ]);
+
+            return [
+                'needs_expiry_sync' => false,
+                'session' => $locked->fresh(),
+            ];
+        });
+
+        if ($decision['needs_expiry_sync']) {
+            $this->syncSectionExpiry($decision['session'], $campaign);
+
+            return $decision['session']->fresh();
         }
 
-        $session->update([
-            'answer_drafts' => $drafts,
-        ]);
-
-        return $session->fresh();
+        return $decision['session'];
     }
 
     /**
@@ -156,28 +172,34 @@ class ExamSessionService
      */
     public function recordViolation(ExamSession $session, Campaign $campaign, string $type): array
     {
-        $this->assertSessionActive($session, $campaign);
+        $mutation = DB::transaction(function () use ($session, $campaign, $type): array {
+            $locked = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
+            $this->assertSessionActive($locked, $campaign);
 
-        $events = $session->integrity_events ?? [];
-        $events[] = [
-            'type' => $type,
-            'occurred_at' => now()->toIso8601String(),
-        ];
+            $events = $locked->integrity_events ?? [];
+            $events[] = [
+                'type' => $type,
+                'occurred_at' => now()->toIso8601String(),
+            ];
 
-        $warningCount = $session->warning_count + 1;
-        $maxWarnings = $this->maxIntegrityWarnings();
-        $autoSubmit = (bool) config('assessment.secure_exam.auto_submit_on_max_warnings', true);
+            $warningCount = $locked->warning_count + 1;
+            $maxWarnings = $this->maxIntegrityWarnings();
+            $autoSubmit = (bool) config('assessment.secure_exam.auto_submit_on_max_warnings', true);
 
-        $session->update([
-            'integrity_events' => $events,
-            'warning_count' => $warningCount,
-        ]);
+            $locked->update([
+                'integrity_events' => $events,
+                'warning_count' => $warningCount,
+            ]);
 
-        $session = $session->fresh();
+            return [
+                'session' => $locked->fresh(),
+                'should_finalize' => $autoSubmit && $warningCount >= $maxWarnings,
+            ];
+        });
 
-        if ($autoSubmit && $warningCount >= $maxWarnings) {
+        if ($mutation['should_finalize']) {
             $assessment = $this->finalizeSession(
-                $session,
+                $mutation['session'],
                 $campaign,
                 submissionReason: 'integrity_max_warnings',
                 status: ExamSessionStatus::AutoSubmitted,
@@ -185,14 +207,14 @@ class ExamSessionService
             );
 
             return [
-                'session' => $session->fresh(),
+                'session' => $mutation['session']->fresh(),
                 'auto_submitted' => true,
                 'assessment' => $assessment,
             ];
         }
 
         return [
-            'session' => $session,
+            'session' => $mutation['session'],
             'auto_submitted' => false,
             'assessment' => null,
         ];
@@ -393,6 +415,21 @@ class ExamSessionService
                 'session' => __('This exam session is no longer active.'),
             ]);
         }
+    }
+
+    private function sectionExpiryIsDue(ExamSession $session): bool
+    {
+        if (! $session->isActive() || $session->current_section_id === null) {
+            return false;
+        }
+
+        if (! (bool) config('assessment.secure_exam.enforce_section_timers', true)) {
+            return false;
+        }
+
+        $expiresAt = $session->current_section_expires_at;
+
+        return $expiresAt !== null && $expiresAt->isPast();
     }
 
     private function assertCurrentSectionNotExpired(ExamSession $session): void
