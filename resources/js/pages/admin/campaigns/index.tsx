@@ -379,9 +379,7 @@ export default function AdminCampaignsIndex({
                                         <div className="grid grid-cols-2 gap-2">
                                             <CampaignMetric
                                                 label="Threshold"
-                                                value={
-                                                    campaign.threshold_score
-                                                }
+                                                value={campaign.threshold_score}
                                             />
                                             <CampaignMetric
                                                 label="Submissions"
@@ -391,15 +389,11 @@ export default function AdminCampaignsIndex({
                                             />
                                             <CampaignMetric
                                                 label="Sections"
-                                                value={
-                                                    campaign.sections_count
-                                                }
+                                                value={campaign.sections_count}
                                             />
                                             <CampaignMetric
                                                 label="Questions"
-                                                value={
-                                                    campaign.questions_count
-                                                }
+                                                value={campaign.questions_count}
                                             />
                                         </div>
                                     </CardContent>

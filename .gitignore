@@ -28,4 +28,10 @@ yarn-error.log
 /.vscode
 /.zed
 /docs
+!/docs/
+/docs/*
+!/docs/agents/
+!/docs/agents/*.md
+!/docs/adr/
+!/docs/adr/*.md
 /.pnpm-store

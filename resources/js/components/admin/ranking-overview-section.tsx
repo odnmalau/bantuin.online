@@ -232,9 +232,7 @@ function RankingActivityChart({ data }: { data: RankingActivityPoint[] }) {
                         />
                         <ChartTooltip
                             cursor={false}
-                            content={
-                                <ChartTooltipContent indicator="line" />
-                            }
+                            content={<ChartTooltipContent indicator="line" />}
                         />
                         <Area
                             dataKey="ranked_count"
@@ -251,11 +249,7 @@ function RankingActivityChart({ data }: { data: RankingActivityPoint[] }) {
     );
 }
 
-function ScoreDistributionChart({
-    data,
-}: {
-    data: ScoreDistributionPoint[];
-}) {
+function ScoreDistributionChart({ data }: { data: ScoreDistributionPoint[] }) {
     return (
         <Card>
             <CardHeader>
@@ -318,11 +312,7 @@ function NeedsAttentionBar({ attention }: { attention: NeedsAttention }) {
               )
             : null,
         attention.summary.pending > 0
-            ? formatCountLabel(
-                  attention.summary.pending,
-                  'pending',
-                  'pending',
-              )
+            ? formatCountLabel(attention.summary.pending, 'pending', 'pending')
             : null,
         attention.summary.manual_reviews > 0
             ? formatCountLabel(

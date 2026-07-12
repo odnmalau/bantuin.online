@@ -454,276 +454,314 @@ export default function AdminCampaignsShow({
                                                                 </div>
                                                             </div>
 
-                                            {section.questions.length === 0 ? (
-                                                <p className="text-sm text-muted-foreground">
-                                                    No questions in this
-                                                    section.
-                                                </p>
-                                            ) : (
-                                                <div className="divide-y rounded-md border">
-                                                    {section.questions.map(
-                                                        (question) => (
-                                                            <div
-                                                                key={
-                                                                    question.id
-                                                                }
-                                                                className="grid gap-4 p-4 lg:grid-cols-[1fr_160px]"
-                                                            >
-                                                                <div className="flex flex-col gap-2">
-                                                                    <div className="flex flex-wrap items-center gap-2">
-                                                                        <Badge variant="secondary">
-                                                                            {
-                                                                                question.type_label
-                                                                            }
-                                                                        </Badge>
-                                                                        <Badge variant="outline">
-                                                                            {
-                                                                                question.grading_mode_label
-                                                                            }
-                                                                        </Badge>
-                                                                        <Badge variant="outline">
-                                                                            {
-                                                                                question.points
-                                                                            }{' '}
-                                                                            pts
-                                                                        </Badge>
-                                                                        <Badge
-                                                                            variant={
-                                                                                question.status ===
-                                                                                'approved'
-                                                                                    ? 'default'
-                                                                                    : 'outline'
-                                                                            }
-                                                                        >
-                                                                            {
-                                                                                question.status_label
-                                                                            }
-                                                                        </Badge>
-                                                                        <span className="text-xs text-muted-foreground">
-                                                                            {
-                                                                                question.difficulty
-                                                                            }
-                                                                        </span>
-                                                                    </div>
-                                                                    <p className="font-medium">
-                                                                        {
-                                                                            question.prompt
-                                                                        }
-                                                                    </p>
-                                                                    {question
-                                                                        .skill_tags
-                                                                        .length >
-                                                                    0 ? (
-                                                                        <div className="flex flex-wrap gap-2">
-                                                                            {question.skill_tags.map(
-                                                                                (
-                                                                                    tag,
-                                                                                ) => (
-                                                                                    <Badge
-                                                                                        key={
-                                                                                            tag
-                                                                                        }
-                                                                                        variant="outline"
-                                                                                    >
+                                                            {section.questions
+                                                                .length ===
+                                                            0 ? (
+                                                                <p className="text-sm text-muted-foreground">
+                                                                    No questions
+                                                                    in this
+                                                                    section.
+                                                                </p>
+                                                            ) : (
+                                                                <div className="divide-y rounded-md border">
+                                                                    {section.questions.map(
+                                                                        (
+                                                                            question,
+                                                                        ) => (
+                                                                            <div
+                                                                                key={
+                                                                                    question.id
+                                                                                }
+                                                                                className="grid gap-4 p-4 lg:grid-cols-[1fr_160px]"
+                                                                            >
+                                                                                <div className="flex flex-col gap-2">
+                                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                                        <Badge variant="secondary">
+                                                                                            {
+                                                                                                question.type_label
+                                                                                            }
+                                                                                        </Badge>
+                                                                                        <Badge variant="outline">
+                                                                                            {
+                                                                                                question.grading_mode_label
+                                                                                            }
+                                                                                        </Badge>
+                                                                                        <Badge variant="outline">
+                                                                                            {
+                                                                                                question.points
+                                                                                            }{' '}
+                                                                                            pts
+                                                                                        </Badge>
+                                                                                        <Badge
+                                                                                            variant={
+                                                                                                question.status ===
+                                                                                                'approved'
+                                                                                                    ? 'default'
+                                                                                                    : 'outline'
+                                                                                            }
+                                                                                        >
+                                                                                            {
+                                                                                                question.status_label
+                                                                                            }
+                                                                                        </Badge>
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            {
+                                                                                                question.difficulty
+                                                                                            }
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <p className="font-medium">
                                                                                         {
-                                                                                            tag
+                                                                                            question.prompt
                                                                                         }
-                                                                                    </Badge>
-                                                                                ),
-                                                                            )}
-                                                                        </div>
-                                                                    ) : null}
-                                                                    {question.expected_rubric ? (
-                                                                        <p className="line-clamp-2 text-sm text-muted-foreground">
-                                                                            {
-                                                                                question.expected_rubric
-                                                                            }
-                                                                        </p>
-                                                                    ) : null}
+                                                                                    </p>
+                                                                                    {question
+                                                                                        .skill_tags
+                                                                                        .length >
+                                                                                    0 ? (
+                                                                                        <div className="flex flex-wrap gap-2">
+                                                                                            {question.skill_tags.map(
+                                                                                                (
+                                                                                                    tag,
+                                                                                                ) => (
+                                                                                                    <Badge
+                                                                                                        key={
+                                                                                                            tag
+                                                                                                        }
+                                                                                                        variant="outline"
+                                                                                                    >
+                                                                                                        {
+                                                                                                            tag
+                                                                                                        }
+                                                                                                    </Badge>
+                                                                                                ),
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ) : null}
+                                                                                    {question.expected_rubric ? (
+                                                                                        <p className="line-clamp-2 text-sm text-muted-foreground">
+                                                                                            {
+                                                                                                question.expected_rubric
+                                                                                            }
+                                                                                        </p>
+                                                                                    ) : null}
+                                                                                </div>
+                                                                                <div className="flex justify-end">
+                                                                                    <QuestionActionsDropdown
+                                                                                        campaignId={
+                                                                                            campaign.id
+                                                                                        }
+                                                                                        question={
+                                                                                            question
+                                                                                        }
+                                                                                        sections={
+                                                                                            campaign.sections
+                                                                                        }
+                                                                                        questionTypes={
+                                                                                            questionTypes
+                                                                                        }
+                                                                                        gradingModeOptions={
+                                                                                            gradingModeOptions
+                                                                                        }
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                        ),
+                                                                    )}
                                                                 </div>
-                                                                <div className="flex justify-end">
-                                                                    <QuestionActionsDropdown
-                                                                        campaignId={
-                                                                            campaign.id
-                                                                        }
-                                                                        question={
-                                                                            question
-                                                                        }
-                                                                        sections={
-                                                                            campaign.sections
-                                                                        }
-                                                                        questionTypes={
-                                                                            questionTypes
-                                                                        }
-                                                                        gradingModeOptions={
-                                                                            gradingModeOptions
-                                                                        }
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        ),
-                                                    )}
-                                                </div>
+                                                            )}
+                                                        </section>
+                                                    ),
+                                                )}
+                                            </div>
+                                        )}
+                                    </CardContent>
+
+                                    <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
+                                        <p className="text-sm text-muted-foreground">
+                                            Add another section when the
+                                            assessment needs a separate topic or
+                                            scoring group.
+                                        </p>
+                                        <AddSectionSheet
+                                            campaignId={campaign.id}
+                                        />
+                                    </CardFooter>
+                                </Card>
+                            </div>
+
+                            <Collapsible className="group/collapsible">
+                                <Card className="gap-0">
+                                    <CollapsibleTrigger asChild>
+                                        <CardHeader className="cursor-pointer">
+                                            <CardTitle className="flex items-center gap-2">
+                                                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                                                Advanced Settings
+                                            </CardTitle>
+                                        </CardHeader>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                        <Form<RankingWeightsFormData>
+                                            {...CampaignRankingController.update.form.patch(
+                                                campaign.id,
                                             )}
-                                        </section>
-                                    ))}
-                                </div>
-                            )}
-                        </CardContent>
+                                            options={{
+                                                preserveScroll: true,
+                                            }}
+                                            className="contents"
+                                        >
+                                            {({ errors, processing }) => {
+                                                const fieldErrors =
+                                                    errors as Record<
+                                                        string,
+                                                        string | undefined
+                                                    >;
 
-                        <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
-                            <p className="text-sm text-muted-foreground">
-                                Add another section when the assessment needs a
-                                separate topic or scoring group.
-                            </p>
-                            <AddSectionSheet campaignId={campaign.id} />
-                        </CardFooter>
-                    </Card>
-                </div>
-
-                <Collapsible className="group/collapsible">
-                    <Card className="gap-0">
-                        <CollapsibleTrigger asChild>
-                            <CardHeader className="cursor-pointer">
-                                <CardTitle className="flex items-center gap-2">
-                                    <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                                    Advanced Settings
-                                </CardTitle>
-                            </CardHeader>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                            <Form<RankingWeightsFormData>
-                                {...CampaignRankingController.update.form.patch(
-                                    campaign.id,
-                                )}
-                                options={{ preserveScroll: true }}
-                                className="contents"
-                            >
-                                {({ errors, processing }) => {
-                                    const fieldErrors = errors as Record<
-                                        string,
-                                        string | undefined
-                                    >;
-
-                                    return (
-                                        <>
-                                            <CardContent className="flex flex-col gap-6 py-(--card-spacing)">
-                                                <section className="flex flex-col gap-3">
-                                                    <div>
-                                                        <h2 className="text-base font-medium">
-                                                            Ranking weights
-                                                        </h2>
-                                                        <p className="text-sm text-muted-foreground">
-                                                            Resume, essay, and
-                                                            MCQ weights must
-                                                            total 100.
-                                                        </p>
-                                                    </div>
-                                                    <div className="grid gap-3 sm:grid-cols-3">
-                                                        <div className="grid gap-2">
-                                                            <Label htmlFor="ranking_resume_score">
-                                                                Resume %
-                                                            </Label>
-                                                            <Input
-                                                                id="ranking_resume_score"
-                                                                name="ranking_weights[resume_score]"
-                                                                type="number"
-                                                                min={0}
-                                                                max={100}
-                                                                defaultValue={
-                                                                    campaign
-                                                                        .ranking_weights
-                                                                        .resume_score
+                                                return (
+                                                    <>
+                                                        <CardContent className="flex flex-col gap-6 py-(--card-spacing)">
+                                                            <section className="flex flex-col gap-3">
+                                                                <div>
+                                                                    <h2 className="text-base font-medium">
+                                                                        Ranking
+                                                                        weights
+                                                                    </h2>
+                                                                    <p className="text-sm text-muted-foreground">
+                                                                        Resume,
+                                                                        essay,
+                                                                        and MCQ
+                                                                        weights
+                                                                        must
+                                                                        total
+                                                                        100.
+                                                                    </p>
+                                                                </div>
+                                                                <div className="grid gap-3 sm:grid-cols-3">
+                                                                    <div className="grid gap-2">
+                                                                        <Label htmlFor="ranking_resume_score">
+                                                                            Resume
+                                                                            %
+                                                                        </Label>
+                                                                        <Input
+                                                                            id="ranking_resume_score"
+                                                                            name="ranking_weights[resume_score]"
+                                                                            type="number"
+                                                                            min={
+                                                                                0
+                                                                            }
+                                                                            max={
+                                                                                100
+                                                                            }
+                                                                            defaultValue={
+                                                                                campaign
+                                                                                    .ranking_weights
+                                                                                    .resume_score
+                                                                            }
+                                                                            required
+                                                                        />
+                                                                        <InputError
+                                                                            message={
+                                                                                fieldErrors[
+                                                                                    'ranking_weights.resume_score'
+                                                                                ]
+                                                                            }
+                                                                        />
+                                                                    </div>
+                                                                    <div className="grid gap-2">
+                                                                        <Label htmlFor="ranking_essay_score">
+                                                                            Essay
+                                                                            %
+                                                                        </Label>
+                                                                        <Input
+                                                                            id="ranking_essay_score"
+                                                                            name="ranking_weights[essay_score]"
+                                                                            type="number"
+                                                                            min={
+                                                                                0
+                                                                            }
+                                                                            max={
+                                                                                100
+                                                                            }
+                                                                            defaultValue={
+                                                                                campaign
+                                                                                    .ranking_weights
+                                                                                    .essay_score
+                                                                            }
+                                                                            required
+                                                                        />
+                                                                        <InputError
+                                                                            message={
+                                                                                fieldErrors[
+                                                                                    'ranking_weights.essay_score'
+                                                                                ]
+                                                                            }
+                                                                        />
+                                                                    </div>
+                                                                    <div className="grid gap-2">
+                                                                        <Label htmlFor="ranking_mcq_score">
+                                                                            MCQ
+                                                                            %
+                                                                        </Label>
+                                                                        <Input
+                                                                            id="ranking_mcq_score"
+                                                                            name="ranking_weights[mcq_score]"
+                                                                            type="number"
+                                                                            min={
+                                                                                0
+                                                                            }
+                                                                            max={
+                                                                                100
+                                                                            }
+                                                                            defaultValue={
+                                                                                campaign
+                                                                                    .ranking_weights
+                                                                                    .mcq_score
+                                                                            }
+                                                                            required
+                                                                        />
+                                                                        <InputError
+                                                                            message={
+                                                                                fieldErrors[
+                                                                                    'ranking_weights.mcq_score'
+                                                                                ]
+                                                                            }
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                                <InputError
+                                                                    message={
+                                                                        fieldErrors.ranking_weights
+                                                                    }
+                                                                />
+                                                            </section>
+                                                        </CardContent>
+                                                        <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
+                                                            <p className="text-sm text-muted-foreground">
+                                                                Apply these
+                                                                weights to
+                                                                candidate
+                                                                ranking.
+                                                            </p>
+                                                            <Button
+                                                                type="submit"
+                                                                size="sm"
+                                                                disabled={
+                                                                    processing
                                                                 }
-                                                                required
-                                                            />
-                                                            <InputError
-                                                                message={
-                                                                    fieldErrors[
-                                                                        'ranking_weights.resume_score'
-                                                                    ]
-                                                                }
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-2">
-                                                            <Label htmlFor="ranking_essay_score">
-                                                                Essay %
-                                                            </Label>
-                                                            <Input
-                                                                id="ranking_essay_score"
-                                                                name="ranking_weights[essay_score]"
-                                                                type="number"
-                                                                min={0}
-                                                                max={100}
-                                                                defaultValue={
-                                                                    campaign
-                                                                        .ranking_weights
-                                                                        .essay_score
-                                                                }
-                                                                required
-                                                            />
-                                                            <InputError
-                                                                message={
-                                                                    fieldErrors[
-                                                                        'ranking_weights.essay_score'
-                                                                    ]
-                                                                }
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-2">
-                                                            <Label htmlFor="ranking_mcq_score">
-                                                                MCQ %
-                                                            </Label>
-                                                            <Input
-                                                                id="ranking_mcq_score"
-                                                                name="ranking_weights[mcq_score]"
-                                                                type="number"
-                                                                min={0}
-                                                                max={100}
-                                                                defaultValue={
-                                                                    campaign
-                                                                        .ranking_weights
-                                                                        .mcq_score
-                                                                }
-                                                                required
-                                                            />
-                                                            <InputError
-                                                                message={
-                                                                    fieldErrors[
-                                                                        'ranking_weights.mcq_score'
-                                                                    ]
-                                                                }
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <InputError
-                                                        message={
-                                                            fieldErrors.ranking_weights
-                                                        }
-                                                    />
-                                                </section>
-                                            </CardContent>
-                                            <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
-                                                <p className="text-sm text-muted-foreground">
-                                                    Apply these weights to
-                                                    candidate ranking.
-                                                </p>
-                                                <Button
-                                                    type="submit"
-                                                    size="sm"
-                                                    disabled={processing}
-                                                >
-                                                    {processing && <Spinner />}
-                                                    Save weights
-                                                </Button>
-                                            </CardFooter>
-                                        </>
-                                    );
-                                }}
-                            </Form>
-                        </CollapsibleContent>
-                    </Card>
-                </Collapsible>
+                                                            >
+                                                                {processing && (
+                                                                    <Spinner />
+                                                                )}
+                                                                Save weights
+                                                            </Button>
+                                                        </CardFooter>
+                                                    </>
+                                                );
+                                            }}
+                                        </Form>
+                                    </CollapsibleContent>
+                                </Card>
+                            </Collapsible>
                         </>
                     ) : null}
                 </Deferred>
@@ -1543,9 +1581,7 @@ function CampaignOverviewCard({
                             />
                             <CampaignOverviewField
                                 label="Seniority"
-                                value={
-                                    campaign.seniority ?? 'Not specified'
-                                }
+                                value={campaign.seniority ?? 'Not specified'}
                             />
                             <CampaignOverviewField
                                 label="Assessment language"
@@ -1585,8 +1621,7 @@ function CampaignOverviewCard({
                             <CampaignOverviewField
                                 label="Job description"
                                 value={
-                                    campaign.job_description ??
-                                    'Not specified'
+                                    campaign.job_description ?? 'Not specified'
                                 }
                             />
                         </div>

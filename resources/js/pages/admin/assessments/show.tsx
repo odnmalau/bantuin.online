@@ -83,12 +83,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import admin from '@/routes/admin';
 
@@ -258,10 +253,7 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
                         score={assessment.resume_score}
                     />
                     <ScoreMetric label="Essay" score={essayScore} />
-                    <ScoreMetric
-                        label="MCQ"
-                        score={assessment.mcq_score}
-                    />
+                    <ScoreMetric label="MCQ" score={assessment.mcq_score} />
                 </div>
 
                 {assessment.needs_manual_review ? (
@@ -296,7 +288,10 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
                         <TabsTrigger value="answers">Answers</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="overview" className="flex flex-col gap-6">
+                    <TabsContent
+                        value="overview"
+                        className="flex flex-col gap-6"
+                    >
                         <OverviewTab assessment={assessment} />
                     </TabsContent>
 
@@ -304,7 +299,10 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
                         <ResumeTab assessment={assessment} />
                     </TabsContent>
 
-                    <TabsContent value="answers" className="flex flex-col gap-6">
+                    <TabsContent
+                        value="answers"
+                        className="flex flex-col gap-6"
+                    >
                         <AnswersTab assessment={assessment} />
                     </TabsContent>
                 </Tabs>
@@ -415,7 +413,7 @@ function OverviewTab({ assessment }: { assessment: Assessment }) {
                         <CardTitle>AI Justification</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
                             {assessment.ai_justification}
                         </p>
                     </CardContent>
@@ -546,9 +544,7 @@ function ResumeTab({ assessment }: { assessment: Assessment }) {
                         />
                         <MetaItem
                             label="Confidence"
-                            value={
-                                assessment.resume_payload?.confidence ?? '-'
-                            }
+                            value={assessment.resume_payload?.confidence ?? '-'}
                         />
                     </FieldGroup>
                     {assessment.resume_score !== null ? (
@@ -567,7 +563,7 @@ function ResumeTab({ assessment }: { assessment: Assessment }) {
                     </CardHeader>
                     <CardContent>
                         {summary ? (
-                            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                            <p className="text-sm whitespace-pre-wrap text-muted-foreground">
                                 {summary}
                             </p>
                         ) : (
@@ -592,16 +588,12 @@ function ResumeTab({ assessment }: { assessment: Assessment }) {
                 <div className="grid gap-4 md:grid-cols-2">
                     <SkillGroup
                         title="Matched skills"
-                        items={
-                            assessment.resume_payload?.matched_skills ?? []
-                        }
+                        items={assessment.resume_payload?.matched_skills ?? []}
                         variant="default"
                     />
                     <SkillGroup
                         title="Missing skills"
-                        items={
-                            assessment.resume_payload?.missing_skills ?? []
-                        }
+                        items={assessment.resume_payload?.missing_skills ?? []}
                         variant="outline"
                     />
                     <SkillGroup
@@ -655,7 +647,7 @@ function AnswersTab({ assessment }: { assessment: Assessment }) {
                             <Field>
                                 <FieldLabel>Rubric</FieldLabel>
                                 <FieldContent>
-                                    <p className="whitespace-pre-wrap text-sm">
+                                    <p className="text-sm whitespace-pre-wrap">
                                         {answer.rubric}
                                     </p>
                                 </FieldContent>
@@ -664,7 +656,7 @@ function AnswersTab({ assessment }: { assessment: Assessment }) {
                             <Field>
                                 <FieldLabel>Answer</FieldLabel>
                                 <FieldContent>
-                                    <p className="whitespace-pre-wrap text-sm">
+                                    <p className="text-sm whitespace-pre-wrap">
                                         {answer.answer}
                                     </p>
                                 </FieldContent>
@@ -762,9 +754,7 @@ function InterviewEmailDialog({
                                     </Field>
 
                                     <Field
-                                        data-invalid={
-                                            hasBodyError || undefined
-                                        }
+                                        data-invalid={hasBodyError || undefined}
                                         data-disabled={
                                             !assessment.can_review || undefined
                                         }
@@ -858,13 +848,7 @@ function ScoreMetric({
     );
 }
 
-function MetaItem({
-    label,
-    value,
-}: {
-    label: string;
-    value: string | number;
-}) {
+function MetaItem({ label, value }: { label: string; value: string | number }) {
     return (
         <Field>
             <FieldLabel>{label}</FieldLabel>
@@ -1012,16 +996,12 @@ function AssessmentActionsMenu({
                 subject={subject}
                 body={body}
                 open={openAction === 'email'}
-                onOpenChange={(open) =>
-                    setOpenAction(open ? 'email' : null)
-                }
+                onOpenChange={(open) => setOpenAction(open ? 'email' : null)}
             />
             <RetryEvaluationDialog
                 assessment={assessment}
                 open={openAction === 'retry'}
-                onOpenChange={(open) =>
-                    setOpenAction(open ? 'retry' : null)
-                }
+                onOpenChange={(open) => setOpenAction(open ? 'retry' : null)}
             />
             <RetryEmailDialog
                 assessment={assessment}
@@ -1033,9 +1013,7 @@ function AssessmentActionsMenu({
             <PromoteAssessmentDialog
                 assessment={assessment}
                 open={openAction === 'promote'}
-                onOpenChange={(open) =>
-                    setOpenAction(open ? 'promote' : null)
-                }
+                onOpenChange={(open) => setOpenAction(open ? 'promote' : null)}
             />
             <OverrideScoreDialog
                 assessment={assessment}
@@ -1048,9 +1026,7 @@ function AssessmentActionsMenu({
     );
 }
 
-function formErrorsFrom(
-    errors: unknown,
-): Record<string, string | undefined> {
+function formErrorsFrom(errors: unknown): Record<string, string | undefined> {
     return errors as Record<string, string | undefined>;
 }
 
@@ -1252,8 +1228,8 @@ function PromoteAssessmentDialog({
                 <DialogHeader>
                     <DialogTitle>Promote to interview review</DialogTitle>
                     <DialogDescription>
-                        Move this false negative into pending approval. If no
-                        AI email draft exists, provide a manual draft here.
+                        Move this false negative into pending approval. If no AI
+                        email draft exists, provide a manual draft here.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -1344,9 +1320,7 @@ function PromoteAssessmentDialog({
                                     </Field>
 
                                     <Field
-                                        data-invalid={
-                                            hasBodyError || undefined
-                                        }
+                                        data-invalid={hasBodyError || undefined}
                                     >
                                         <FieldLabel htmlFor="promote_email_body">
                                             Manual email body
@@ -1417,9 +1391,7 @@ function OverrideScoreDialog({
                 >
                     {({ errors, processing }) => {
                         const formErrors = formErrorsFrom(errors);
-                        const hasScoreError = Boolean(
-                            formErrors.ranking_score,
-                        );
+                        const hasScoreError = Boolean(formErrors.ranking_score);
                         const hasReasonError = Boolean(formErrors.reason);
 
                         return (
