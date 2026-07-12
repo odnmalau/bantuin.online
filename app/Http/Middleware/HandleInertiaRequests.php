@@ -110,6 +110,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $user->activeTeamMemberships()
+            ->whereHas('team')
             ->with('team:id,name,status')
             ->get()
             ->sortBy(fn ($membership) => mb_strtolower($membership->team->name))

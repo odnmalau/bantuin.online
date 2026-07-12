@@ -195,6 +195,28 @@ test('google callback keeps existing avatar when google omits one', function () 
     expect($user->avatar)->toBe('https://lh3.googleusercontent.com/a/existing-avatar');
 });
 
+test('a closed account cannot authenticate or register again with google', function () {
+    fakeGoogleAuthConfig();
+    $user = User::factory()->create([
+        'email' => 'closed@example.com',
+        'google_id' => 'google-closed-account',
+    ]);
+    $user->delete();
+
+    fakeGoogleUserAuthentication(
+        id: 'google-closed-account',
+        email: 'closed@example.com',
+        name: 'Closed User',
+    );
+
+    $this->get(route('auth.google.callback'))
+        ->assertRedirect(route('login'))
+        ->assertSessionHas('status');
+
+    $this->assertGuest();
+    expect(User::withTrashed()->count())->toBe(1);
+});
+
 test('google callback redirects to login when the user cancels', function () {
     $this->get(route('auth.google.callback', ['error' => 'access_denied']))
         ->assertRedirect(route('login'))

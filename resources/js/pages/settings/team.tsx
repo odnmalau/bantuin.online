@@ -1,4 +1,5 @@
 import { Form, Head, Link } from '@inertiajs/react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,6 +27,11 @@ import {
     update as updateMembership,
 } from '@/routes/team-memberships';
 import { edit } from '@/routes/team-settings';
+import {
+    deactivate as deactivateTeam,
+    destroy as deleteTeam,
+    reactivate as reactivateTeam,
+} from '@/routes/teams';
 
 type Member = {
     id: number;
@@ -66,12 +72,16 @@ type Props = {
     } | null;
     activities?: Activity[];
     activityPagination?: { previous: string | null; next: string | null };
+    deletionBlocker: string | null;
     can: {
         inviteAdministrator: boolean;
         inviteCollaborator: boolean;
         transferOwnership: boolean;
         viewActivity: boolean;
         leave: boolean;
+        deactivate: boolean;
+        reactivate: boolean;
+        delete: boolean;
     };
 };
 
@@ -92,6 +102,7 @@ export default function TeamSettings({
     pendingTransfer,
     activities,
     activityPagination,
+    deletionBlocker,
     can,
 }: Props) {
     const canInvite = can.inviteAdministrator || can.inviteCollaborator;
@@ -103,6 +114,96 @@ export default function TeamSettings({
         <>
             <Head title={`${team.name} settings`} />
             <h1 className="sr-only">{team.name} settings</h1>
+
+            {team.status === 'deactivated' ? (
+                <Alert>
+                    <AlertTitle>Read-only Team history</AlertTitle>
+                    <AlertDescription>
+                        Hiring, Candidate, membership, invitation, ownership,
+                        rename, and assessment changes are paused until the
+                        Owner reactivates this Team.
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            {can.deactivate ||
+            can.reactivate ||
+            can.delete ||
+            deletionBlocker ? (
+                <Card className="border-destructive/30">
+                    <CardHeader>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <CardTitle>Team Lifecycle</CardTitle>
+                            <Badge variant="secondary">
+                                {team.status === 'active'
+                                    ? 'Active'
+                                    : 'Deactivated'}
+                            </Badge>
+                        </div>
+                        <CardDescription>
+                            Deactivation preserves Team history as read-only.
+                            Only an Empty Team can be deleted.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        {can.deactivate ? (
+                            <Form {...deactivateTeam.form(team.id)}>
+                                {({ processing, errors }) => (
+                                    <div className="flex flex-col gap-2">
+                                        <Button
+                                            variant="outline"
+                                            disabled={processing}
+                                        >
+                                            {processing ? <Spinner /> : null}
+                                            Deactivate Team
+                                        </Button>
+                                        {errors.team ? (
+                                            <p className="text-sm text-destructive">
+                                                {errors.team}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                )}
+                            </Form>
+                        ) : null}
+                        {can.reactivate ? (
+                            <Form {...reactivateTeam.form(team.id)}>
+                                {({ processing }) => (
+                                    <Button disabled={processing}>
+                                        {processing ? <Spinner /> : null}
+                                        Reactivate Team
+                                    </Button>
+                                )}
+                            </Form>
+                        ) : null}
+                        {can.delete ? (
+                            <Form {...deleteTeam.form(team.id)}>
+                                {({ processing, errors }) => (
+                                    <div className="flex flex-col gap-2">
+                                        <Button
+                                            variant="destructive"
+                                            disabled={processing}
+                                        >
+                                            {processing ? <Spinner /> : null}
+                                            Delete Empty Team
+                                        </Button>
+                                        {errors.team ? (
+                                            <p className="text-sm text-destructive">
+                                                {errors.team}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                )}
+                            </Form>
+                        ) : null}
+                        {deletionBlocker ? (
+                            <p className="text-sm text-muted-foreground">
+                                {deletionBlocker}
+                            </p>
+                        ) : null}
+                    </CardContent>
+                </Card>
+            ) : null}
 
             <Card>
                 <CardHeader>

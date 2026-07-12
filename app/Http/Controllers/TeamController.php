@@ -7,13 +7,19 @@ use App\Http\Requests\UpdateTeamRequest;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\TeamActivityRecorder;
+use App\Services\TeamLifecycleService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 
 class TeamController extends Controller
 {
-    public function __construct(private TeamActivityRecorder $activities) {}
+    public function __construct(
+        private TeamActivityRecorder $activities,
+        private TeamLifecycleService $lifecycle,
+    ) {}
 
     public function store(StoreTeamRequest $request): RedirectResponse
     {
@@ -50,5 +56,35 @@ class TeamController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Team renamed.')]);
 
         return back();
+    }
+
+    public function deactivate(Request $request, Team $team): RedirectResponse
+    {
+        Gate::authorize('deactivate', $team);
+        $this->lifecycle->deactivate($team, $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team deactivated.')]);
+
+        return back();
+    }
+
+    public function reactivate(Request $request, Team $team): RedirectResponse
+    {
+        Gate::authorize('reactivate', $team);
+        $this->lifecycle->reactivate($team, $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team reactivated.')]);
+
+        return back();
+    }
+
+    public function destroy(Request $request, Team $team): RedirectResponse
+    {
+        Gate::authorize('delete', $team);
+        $this->lifecycle->deleteEmpty($team, $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team deleted.')]);
+
+        return to_route('dashboard');
     }
 }

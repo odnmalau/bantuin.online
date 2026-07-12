@@ -41,13 +41,13 @@ class TeamInvitation extends Model
     /** @return BelongsTo<User, $this> */
     public function inviter(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'invited_by');
+        return $this->belongsTo(User::class, 'invited_by')->withTrashed();
     }
 
     /** @return BelongsTo<User, $this> */
     public function acceptedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'accepted_by');
+        return $this->belongsTo(User::class, 'accepted_by')->withTrashed();
     }
 
     public function isRedeemable(): bool

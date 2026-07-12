@@ -8,6 +8,7 @@ use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\TeamMembership;
 use App\OwnershipTransferStatus;
+use App\Services\TeamLifecycleService;
 use App\TeamInvitationStatus;
 use App\TeamMembershipRole;
 use App\TeamStatus;
@@ -17,7 +18,7 @@ use Inertia\Response;
 
 class TeamController extends Controller
 {
-    public function edit(Request $request): Response
+    public function edit(Request $request, TeamLifecycleService $lifecycle): Response
     {
         $user = $request->user();
         $team = $user->currentTeam()->firstOrFail();
@@ -25,6 +26,8 @@ class TeamController extends Controller
         $canViewActivity = $user->can('viewActivity', $team);
         $isMutable = $team->status === TeamStatus::Active;
         $viewerRole = $viewerMembership->role;
+        $deletionBlocker = $lifecycle->emptyTeamDeletionBlocker($team);
+        $canDelete = $user->can('delete', $team) && $deletionBlocker === null;
         $members = $team->activeMemberships()
             ->with('user:id,name,email')
             ->orderBy('id')
@@ -75,8 +78,12 @@ class TeamController extends Controller
                 'inviteCollaborator' => $user->can('invite', [$team, TeamMembershipRole::Collaborator]),
                 'transferOwnership' => $user->can('transferOwnership', $team),
                 'viewActivity' => $canViewActivity,
-                'leave' => $viewerMembership->role !== TeamMembershipRole::Owner,
+                'leave' => $isMutable && $viewerMembership->role !== TeamMembershipRole::Owner,
+                'deactivate' => $user->can('deactivate', $team),
+                'reactivate' => $user->can('reactivate', $team),
+                'delete' => $canDelete,
             ],
+            'deletionBlocker' => $viewerRole === TeamMembershipRole::Owner ? $deletionBlocker : null,
         ];
 
         if ($canViewActivity) {

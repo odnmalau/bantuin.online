@@ -54,7 +54,7 @@ class CampaignInvitation extends Model
      */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class)->withTrashed();
     }
 
     /**
@@ -64,7 +64,7 @@ class CampaignInvitation extends Model
      */
     public function inviter(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'invited_by');
+        return $this->belongsTo(User::class, 'invited_by')->withTrashed();
     }
 
     public function isRedeemable(): bool

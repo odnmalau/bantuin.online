@@ -42,6 +42,9 @@ Route::middleware('auth')->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::post('teams', [TeamController::class, 'store'])->name('teams.store');
     Route::patch('teams/{team}', [TeamController::class, 'update'])->name('teams.update');
+    Route::post('teams/{team}/deactivate', [TeamController::class, 'deactivate'])->name('teams.deactivate');
+    Route::post('teams/{team}/reactivate', [TeamController::class, 'reactivate'])->name('teams.reactivate');
+    Route::delete('teams/{team}', [TeamController::class, 'destroy'])->name('teams.destroy');
     Route::put('current-team', CurrentTeamController::class)->name('current-team.update');
     Route::post('team-invitations', [TeamInvitationController::class, 'store'])->name('team-invitations.store');
     Route::delete('team-invitations/{teamInvitation}', [TeamInvitationController::class, 'destroy'])->name('team-invitations.destroy');

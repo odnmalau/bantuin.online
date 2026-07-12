@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +21,7 @@ use LogicException;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, SoftDeletes;
 
     /**
      * Get the user's assessments.
@@ -116,6 +117,7 @@ class User extends Authenticatable
 
         $fallback = $this->activeTeamMemberships()
             ->where('team_id', '!=', $endedTeamId)
+            ->whereHas('team')
             ->orderByRaw('last_used_at IS NULL')
             ->orderByDesc('last_used_at')
             ->orderByDesc('id')

@@ -35,7 +35,7 @@ class TeamActivity extends Model
     /** @return BelongsTo<User, $this> */
     public function actor(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'actor_id');
+        return $this->belongsTo(User::class, 'actor_id')->withTrashed();
     }
 
     protected static function booted(): void

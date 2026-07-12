@@ -51,6 +51,11 @@ export function TeamSwitcher({ className }: Props) {
                         <span className="min-w-0 flex-1 truncate">
                             {team.name}
                         </span>
+                        {team.status === 'deactivated' ? (
+                            <span className="text-xs text-muted-foreground">
+                                Read-only
+                            </span>
+                        ) : null}
                         <span className="text-xs text-muted-foreground capitalize">
                             {team.role}
                         </span>

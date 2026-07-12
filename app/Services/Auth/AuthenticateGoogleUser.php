@@ -23,10 +23,15 @@ class AuthenticateGoogleUser
 
         $email = mb_strtolower(trim($email));
 
-        $user = User::query()->where('google_id', $googleId)->first();
+        $user = User::withTrashed()
+            ->where(function ($query) use ($googleId, $email): void {
+                $query->where('google_id', $googleId)
+                    ->orWhereRaw('LOWER(email) = ?', [$email]);
+            })
+            ->first();
 
-        if ($user === null) {
-            $user = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
+        if ($user?->trashed()) {
+            throw new GoogleAuthenticationException(__('This account has been closed and can no longer sign in.'));
         }
 
         $avatar = $googleUser->getAvatar();

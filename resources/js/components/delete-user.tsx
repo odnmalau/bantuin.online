@@ -22,9 +22,10 @@ export default function DeleteUser() {
         <div className="space-y-6">
             <div className="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10">
                 <div className="relative space-y-0.5 text-red-600 dark:text-red-100">
-                    <p className="font-medium">Warning</p>
+                    <p className="font-medium">Close account</p>
                     <p className="text-sm">
-                        Please proceed with caution, this cannot be undone.
+                        This ends authentication and active Team access. Your
+                        historical hiring records remain.
                     </p>
                 </div>
 
@@ -34,17 +35,19 @@ export default function DeleteUser() {
                             variant="destructive"
                             data-test="delete-user-button"
                         >
-                            Delete account
+                            Close account
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogTitle>
-                            Are you sure you want to delete your account?
+                            Are you sure you want to close your account?
                         </DialogTitle>
                         <DialogDescription>
-                            Once your account is deleted, all of its resources
-                            and data will also be permanently deleted. Type{' '}
-                            <strong>DELETE</strong> to confirm.
+                            You cannot sign in again after closure. Durable
+                            Team, Candidate, assessment, exam, and activity
+                            history is retained. Team Owners must transfer
+                            Ownership first. Type <strong>DELETE</strong> to
+                            confirm.
                         </DialogDescription>
 
                         <Form
@@ -74,6 +77,7 @@ export default function DeleteUser() {
                                         <InputError
                                             message={errors.confirmation}
                                         />
+                                        <InputError message={errors.account} />
                                     </div>
 
                                     <DialogFooter className="gap-2">
@@ -97,7 +101,7 @@ export default function DeleteUser() {
                                                 type="submit"
                                                 data-test="confirm-delete-user-button"
                                             >
-                                                Delete account
+                                                Close account
                                             </button>
                                         </Button>
                                     </DialogFooter>

@@ -74,6 +74,16 @@ class TeamPolicy
                 ->exists();
     }
 
+    public function deactivate(User $user, Team $team): bool
+    {
+        return $team->status === TeamStatus::Active && $this->isCurrentOwner($user, $team);
+    }
+
+    public function reactivate(User $user, Team $team): bool
+    {
+        return $team->status === TeamStatus::Deactivated && $this->isCurrentOwner($user, $team);
+    }
+
     public function viewActivity(User $user, Team $team): bool
     {
         if ($user->current_team_id !== $team->id) {
@@ -91,7 +101,7 @@ class TeamPolicy
      */
     public function delete(User $user, Team $team): bool
     {
-        return false;
+        return $this->isCurrentOwner($user, $team);
     }
 
     /**
@@ -108,5 +118,14 @@ class TeamPolicy
     public function forceDelete(User $user, Team $team): bool
     {
         return false;
+    }
+
+    private function isCurrentOwner(User $user, Team $team): bool
+    {
+        return $user->current_team_id === $team->id
+            && $user->activeTeamMemberships()
+                ->where('team_id', $team->id)
+                ->where('role', TeamMembershipRole::Owner)
+                ->exists();
     }
 }

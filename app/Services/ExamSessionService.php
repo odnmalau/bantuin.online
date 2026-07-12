@@ -8,11 +8,14 @@ use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
 use App\Models\ExamSession;
+use App\Models\Team;
 use App\Models\User;
 use App\QuestionStatus;
+use App\TeamStatus;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ExamSessionService
@@ -32,42 +35,52 @@ class ExamSessionService
 
     public function startSession(User $user, Campaign $campaign): ExamSession
     {
-        if ($user->assessments()->whereBelongsTo($campaign)->exists()) {
-            throw ValidationException::withMessages([
-                'session' => __('You have already submitted your assessment for this campaign.'),
+        return DB::transaction(function () use ($user, $campaign): ExamSession {
+            $team = Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
+
+            if ($team->status !== TeamStatus::Active) {
+                throw ValidationException::withMessages([
+                    'session' => __('This Team is not accepting new Exam Sessions.'),
+                ]);
+            }
+
+            if ($user->assessments()->whereBelongsTo($campaign)->exists()) {
+                throw ValidationException::withMessages([
+                    'session' => __('You have already submitted your assessment for this campaign.'),
+                ]);
+            }
+
+            $existing = $this->findActiveSession($user, $campaign);
+
+            if ($existing !== null) {
+                $this->syncSectionExpiry($existing, $campaign);
+
+                return $existing->fresh();
+            }
+
+            $sections = $this->orderedExamSections($campaign);
+
+            if ($sections->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'session' => __('There are no approved campaign questions available.'),
+                ]);
+            }
+
+            $firstSection = $sections->first();
+
+            return ExamSession::query()->create([
+                'user_id' => $user->id,
+                'campaign_id' => $campaign->id,
+                'status' => ExamSessionStatus::InProgress,
+                'current_section_id' => $firstSection->id,
+                'current_section_started_at' => now(),
+                'current_section_expires_at' => $this->sectionExpiresAt($firstSection),
+                'completed_section_ids' => [],
+                'warning_count' => 0,
+                'integrity_events' => [],
+                'answer_drafts' => [],
             ]);
-        }
-
-        $existing = $this->findActiveSession($user, $campaign);
-
-        if ($existing !== null) {
-            $this->syncSectionExpiry($existing, $campaign);
-
-            return $existing->fresh();
-        }
-
-        $sections = $this->orderedExamSections($campaign);
-
-        if ($sections->isEmpty()) {
-            throw ValidationException::withMessages([
-                'session' => __('There are no approved campaign questions available.'),
-            ]);
-        }
-
-        $firstSection = $sections->first();
-
-        return ExamSession::query()->create([
-            'user_id' => $user->id,
-            'campaign_id' => $campaign->id,
-            'status' => ExamSessionStatus::InProgress,
-            'current_section_id' => $firstSection->id,
-            'current_section_started_at' => now(),
-            'current_section_expires_at' => $this->sectionExpiresAt($firstSection),
-            'completed_section_ids' => [],
-            'warning_count' => 0,
-            'integrity_events' => [],
-            'answer_drafts' => [],
-        ]);
+        });
     }
 
     /**
