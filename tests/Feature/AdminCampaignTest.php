@@ -625,7 +625,8 @@ test('campaign index requires confirmation before deleting a campaign', function
     expect($source)
         ->toContain('DialogTitle')
         ->toContain('Delete campaign?')
-        ->toContain('Campaigns with invitations, exam attempts, or assessments cannot be deleted.')
+        ->toContain('Campaigns with invitations, exam attempts, or')
+        ->toContain('assessments cannot be deleted.')
         ->toContain('CampaignController.destroy.form.delete');
 });
 

@@ -18,6 +18,7 @@ const statuses: Record<string, { label: string; variant: BadgeVariant }> = {
     overridden: { label: 'Overridden', variant: 'outline' },
     rejected: { label: 'Rejected', variant: 'destructive' },
     approved: { label: 'Approved', variant: 'outline' },
+    email_sending: { label: 'Email sending', variant: 'secondary' },
     email_sent: { label: 'Email sent', variant: 'outline' },
     email_failed: { label: 'Email failed', variant: 'destructive' },
     evaluation_failed: { label: 'Evaluation failed', variant: 'destructive' },

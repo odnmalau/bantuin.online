@@ -19,6 +19,9 @@ pest()->extend(TestCase::class)
     ->in('Feature');
 
 pest()->extend(TestCase::class)
+    ->in('Unit');
+
+pest()->extend(TestCase::class)
     ->in('Integration');
 
 /*

@@ -11,6 +11,7 @@ use App\Services\Ai\AssessmentEvaluationException;
 use App\Services\Ai\AssessmentEvaluationResult;
 use App\Services\Ai\QwenAssessmentEvaluator;
 use App\Services\AssessmentEvaluationPipeline;
+use App\Services\AssessmentExternalWorkCoordinator;
 use App\Services\AssessmentThreshold;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -138,7 +139,7 @@ test('assessment evaluation pipeline marks passing score as pending approval', f
     $assessment = Assessment::factory()
         ->for(User::factory())
         ->create([
-            'status' => AssessmentStatus::Evaluating,
+            'status' => AssessmentStatus::Submitted,
             'answers_payload' => [
                 [
                     'question_id' => 1,
@@ -149,7 +150,12 @@ test('assessment evaluation pipeline marks passing score as pending approval', f
             ],
         ]);
 
-    $evaluated = app(AssessmentEvaluationPipeline::class)->evaluate($assessment);
+    $claimed = app(AssessmentExternalWorkCoordinator::class)
+        ->claimEvaluation($assessment, $assessment->campaign->team_id);
+
+    expect($claimed)->not->toBeNull();
+
+    $evaluated = app(AssessmentEvaluationPipeline::class)->evaluate($claimed->assessment);
 
     expect($evaluated)
         ->not->toBeNull()

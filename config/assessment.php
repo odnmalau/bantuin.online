@@ -7,6 +7,8 @@ return [
         'provider' => env('QWEN_PROVIDER', 'qwen'),
         'model' => env('QWEN_MODEL', 'qwen3.7-plus'),
         'timeout' => (int) env('QWEN_TIMEOUT', 30),
+        'transport_attempt_count' => (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2),
+        'transport_retry_sleep_ms' => (int) env('ASSESSMENT_QWEN_TRANSPORT_RETRY_SLEEP_MS', 300),
     ],
 
     'generator' => [
@@ -28,6 +30,24 @@ return [
             'essay_score' => (int) env('ASSESSMENT_RANKING_ESSAY_WEIGHT', 50),
             'mcq_score' => (int) env('ASSESSMENT_RANKING_MCQ_WEIGHT', 15),
         ],
+    ],
+
+    'queue' => [
+        /*
+         * Supported evaluation calls: initial evaluator + configured repair attempts + critic.
+         * attemptSeconds = qwen_timeout * transport_attempt_count
+         * evaluation_timeout must exceed supported_calls * attemptSeconds + processing margin.
+         * database/redis retry_after must exceed evaluation_timeout + safety margin.
+         */
+        'evaluation_processing_margin' => (int) env('ASSESSMENT_EVALUATION_PROCESSING_MARGIN', 30),
+        'retry_after_safety_margin' => (int) env('ASSESSMENT_QUEUE_RETRY_AFTER_SAFETY_MARGIN', 60),
+        'evaluation_timeout' => (int) env(
+            'ASSESSMENT_EVALUATION_JOB_TIMEOUT',
+            ((int) env('QWEN_TIMEOUT', 30)
+                * (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2)
+                * (1 + (int) env('ASSESSMENT_EVALUATION_REPAIR_ATTEMPTS', 1) + 1))
+            + (int) env('ASSESSMENT_EVALUATION_PROCESSING_MARGIN', 30),
+        ),
     ],
 
     'secure_exam' => [

@@ -38,6 +38,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'approved_at',
     'rejected_at',
     'email_sent_at',
+    'resume_screening_attempt_id',
+    'resume_screening_started_at',
+    'evaluation_attempt_id',
+    'evaluation_started_at',
+    'email_delivery_attempt_id',
+    'email_delivery_started_at',
 ])]
 class Assessment extends Model
 {
@@ -67,6 +73,9 @@ class Assessment extends Model
             'approved_at' => 'datetime',
             'rejected_at' => 'datetime',
             'email_sent_at' => 'datetime',
+            'resume_screening_started_at' => 'datetime',
+            'evaluation_started_at' => 'datetime',
+            'email_delivery_started_at' => 'datetime',
         ];
     }
 
@@ -123,6 +132,8 @@ class Assessment extends Model
             'ranking_payload' => null,
             'critic_payload' => null,
             'evaluated_at' => null,
+            'evaluation_attempt_id' => null,
+            'evaluation_started_at' => null,
             'status' => AssessmentStatus::Submitted,
         ]);
     }

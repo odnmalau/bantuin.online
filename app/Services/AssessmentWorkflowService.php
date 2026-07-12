@@ -70,6 +70,8 @@ class AssessmentWorkflowService
 
             $locked->update([
                 'status' => AssessmentStatus::Approved,
+                'email_delivery_attempt_id' => null,
+                'email_delivery_started_at' => null,
             ]);
 
             $this->recordStatusTransition(
