@@ -17,8 +17,10 @@ import { primaryMainNavHref, resolveMainNavItems } from '@/lib/main-nav-items';
 import type { Auth } from '@/types';
 
 export function AppSidebar() {
-    const { auth } = usePage<{ auth: Auth }>().props;
-    const mainNavItems = resolveMainNavItems(auth, 'sidebar');
+    const page = usePage<{ auth: Auth }>();
+    const { auth } = page.props;
+    const isSupportMode = page.url.startsWith('/support');
+    const mainNavItems = resolveMainNavItems(auth, 'sidebar', isSupportMode);
 
     return (
         <Sidebar collapsible="offcanvas" variant="sidebar">
@@ -32,7 +34,13 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>
-                <TeamSwitcher className="w-full justify-between" />
+                {isSupportMode ? (
+                    <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+                        Platform Support mode
+                    </div>
+                ) : (
+                    <TeamSwitcher className="w-full justify-between" />
+                )}
             </SidebarHeader>
 
             <SidebarContent>

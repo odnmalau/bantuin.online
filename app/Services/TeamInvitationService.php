@@ -25,10 +25,22 @@ class TeamInvitationService
 
     public function issue(Team $team, User $inviter, string $email, TeamMembershipRole $role): TeamInvitation
     {
+        return $this->issueAs($team, $inviter, $email, $role, 'team_member');
+    }
+
+    public function issueByOperator(Team $team, User $operator, string $email, TeamMembershipRole $role, string $reason): TeamInvitation
+    {
+        $this->assertSupportReason($reason);
+
+        return $this->issueAs($team, $operator, $email, $role, 'platform_operator', $reason);
+    }
+
+    private function issueAs(Team $team, User $inviter, string $email, TeamMembershipRole $role, string $actorContext, ?string $reason = null): TeamInvitation
+    {
         $normalizedEmail = mb_strtolower(trim($email));
         $plainToken = Str::random(64);
 
-        $invitation = DB::transaction(function () use ($team, $inviter, $normalizedEmail, $role, $plainToken): TeamInvitation {
+        $invitation = DB::transaction(function () use ($team, $inviter, $normalizedEmail, $role, $plainToken, $actorContext, $reason): TeamInvitation {
             $lockedTeam = Team::query()->whereKey($team->id)->lockForUpdate()->firstOrFail();
             $inviterRole = TeamMembership::query()
                 ->active()
@@ -38,8 +50,10 @@ class TeamInvitationService
                 ->first()
                 ?->role;
 
+            $isAuthorizedOperator = $actorContext === 'platform_operator' && $inviter->isPlatformOperator();
+
             if ($lockedTeam->status !== TeamStatus::Active
-                || ($inviterRole !== TeamMembershipRole::Owner
+                || (! $isAuthorizedOperator && $inviterRole !== TeamMembershipRole::Owner
                     && ! ($inviterRole === TeamMembershipRole::Administrator && $role === TeamMembershipRole::Collaborator))) {
                 throw ValidationException::withMessages([
                     'invitation' => __('You are no longer authorized to issue this Team Invitation.'),
@@ -85,6 +99,7 @@ class TeamInvitationService
                 'email' => $normalizedEmail,
                 'role' => $role,
                 'invited_by' => $inviter->id,
+                'actor_context' => $actorContext,
                 'token_hash' => hash('sha256', $plainToken),
                 'status' => TeamInvitationStatus::Pending,
                 'expires_at' => now()->addDays(14),
@@ -95,7 +110,10 @@ class TeamInvitationService
                 $inviter,
                 'team_invitation_issued',
                 $invitation,
+                before: [],
                 after: ['email' => $normalizedEmail, 'role' => $role->value],
+                actorContext: $actorContext,
+                reason: $reason,
             );
 
             return $invitation;
@@ -112,6 +130,13 @@ class TeamInvitationService
         return TeamInvitation::query()
             ->where('token_hash', hash('sha256', $plainToken))
             ->first();
+    }
+
+    private function assertSupportReason(string $reason): void
+    {
+        if (trim($reason) === '') {
+            throw ValidationException::withMessages(['reason' => __('A support reason is required.')]);
+        }
     }
 
     public function accept(TeamInvitation $invitation, User $recipient): TeamMembership
@@ -153,10 +178,12 @@ class TeamInvitationService
                 ->lockForUpdate()
                 ->first()
                 ?->role;
+            $inviterIsAuthorized = $lockedInvitation->actor_context === 'platform_operator'
+                ? User::query()->find($lockedInvitation->invited_by)?->isPlatformOperator() === true
+                : $inviterRole === TeamMembershipRole::Owner
+                    || ($inviterRole === TeamMembershipRole::Administrator && $lockedInvitation->role === TeamMembershipRole::Collaborator);
 
-            if ($inviterRole !== TeamMembershipRole::Owner
-                && ! ($inviterRole === TeamMembershipRole::Administrator
-                    && $lockedInvitation->role === TeamMembershipRole::Collaborator)) {
+            if (! $inviterIsAuthorized) {
                 throw ValidationException::withMessages([
                     'invitation' => __('The inviter is no longer authorized to offer this Team role.'),
                 ]);

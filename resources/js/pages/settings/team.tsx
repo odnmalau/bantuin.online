@@ -58,6 +58,8 @@ type Activity = {
     actor_name: string;
     action: string;
     occurred_at: string;
+    actor_context: 'team_member' | 'platform_operator';
+    reason: string | null;
 };
 
 type Props = {
@@ -506,6 +508,20 @@ export default function TeamSettings({
                                     <p className="text-sm">
                                         <strong>{activity.actor_name}</strong> /{' '}
                                         {actionLabel(activity.action)}
+                                        {activity.actor_context ===
+                                        'platform_operator' ? (
+                                            <Badge
+                                                className="ml-2"
+                                                variant="outline"
+                                            >
+                                                Platform Support
+                                            </Badge>
+                                        ) : null}
+                                        {activity.reason ? (
+                                            <span className="block text-muted-foreground">
+                                                Reason: {activity.reason}
+                                            </span>
+                                        ) : null}
                                     </p>
                                     <time className="text-xs text-muted-foreground">
                                         {new Date(

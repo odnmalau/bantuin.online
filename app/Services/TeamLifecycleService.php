@@ -19,9 +19,21 @@ class TeamLifecycleService
 
     public function deactivate(Team $team, User $actor): Team
     {
-        return DB::transaction(function () use ($team, $actor): Team {
+        return $this->deactivateAs($team, $actor, false);
+    }
+
+    public function deactivateByOperator(Team $team, User $operator, string $reason): Team
+    {
+        $this->assertSupportReason($reason);
+
+        return $this->deactivateAs($team, $operator, true, $reason);
+    }
+
+    private function deactivateAs(Team $team, User $actor, bool $byOperator, ?string $reason = null): Team
+    {
+        return DB::transaction(function () use ($team, $actor, $byOperator, $reason): Team {
             $lockedTeam = Team::query()->whereKey($team->id)->lockForUpdate()->firstOrFail();
-            $this->assertOwner($lockedTeam, $actor);
+            $byOperator ? $this->assertOperator($actor) : $this->assertOwner($lockedTeam, $actor);
 
             if ($lockedTeam->status !== TeamStatus::Active) {
                 throw ValidationException::withMessages(['team' => __('This Team is already deactivated.')]);
@@ -51,6 +63,8 @@ class TeamLifecycleService
                 $lockedTeam,
                 before: ['status' => TeamStatus::Active->value],
                 after: ['status' => TeamStatus::Deactivated->value],
+                actorContext: $byOperator ? 'platform_operator' : 'team_member',
+                reason: $reason,
             );
 
             return $lockedTeam;
@@ -59,9 +73,21 @@ class TeamLifecycleService
 
     public function reactivate(Team $team, User $actor): Team
     {
-        return DB::transaction(function () use ($team, $actor): Team {
+        return $this->reactivateAs($team, $actor, false);
+    }
+
+    public function reactivateByOperator(Team $team, User $operator, string $reason): Team
+    {
+        $this->assertSupportReason($reason);
+
+        return $this->reactivateAs($team, $operator, true, $reason);
+    }
+
+    private function reactivateAs(Team $team, User $actor, bool $byOperator, ?string $reason = null): Team
+    {
+        return DB::transaction(function () use ($team, $actor, $byOperator, $reason): Team {
             $lockedTeam = Team::query()->whereKey($team->id)->lockForUpdate()->firstOrFail();
-            $this->assertOwner($lockedTeam, $actor);
+            $byOperator ? $this->assertOperator($actor) : $this->assertOwner($lockedTeam, $actor);
 
             if ($lockedTeam->status !== TeamStatus::Deactivated) {
                 throw ValidationException::withMessages(['team' => __('This Team is already active.')]);
@@ -80,6 +106,8 @@ class TeamLifecycleService
                 $lockedTeam,
                 before: ['status' => TeamStatus::Deactivated->value],
                 after: ['status' => TeamStatus::Active->value],
+                actorContext: $byOperator ? 'platform_operator' : 'team_member',
+                reason: $reason,
             );
 
             return $lockedTeam;
@@ -142,5 +170,19 @@ class TeamLifecycleService
         }
 
         return $ownerMembership;
+    }
+
+    private function assertOperator(User $actor): void
+    {
+        if (! $actor->isPlatformOperator()) {
+            throw new AuthorizationException;
+        }
+    }
+
+    private function assertSupportReason(string $reason): void
+    {
+        if (trim($reason) === '') {
+            throw ValidationException::withMessages(['reason' => __('A support reason is required.')]);
+        }
     }
 }

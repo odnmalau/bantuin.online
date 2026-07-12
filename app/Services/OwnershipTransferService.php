@@ -24,15 +24,29 @@ class OwnershipTransferService
 
     public function propose(Team $team, TeamMembership $recipient, User $owner): OwnershipTransfer
     {
+        return $this->proposeAs($team, $recipient, $owner, false);
+    }
+
+    public function proposeByOperator(Team $team, TeamMembership $recipient, User $operator, string $reason): OwnershipTransfer
+    {
+        if (trim($reason) === '') {
+            throw ValidationException::withMessages(['reason' => __('A support reason is required.')]);
+        }
+
+        return $this->proposeAs($team, $recipient, $operator, true, $reason);
+    }
+
+    private function proposeAs(Team $team, TeamMembership $recipient, User $actor, bool $byOperator, ?string $reason = null): OwnershipTransfer
+    {
         $plainToken = Str::random(64);
 
-        $transfer = DB::transaction(function () use ($team, $recipient, $owner, $plainToken): OwnershipTransfer {
+        $transfer = DB::transaction(function () use ($team, $recipient, $actor, $plainToken, $byOperator, $reason): OwnershipTransfer {
             $lockedTeam = Team::query()->whereKey($team->id)->lockForUpdate()->firstOrFail();
             $ownerMembership = $lockedTeam->ownerMembership()->lockForUpdate()->firstOrFail();
             $recipientMembership = TeamMembership::query()->whereKey($recipient->id)->lockForUpdate()->firstOrFail();
 
             if ($lockedTeam->status !== TeamStatus::Active
-                || $ownerMembership->user_id !== $owner->id
+                || ($byOperator ? ! $actor->isPlatformOperator() : $ownerMembership->user_id !== $actor->id)
                 || $recipientMembership->team_id !== $lockedTeam->id
                 || ! $recipientMembership->isActive()
                 || $recipientMembership->role === TeamMembershipRole::Owner) {
@@ -69,10 +83,13 @@ class OwnershipTransferService
 
             $this->activities->record(
                 $lockedTeam,
-                $owner,
+                $actor,
                 'ownership_transfer_proposed',
                 $transfer,
+                before: [],
                 after: ['recipient_user_id' => $recipientMembership->user_id, 'expires_at' => $transfer->expires_at->toISOString()],
+                actorContext: $byOperator ? 'platform_operator' : 'team_member',
+                reason: $reason,
             );
 
             return $transfer;

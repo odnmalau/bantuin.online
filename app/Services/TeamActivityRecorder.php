@@ -20,16 +20,19 @@ class TeamActivityRecorder
         Model $subject,
         ?array $before = null,
         ?array $after = null,
+        string $actorContext = 'team_member',
+        ?string $reason = null,
     ): TeamActivity {
         return TeamActivity::query()->create([
             'team_id' => $team->id,
             'actor_id' => $actor->id,
-            'actor_context' => 'team_member',
+            'actor_context' => $actorContext,
             'action' => $action,
             'subject_type' => $subject::class,
             'subject_id' => $subject->getKey(),
             'before_state' => $before,
             'after_state' => $after,
+            'reason' => $reason,
             'occurred_at' => now(),
         ]);
     }

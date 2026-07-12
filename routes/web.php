@@ -18,6 +18,10 @@ use App\Http\Controllers\Candidate\ExamSessionController;
 use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OwnershipTransferController;
+use App\Http\Controllers\Support\OwnershipTransferController as SupportOwnershipTransferController;
+use App\Http\Controllers\Support\TeamController as SupportTeamController;
+use App\Http\Controllers\Support\TeamLifecycleController as SupportTeamLifecycleController;
+use App\Http\Controllers\Support\TeamMembershipRepairController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TeamMembershipController;
@@ -87,6 +91,15 @@ Route::middleware(['auth', 'current-team'])
         Route::post('assessments/{assessment}/approve', [AdminAssessmentController::class, 'approve'])->name('assessments.approve');
         Route::post('assessments/{assessment}/reject', [AdminAssessmentController::class, 'reject'])->name('assessments.reject');
     });
+
+Route::middleware(['auth', 'platform-operator'])->prefix('support')->name('support.')->group(function () {
+    Route::get('teams', [SupportTeamController::class, 'index'])->name('teams.index');
+    Route::get('teams/{team}', [SupportTeamController::class, 'show'])->name('teams.show');
+    Route::post('teams/{team}/membership-repairs', [TeamMembershipRepairController::class, 'store'])->name('teams.membership-repairs.store');
+    Route::post('teams/{team}/ownership-transfers', [SupportOwnershipTransferController::class, 'store'])->name('teams.ownership-transfers.store');
+    Route::post('teams/{team}/deactivate', [SupportTeamLifecycleController::class, 'deactivate'])->name('teams.deactivate');
+    Route::post('teams/{team}/reactivate', [SupportTeamLifecycleController::class, 'reactivate'])->name('teams.reactivate');
+});
 
 Route::middleware('auth')
     ->prefix('candidate')

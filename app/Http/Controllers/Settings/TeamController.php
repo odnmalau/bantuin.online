@@ -97,6 +97,8 @@ class TeamController extends Controller
                     'id' => $activity->id,
                     'actor_name' => $activity->actor?->name ?? __('System'),
                     'action' => $activity->action,
+                    'actor_context' => $activity->actor_context,
+                    'reason' => $activity->reason,
                     'before' => $activity->before_state,
                     'after' => $activity->after_state,
                     'occurred_at' => $activity->occurred_at->toISOString(),

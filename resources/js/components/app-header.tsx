@@ -41,7 +41,11 @@ const activeItemStyles =
 export function AppHeader({ breadcrumbs = [] }: Props) {
     const page = usePage<{ auth: Auth }>();
     const { auth } = page.props;
-    const mainNavItems = resolveMainNavItems(auth, 'header');
+    const mainNavItems = resolveMainNavItems(
+        auth,
+        'header',
+        page.url.startsWith('/support'),
+    );
     const getInitials = useInitials();
     const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
 

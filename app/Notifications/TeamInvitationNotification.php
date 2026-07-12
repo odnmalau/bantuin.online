@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\TeamInvitation;
 use App\Models\TeamMembership;
+use App\Models\User;
 use App\TeamInvitationStatus;
 use App\TeamMembershipRole;
 use App\TeamStatus;
@@ -63,6 +64,10 @@ class TeamInvitationNotification extends Notification implements ShouldBeEncrypt
             ->where('user_id', $invitation->invited_by)
             ->first()
             ?->role;
+
+        if ($invitation->actor_context === 'platform_operator') {
+            return User::query()->find($invitation->invited_by)?->isPlatformOperator() === true;
+        }
 
         return $inviterRole === TeamMembershipRole::Owner
             || ($inviterRole === TeamMembershipRole::Administrator

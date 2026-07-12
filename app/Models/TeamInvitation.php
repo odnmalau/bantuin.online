@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'email',
     'role',
     'invited_by',
+    'actor_context',
     'token_hash',
     'status',
     'expires_at',
