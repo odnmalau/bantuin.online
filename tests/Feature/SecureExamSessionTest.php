@@ -96,6 +96,29 @@ test('candidate cannot advance a section without answering every question', func
         ->assertSessionHasErrors("answers.{$question->id}");
 });
 
+test('candidate cannot save an exam answer that exceeds the configured max length', function () {
+    config()->set('assessment.secure_exam.max_answer_characters', 100);
+
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $question = CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+
+    $session = startCandidateExamSession($candidate, $campaign);
+
+    $this->actingAs($candidate)
+        ->from(route('candidate.campaigns.exam', $campaign))
+        ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session]), [
+            'answers' => [
+                $question->id => str_repeat('a', 101),
+            ],
+        ])
+        ->assertSessionHasErrors("answers.{$question->id}");
+});
+
 test('candidate cannot advance after the section timer expires', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();

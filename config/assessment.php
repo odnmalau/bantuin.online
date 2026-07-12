@@ -36,5 +36,6 @@ return [
         'auto_submit_on_max_warnings' => (bool) env('ASSESSMENT_EXAM_AUTO_SUBMIT_ON_MAX_WARNINGS', true),
         'block_copy_paste' => (bool) env('ASSESSMENT_EXAM_BLOCK_COPY_PASTE', true),
         'enforce_section_timers' => (bool) env('ASSESSMENT_EXAM_ENFORCE_SECTION_TIMERS', true),
+        'max_answer_characters' => (int) env('ASSESSMENT_EXAM_MAX_ANSWER_CHARACTERS', 20000),
     ],
 ];
