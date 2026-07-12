@@ -10,6 +10,7 @@ import { MoreHorizontal, Plus, SlidersHorizontal } from 'lucide-react';
 import type { FormEvent } from 'react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import CampaignCloneController from '@/actions/App/Http/Controllers/Admin/CampaignCloneController';
 import CampaignController from '@/actions/App/Http/Controllers/Admin/CampaignController';
 import CampaignForm from '@/components/admin/campaign-form';
 import InputError from '@/components/input-error';
@@ -70,6 +71,7 @@ type CampaignRow = {
     sections_count: number;
     questions_count: number;
     assessments_count: number;
+    definition_frozen: boolean;
     created_by: string | null;
     created_at: string;
 };
@@ -342,38 +344,58 @@ export default function AdminCampaignsIndex({
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent
                                                         align="end"
-                                                        className="w-44"
+                                                        className="w-48"
                                                     >
                                                         <DropdownMenuGroup>
+                                                            {!campaign.definition_frozen ? (
+                                                                <DropdownMenuItem
+                                                                    onSelect={(
+                                                                        event,
+                                                                    ) => {
+                                                                        event.preventDefault();
+                                                                        router.visit(
+                                                                            admin.campaigns.edit.url(
+                                                                                campaign.id,
+                                                                            ),
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    Edit campaign
+                                                                </DropdownMenuItem>
+                                                            ) : null}
                                                             <DropdownMenuItem
                                                                 onSelect={(
                                                                     event,
                                                                 ) => {
                                                                     event.preventDefault();
-                                                                    router.visit(
-                                                                        admin.campaigns.edit.url(
+                                                                    router.post(
+                                                                        CampaignCloneController.store.url(
                                                                             campaign.id,
                                                                         ),
                                                                     );
                                                                 }}
                                                             >
-                                                                Edit campaign
+                                                                Clone as new draft
                                                             </DropdownMenuItem>
                                                         </DropdownMenuGroup>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem
-                                                            variant="destructive"
-                                                            onSelect={(
-                                                                event,
-                                                            ) => {
-                                                                event.preventDefault();
-                                                                setCampaignPendingDeletion(
-                                                                    campaign,
-                                                                );
-                                                            }}
-                                                        >
-                                                            Delete campaign
-                                                        </DropdownMenuItem>
+                                                        {!campaign.definition_frozen ? (
+                                                            <>
+                                                                <DropdownMenuSeparator />
+                                                                <DropdownMenuItem
+                                                                    variant="destructive"
+                                                                    onSelect={(
+                                                                        event,
+                                                                    ) => {
+                                                                        event.preventDefault();
+                                                                        setCampaignPendingDeletion(
+                                                                            campaign,
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    Delete campaign
+                                                                </DropdownMenuItem>
+                                                            </>
+                                                        ) : null}
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </CardAction>

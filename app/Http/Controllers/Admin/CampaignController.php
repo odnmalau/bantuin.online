@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\CampaignStatus;
+use App\ExamSessionStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCampaignRequest;
 use App\Http\Requests\Admin\UpdateCampaignRequest;
@@ -15,6 +16,7 @@ use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use App\Services\CampaignInvitationService;
+use App\Services\CampaignLifecycleService;
 use App\TeamStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -27,6 +29,8 @@ use Inertia\Response;
 
 class CampaignController extends Controller
 {
+    public function __construct(private CampaignLifecycleService $lifecycle) {}
+
     /**
      * Display a listing of the resource.
      */
@@ -46,6 +50,10 @@ class CampaignController extends Controller
                 ->where('team_id', $currentTeamId)
                 ->with('creator:id,name,email')
                 ->withCount(['sections', 'questions', 'assessments'])
+                ->withExists([
+                    'invitations as has_invitations',
+                    'examSessions as has_exam_sessions',
+                ])
                 ->when($search !== '', fn (Builder $query) => $this->applyCampaignSearch($query, $search))
                 ->when($status !== 'all', fn (Builder $query) => $query->where('status', $status))
                 ->latest()
@@ -63,6 +71,9 @@ class CampaignController extends Controller
                     'sections_count' => $campaign->sections_count,
                     'questions_count' => $campaign->questions_count,
                     'assessments_count' => $campaign->assessments_count,
+                    'definition_frozen' => $campaign->has_invitations
+                        || $campaign->has_exam_sessions
+                        || $campaign->assessments_count > 0,
                     'created_by' => $campaign->creator?->name,
                     'created_at' => $campaign->created_at,
                 ])),
@@ -147,6 +158,10 @@ class CampaignController extends Controller
                 ]);
 
                 $publishability = $this->publishability($campaign);
+                $definitionFrozen = $this->lifecycle->hasCandidateActivity($campaign);
+                $hasInProgressExam = $campaign->examSessions()
+                    ->where('status', ExamSessionStatus::InProgress)
+                    ->exists();
 
                 return [
                     'id' => $campaign->id,
@@ -168,6 +183,9 @@ class CampaignController extends Controller
                     'draft_questions_count' => $publishability['draft_questions_count'],
                     'approved_questions_count' => $publishability['approved_questions_count'],
                     'can_publish' => $publishability['can_publish'],
+                    'definition_frozen' => $definitionFrozen,
+                    'can_archive' => ! $hasInProgressExam,
+                    'can_clone' => true,
                     'sections' => $campaign->sections->map(fn (CampaignSection $section): array => [
                         'id' => $section->id,
                         'title' => $section->title,
@@ -212,6 +230,7 @@ class CampaignController extends Controller
                 'required_skills' => $campaign->required_skills ?? [],
                 'language' => $campaign->language,
                 'threshold_score' => $campaign->threshold_score,
+                'definition_frozen' => $this->lifecycle->hasCandidateActivity($campaign),
             ],
         ]);
     }
@@ -364,6 +383,7 @@ class CampaignController extends Controller
 
         $errorMessage = match (true) {
             $campaign->status === CampaignStatus::Archived => 'Archived campaigns cannot be published.',
+            $this->lifecycle->hasCandidateActivity($campaign) => 'This campaign definition is frozen because candidates have already been invited. Clone it as a new draft to make changes.',
             $draftQuestionsCount > 0 => 'Approve or remove draft questions before publishing this campaign.',
             $approvedQuestionsCount === 0 => 'Add at least one approved question before publishing this campaign.',
             default => null,

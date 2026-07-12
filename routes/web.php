@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AssessmentController as AdminAssessmentController;
 use App\Http\Controllers\Admin\CampaignAssessmentGenerationController;
+use App\Http\Controllers\Admin\CampaignCloneController;
 use App\Http\Controllers\Admin\CampaignController;
 use App\Http\Controllers\Admin\CampaignInvitationController;
 use App\Http\Controllers\Admin\CampaignQuestionController;
@@ -64,22 +65,28 @@ Route::middleware(['auth', 'current-team'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {
-        Route::resource('campaigns', CampaignController::class);
-        Route::post('campaigns/{campaign}/publish', [CampaignController::class, 'publish'])->name('campaigns.publish');
+        Route::resource('campaigns', CampaignController::class)->except(['edit', 'update']);
+        Route::post('campaigns/{campaign}/clone', [CampaignCloneController::class, 'store'])->name('campaigns.clone');
         Route::post('campaigns/{campaign}/archive', [CampaignStatusController::class, 'archive'])->name('campaigns.archive');
-        Route::post('campaigns/{campaign}/draft', [CampaignStatusController::class, 'draft'])->name('campaigns.draft');
-        Route::patch('campaigns/{campaign}/ranking', [CampaignRankingController::class, 'update'])->name('campaigns.ranking.update');
         Route::post('campaigns/{campaign}/invitations', [CampaignInvitationController::class, 'store'])->name('campaigns.invitations.store');
-        Route::post('campaigns/{campaign}/generate-assessment', [CampaignAssessmentGenerationController::class, 'store'])->name('campaigns.generate-assessment');
-        Route::post('campaigns/{campaign}/sections', [CampaignSectionController::class, 'store'])->name('campaigns.sections.store');
-        Route::delete('campaigns/{campaign}/sections/{section}', [CampaignSectionController::class, 'destroy'])->name('campaigns.sections.destroy');
-        Route::post('campaigns/{campaign}/questions', [CampaignQuestionController::class, 'store'])->name('campaigns.questions.store');
-        Route::post('campaigns/{campaign}/questions/approve-all', [CampaignQuestionController::class, 'approveAll'])->name('campaigns.questions.approve-all');
-        Route::post('campaigns/{campaign}/questions/{question}/approve', [CampaignQuestionController::class, 'approve'])->name('campaigns.questions.approve');
-        Route::post('campaigns/{campaign}/questions/{question}/regenerate-mcq-options', [CampaignQuestionController::class, 'regenerateMcqOptions'])->name('campaigns.questions.regenerate-mcq-options');
-        Route::post('campaigns/{campaign}/questions/{question}/convert-to-mcq', [CampaignQuestionController::class, 'convertToMcq'])->name('campaigns.questions.convert-to-mcq');
-        Route::patch('campaigns/{campaign}/questions/{question}', [CampaignQuestionController::class, 'update'])->name('campaigns.questions.update');
-        Route::delete('campaigns/{campaign}/questions/{question}', [CampaignQuestionController::class, 'destroy'])->name('campaigns.questions.destroy');
+
+        Route::middleware('campaign-definition-editable')->group(function () {
+            Route::get('campaigns/{campaign}/edit', [CampaignController::class, 'edit'])->name('campaigns.edit');
+            Route::match(['put', 'patch'], 'campaigns/{campaign}', [CampaignController::class, 'update'])->name('campaigns.update');
+            Route::post('campaigns/{campaign}/publish', [CampaignController::class, 'publish'])->name('campaigns.publish');
+            Route::post('campaigns/{campaign}/draft', [CampaignStatusController::class, 'draft'])->name('campaigns.draft');
+            Route::patch('campaigns/{campaign}/ranking', [CampaignRankingController::class, 'update'])->name('campaigns.ranking.update');
+            Route::post('campaigns/{campaign}/generate-assessment', [CampaignAssessmentGenerationController::class, 'store'])->name('campaigns.generate-assessment');
+            Route::post('campaigns/{campaign}/sections', [CampaignSectionController::class, 'store'])->name('campaigns.sections.store');
+            Route::delete('campaigns/{campaign}/sections/{section}', [CampaignSectionController::class, 'destroy'])->name('campaigns.sections.destroy');
+            Route::post('campaigns/{campaign}/questions', [CampaignQuestionController::class, 'store'])->name('campaigns.questions.store');
+            Route::post('campaigns/{campaign}/questions/approve-all', [CampaignQuestionController::class, 'approveAll'])->name('campaigns.questions.approve-all');
+            Route::post('campaigns/{campaign}/questions/{question}/approve', [CampaignQuestionController::class, 'approve'])->name('campaigns.questions.approve');
+            Route::post('campaigns/{campaign}/questions/{question}/regenerate-mcq-options', [CampaignQuestionController::class, 'regenerateMcqOptions'])->name('campaigns.questions.regenerate-mcq-options');
+            Route::post('campaigns/{campaign}/questions/{question}/convert-to-mcq', [CampaignQuestionController::class, 'convertToMcq'])->name('campaigns.questions.convert-to-mcq');
+            Route::patch('campaigns/{campaign}/questions/{question}', [CampaignQuestionController::class, 'update'])->name('campaigns.questions.update');
+            Route::delete('campaigns/{campaign}/questions/{question}', [CampaignQuestionController::class, 'destroy'])->name('campaigns.questions.destroy');
+        });
 
         Route::get('rankings', [RankingController::class, 'index'])->name('rankings.index');
 

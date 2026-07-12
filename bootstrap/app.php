@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureCampaignDefinitionIsEditable;
 use App\Http\Middleware\EnsureCurrentTeamMember;
 use App\Http\Middleware\EnsurePlatformOperator;
 use App\Http\Middleware\HandleAppearance;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'current-team' => EnsureCurrentTeamMember::class,
             'platform-operator' => EnsurePlatformOperator::class,
+            'campaign-definition-editable' => EnsureCampaignDefinitionIsEditable::class,
         ]);
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);

@@ -1,7 +1,8 @@
-import { Deferred, Form, Head, usePage } from '@inertiajs/react';
+import { Deferred, Form, Head, router, usePage } from '@inertiajs/react';
 import {
     Check,
     ChevronRight,
+    Copy,
     Mail,
     MoreHorizontal,
     Plus,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import CampaignAssessmentGenerationController from '@/actions/App/Http/Controllers/Admin/CampaignAssessmentGenerationController';
+import CampaignCloneController from '@/actions/App/Http/Controllers/Admin/CampaignCloneController';
 import CampaignController from '@/actions/App/Http/Controllers/Admin/CampaignController';
 import CampaignQuestionController from '@/actions/App/Http/Controllers/Admin/CampaignQuestionController';
 import CampaignRankingController from '@/actions/App/Http/Controllers/Admin/CampaignRankingController';
@@ -163,6 +165,9 @@ type Campaign = {
     draft_questions_count: number;
     approved_questions_count: number;
     can_publish: boolean;
+    definition_frozen: boolean;
+    can_archive: boolean;
+    can_clone: boolean;
     sections: CampaignSection[];
 };
 
@@ -343,6 +348,45 @@ export default function AdminCampaignsShow({
                 >
                     {campaign !== undefined && invitations !== undefined ? (
                         <>
+                            {campaign.definition_frozen ? (
+                                <Card className="border-amber-500/30 bg-amber-500/5">
+                                    <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                                        <p>
+                                            This campaign definition is frozen
+                                            because candidates have already been
+                                            invited. Clone it as a new draft to
+                                            revise questions, ranking, or role
+                                            context.
+                                        </p>
+                                        {campaign.can_clone &&
+                                        !auth.readOnly ? (
+                                            <Form
+                                                {...CampaignCloneController.store.form(
+                                                    campaign.id,
+                                                )}
+                                                options={{
+                                                    preserveScroll: true,
+                                                }}
+                                            >
+                                                {({ processing }) => (
+                                                    <Button
+                                                        type="submit"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        disabled={processing}
+                                                    >
+                                                        {processing && (
+                                                            <Spinner />
+                                                        )}
+                                                        <Copy data-icon="inline-start" />
+                                                        Clone as new draft
+                                                    </Button>
+                                                )}
+                                            </Form>
+                                        ) : null}
+                                    </CardContent>
+                                </Card>
+                            ) : null}
                             <CampaignOverviewCard
                                 campaign={campaign}
                                 invitations={invitations}
@@ -351,44 +395,49 @@ export default function AdminCampaignsShow({
                                 onDeleteDialogOpenChange={setDeleteDialogOpen}
                             />
 
-                            <div className="flex flex-col gap-6">
+                            <div
+                                className={`flex flex-col gap-6 ${campaign.definition_frozen ? '[&_form]:pointer-events-none [&_form]:opacity-60' : ''}`}
+                            >
                                 <Card className="gap-0">
                                     <CardHeader className="border-b">
                                         <CardTitle>
                                             Sections and questions
                                         </CardTitle>
-                                        <CardAction className="flex flex-wrap items-center gap-2">
-                                            <GenerateAssessmentDialog
-                                                campaignId={campaign.id}
-                                            />
-                                            {campaign.draft_questions_count >
-                                            0 ? (
-                                                <Form
-                                                    {...CampaignQuestionController.approveAll.form(
-                                                        campaign.id,
-                                                    )}
-                                                    options={{
-                                                        preserveScroll: true,
-                                                    }}
-                                                >
-                                                    {({ processing }) => (
-                                                        <Button
-                                                            type="submit"
-                                                            variant="outline"
-                                                            disabled={
-                                                                processing
-                                                            }
-                                                        >
-                                                            {processing && (
-                                                                <Spinner />
-                                                            )}
-                                                            <Check data-icon="inline-start" />
-                                                            Approve all drafts
-                                                        </Button>
-                                                    )}
-                                                </Form>
-                                            ) : null}
-                                        </CardAction>
+                                        {!campaign.definition_frozen ? (
+                                            <CardAction className="flex flex-wrap items-center gap-2">
+                                                <GenerateAssessmentDialog
+                                                    campaignId={campaign.id}
+                                                />
+                                                {campaign.draft_questions_count >
+                                                0 ? (
+                                                    <Form
+                                                        {...CampaignQuestionController.approveAll.form(
+                                                            campaign.id,
+                                                        )}
+                                                        options={{
+                                                            preserveScroll: true,
+                                                        }}
+                                                    >
+                                                        {({ processing }) => (
+                                                            <Button
+                                                                type="submit"
+                                                                variant="outline"
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                            >
+                                                                {processing && (
+                                                                    <Spinner />
+                                                                )}
+                                                                <Check data-icon="inline-start" />
+                                                                Approve all
+                                                                drafts
+                                                            </Button>
+                                                        )}
+                                                    </Form>
+                                                ) : null}
+                                            </CardAction>
+                                        ) : null}
                                     </CardHeader>
 
                                     <CardContent className="p-0">
@@ -583,185 +632,188 @@ export default function AdminCampaignsShow({
                                             assessment needs a separate topic or
                                             scoring group.
                                         </p>
-                                        <AddSectionSheet
-                                            campaignId={campaign.id}
-                                        />
+                                        {!campaign.definition_frozen ? (
+                                            <AddSectionSheet
+                                                campaignId={campaign.id}
+                                            />
+                                        ) : null}
                                     </CardFooter>
                                 </Card>
-                            </div>
 
-                            <Collapsible className="group/collapsible">
-                                <Card className="gap-0">
-                                    <CollapsibleTrigger asChild>
-                                        <CardHeader className="cursor-pointer">
-                                            <CardTitle className="flex items-center gap-2">
-                                                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                                                Advanced Settings
-                                            </CardTitle>
-                                        </CardHeader>
-                                    </CollapsibleTrigger>
-                                    <CollapsibleContent>
-                                        <Form<RankingWeightsFormData>
-                                            {...CampaignRankingController.update.form.patch(
-                                                campaign.id,
-                                            )}
-                                            options={{
-                                                preserveScroll: true,
-                                            }}
-                                            className="contents"
-                                        >
-                                            {({ errors, processing }) => {
-                                                const fieldErrors =
-                                                    errors as Record<
-                                                        string,
-                                                        string | undefined
-                                                    >;
+                                <Collapsible className="group/collapsible">
+                                    <Card className="gap-0">
+                                        <CollapsibleTrigger asChild>
+                                            <CardHeader className="cursor-pointer">
+                                                <CardTitle className="flex items-center gap-2">
+                                                    <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                                                    Advanced Settings
+                                                </CardTitle>
+                                            </CardHeader>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <Form<RankingWeightsFormData>
+                                                {...CampaignRankingController.update.form.patch(
+                                                    campaign.id,
+                                                )}
+                                                options={{
+                                                    preserveScroll: true,
+                                                }}
+                                                className="contents"
+                                            >
+                                                {({ errors, processing }) => {
+                                                    const fieldErrors =
+                                                        errors as Record<
+                                                            string,
+                                                            string | undefined
+                                                        >;
 
-                                                return (
-                                                    <>
-                                                        <CardContent className="flex flex-col gap-6 py-(--card-spacing)">
-                                                            <section className="flex flex-col gap-3">
-                                                                <div>
-                                                                    <h2 className="text-base font-medium">
-                                                                        Ranking
-                                                                        weights
-                                                                    </h2>
-                                                                    <p className="text-sm text-muted-foreground">
-                                                                        Resume,
-                                                                        essay,
-                                                                        and MCQ
-                                                                        weights
-                                                                        must
-                                                                        total
-                                                                        100.
-                                                                    </p>
-                                                                </div>
-                                                                <div className="grid gap-3 sm:grid-cols-3">
-                                                                    <div className="grid gap-2">
-                                                                        <Label htmlFor="ranking_resume_score">
-                                                                            Resume
-                                                                            %
-                                                                        </Label>
-                                                                        <Input
-                                                                            id="ranking_resume_score"
-                                                                            name="ranking_weights[resume_score]"
-                                                                            type="number"
-                                                                            min={
-                                                                                0
-                                                                            }
-                                                                            max={
-                                                                                100
-                                                                            }
-                                                                            defaultValue={
-                                                                                campaign
-                                                                                    .ranking_weights
-                                                                                    .resume_score
-                                                                            }
-                                                                            required
-                                                                        />
-                                                                        <InputError
-                                                                            message={
-                                                                                fieldErrors[
-                                                                                    'ranking_weights.resume_score'
-                                                                                ]
-                                                                            }
-                                                                        />
-                                                                    </div>
-                                                                    <div className="grid gap-2">
-                                                                        <Label htmlFor="ranking_essay_score">
-                                                                            Essay
-                                                                            %
-                                                                        </Label>
-                                                                        <Input
-                                                                            id="ranking_essay_score"
-                                                                            name="ranking_weights[essay_score]"
-                                                                            type="number"
-                                                                            min={
-                                                                                0
-                                                                            }
-                                                                            max={
-                                                                                100
-                                                                            }
-                                                                            defaultValue={
-                                                                                campaign
-                                                                                    .ranking_weights
-                                                                                    .essay_score
-                                                                            }
-                                                                            required
-                                                                        />
-                                                                        <InputError
-                                                                            message={
-                                                                                fieldErrors[
-                                                                                    'ranking_weights.essay_score'
-                                                                                ]
-                                                                            }
-                                                                        />
-                                                                    </div>
-                                                                    <div className="grid gap-2">
-                                                                        <Label htmlFor="ranking_mcq_score">
+                                                    return (
+                                                        <>
+                                                            <CardContent className="flex flex-col gap-6 py-(--card-spacing)">
+                                                                <section className="flex flex-col gap-3">
+                                                                    <div>
+                                                                        <h2 className="text-base font-medium">
+                                                                            Ranking
+                                                                            weights
+                                                                        </h2>
+                                                                        <p className="text-sm text-muted-foreground">
+                                                                            Resume,
+                                                                            essay,
+                                                                            and
                                                                             MCQ
-                                                                            %
-                                                                        </Label>
-                                                                        <Input
-                                                                            id="ranking_mcq_score"
-                                                                            name="ranking_weights[mcq_score]"
-                                                                            type="number"
-                                                                            min={
-                                                                                0
-                                                                            }
-                                                                            max={
-                                                                                100
-                                                                            }
-                                                                            defaultValue={
-                                                                                campaign
-                                                                                    .ranking_weights
-                                                                                    .mcq_score
-                                                                            }
-                                                                            required
-                                                                        />
-                                                                        <InputError
-                                                                            message={
-                                                                                fieldErrors[
-                                                                                    'ranking_weights.mcq_score'
-                                                                                ]
-                                                                            }
-                                                                        />
+                                                                            weights
+                                                                            must
+                                                                            total
+                                                                            100.
+                                                                        </p>
                                                                     </div>
-                                                                </div>
-                                                                <InputError
-                                                                    message={
-                                                                        fieldErrors.ranking_weights
+                                                                    <div className="grid gap-3 sm:grid-cols-3">
+                                                                        <div className="grid gap-2">
+                                                                            <Label htmlFor="ranking_resume_score">
+                                                                                Resume
+                                                                                %
+                                                                            </Label>
+                                                                            <Input
+                                                                                id="ranking_resume_score"
+                                                                                name="ranking_weights[resume_score]"
+                                                                                type="number"
+                                                                                min={
+                                                                                    0
+                                                                                }
+                                                                                max={
+                                                                                    100
+                                                                                }
+                                                                                defaultValue={
+                                                                                    campaign
+                                                                                        .ranking_weights
+                                                                                        .resume_score
+                                                                                }
+                                                                                required
+                                                                            />
+                                                                            <InputError
+                                                                                message={
+                                                                                    fieldErrors[
+                                                                                        'ranking_weights.resume_score'
+                                                                                    ]
+                                                                                }
+                                                                            />
+                                                                        </div>
+                                                                        <div className="grid gap-2">
+                                                                            <Label htmlFor="ranking_essay_score">
+                                                                                Essay
+                                                                                %
+                                                                            </Label>
+                                                                            <Input
+                                                                                id="ranking_essay_score"
+                                                                                name="ranking_weights[essay_score]"
+                                                                                type="number"
+                                                                                min={
+                                                                                    0
+                                                                                }
+                                                                                max={
+                                                                                    100
+                                                                                }
+                                                                                defaultValue={
+                                                                                    campaign
+                                                                                        .ranking_weights
+                                                                                        .essay_score
+                                                                                }
+                                                                                required
+                                                                            />
+                                                                            <InputError
+                                                                                message={
+                                                                                    fieldErrors[
+                                                                                        'ranking_weights.essay_score'
+                                                                                    ]
+                                                                                }
+                                                                            />
+                                                                        </div>
+                                                                        <div className="grid gap-2">
+                                                                            <Label htmlFor="ranking_mcq_score">
+                                                                                MCQ
+                                                                                %
+                                                                            </Label>
+                                                                            <Input
+                                                                                id="ranking_mcq_score"
+                                                                                name="ranking_weights[mcq_score]"
+                                                                                type="number"
+                                                                                min={
+                                                                                    0
+                                                                                }
+                                                                                max={
+                                                                                    100
+                                                                                }
+                                                                                defaultValue={
+                                                                                    campaign
+                                                                                        .ranking_weights
+                                                                                        .mcq_score
+                                                                                }
+                                                                                required
+                                                                            />
+                                                                            <InputError
+                                                                                message={
+                                                                                    fieldErrors[
+                                                                                        'ranking_weights.mcq_score'
+                                                                                    ]
+                                                                                }
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+                                                                    <InputError
+                                                                        message={
+                                                                            fieldErrors.ranking_weights
+                                                                        }
+                                                                    />
+                                                                </section>
+                                                            </CardContent>
+                                                            <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
+                                                                <p className="text-sm text-muted-foreground">
+                                                                    Apply these
+                                                                    weights to
+                                                                    candidate
+                                                                    ranking.
+                                                                </p>
+                                                                <Button
+                                                                    type="submit"
+                                                                    size="sm"
+                                                                    disabled={
+                                                                        processing
                                                                     }
-                                                                />
-                                                            </section>
-                                                        </CardContent>
-                                                        <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
-                                                            <p className="text-sm text-muted-foreground">
-                                                                Apply these
-                                                                weights to
-                                                                candidate
-                                                                ranking.
-                                                            </p>
-                                                            <Button
-                                                                type="submit"
-                                                                size="sm"
-                                                                disabled={
-                                                                    processing
-                                                                }
-                                                            >
-                                                                {processing && (
-                                                                    <Spinner />
-                                                                )}
-                                                                Save weights
-                                                            </Button>
-                                                        </CardFooter>
-                                                    </>
-                                                );
-                                            }}
-                                        </Form>
-                                    </CollapsibleContent>
-                                </Card>
-                            </Collapsible>
+                                                                >
+                                                                    {processing && (
+                                                                        <Spinner />
+                                                                    )}
+                                                                    Save weights
+                                                                </Button>
+                                                            </CardFooter>
+                                                        </>
+                                                    );
+                                                }}
+                                            </Form>
+                                        </CollapsibleContent>
+                                    </Card>
+                                </Collapsible>
+                            </div>
                         </>
                     ) : null}
                 </Deferred>
@@ -1795,6 +1847,10 @@ function CandidateInvitationsDialog({
 
 function CampaignStatusButton({ campaign }: { campaign: Campaign }) {
     if (campaign.status === 'archived') {
+        if (campaign.definition_frozen) {
+            return null;
+        }
+
         return (
             <Form
                 {...CampaignStatusController.draft.form(campaign.id)}
@@ -1816,14 +1872,25 @@ function CampaignStatusButton({ campaign }: { campaign: Campaign }) {
                 {...CampaignStatusController.archive.form(campaign.id)}
                 options={{ preserveScroll: true }}
             >
-                {({ processing }) => (
-                    <Button size="sm" variant="outline" disabled={processing}>
-                        {processing && <Spinner />}
-                        Archive
-                    </Button>
+                {({ processing, errors }) => (
+                    <div className="flex flex-col gap-1">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={processing || !campaign.can_archive}
+                        >
+                            {processing && <Spinner />}
+                            Archive
+                        </Button>
+                        <InputError message={errors.campaign} />
+                    </div>
                 )}
             </Form>
         );
+    }
+
+    if (campaign.definition_frozen) {
+        return null;
     }
 
     return (
@@ -1866,53 +1933,75 @@ function CampaignActionsDropdown({
                         <span className="sr-only">Open campaign actions</span>
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuContent align="start" className="w-48">
                     <DropdownMenuGroup>
-                        <DropdownMenuItem
-                            onSelect={(event) => {
-                                event.preventDefault();
-                                setEditOpen(true);
-                            }}
-                        >
-                            Edit campaign
-                        </DropdownMenuItem>
+                        {!campaign.definition_frozen ? (
+                            <DropdownMenuItem
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    setEditOpen(true);
+                                }}
+                            >
+                                Edit campaign
+                            </DropdownMenuItem>
+                        ) : null}
+                        {campaign.can_clone ? (
+                            <DropdownMenuItem
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    router.post(
+                                        CampaignCloneController.store.url(
+                                            campaign.id,
+                                        ),
+                                    );
+                                }}
+                            >
+                                Clone as new draft
+                            </DropdownMenuItem>
+                        ) : null}
                     </DropdownMenuGroup>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={(event) => {
-                            event.preventDefault();
-                            onDelete();
-                        }}
-                    >
-                        Delete campaign
-                    </DropdownMenuItem>
+                    {!campaign.definition_frozen ? (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    onDelete();
+                                }}
+                            >
+                                Delete campaign
+                            </DropdownMenuItem>
+                        </>
+                    ) : null}
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            <Sheet open={editOpen} onOpenChange={setEditOpen}>
-                <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
-                    <SheetHeader>
-                        <SheetTitle>Edit campaign</SheetTitle>
-                        <SheetDescription>
-                            Update role context, required skills, and scoring
-                            threshold.
-                        </SheetDescription>
-                    </SheetHeader>
-                    <CampaignForm
-                        action={CampaignController.update.form.patch(
-                            campaign.id,
-                        )}
-                        submitLabel="Save changes"
-                        campaign={campaign}
-                        onSuccess={() => setEditOpen(false)}
-                        onCancel={() => setEditOpen(false)}
-                        className="flex-1 overflow-hidden"
-                        bodyClassName="flex-1 overflow-y-auto px-4"
-                        footerClassName="mt-auto border-t bg-background p-4"
-                    />
-                </SheetContent>
-            </Sheet>
+            {!campaign.definition_frozen ? (
+                <Sheet open={editOpen} onOpenChange={setEditOpen}>
+                    <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
+                        <SheetHeader>
+                            <SheetTitle>Edit campaign</SheetTitle>
+                            <SheetDescription>
+                                Update role context, required skills, and
+                                scoring threshold.
+                            </SheetDescription>
+                        </SheetHeader>
+                        <CampaignForm
+                            action={CampaignController.update.form.patch(
+                                campaign.id,
+                            )}
+                            submitLabel="Save changes"
+                            campaign={campaign}
+                            onSuccess={() => setEditOpen(false)}
+                            onCancel={() => setEditOpen(false)}
+                            className="flex-1 overflow-hidden"
+                            bodyClassName="flex-1 overflow-y-auto px-4"
+                            footerClassName="mt-auto border-t bg-background p-4"
+                        />
+                    </SheetContent>
+                </Sheet>
+            ) : null}
         </>
     );
 }
