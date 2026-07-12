@@ -109,15 +109,6 @@ export function useExamProctoring({
         document.addEventListener('contextmenu', onContextMenu);
         document.addEventListener('fullscreenchange', onFullscreenChange);
 
-        if (
-            secureExam.require_fullscreen &&
-            document.fullscreenElement === null
-        ) {
-            void document.documentElement.requestFullscreen?.().catch(() => {
-                report('fullscreen_exit');
-            });
-        }
-
         return () => {
             document.removeEventListener('visibilitychange', onVisibility);
             window.removeEventListener('blur', onBlur);

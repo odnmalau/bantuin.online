@@ -40,6 +40,8 @@ test('candidate must start a secure exam session before seeing section questions
         ->assertInertia(fn ($page) => $page
             ->component('candidate/exam')
             ->where('state', 'ready_to_start')
+            ->where('secure_exam.require_fullscreen', true)
+            ->where('secure_exam.block_copy_paste', true)
             ->missing('examSession')
             ->missing('currentSection')
             ->missing('questions')
@@ -494,4 +496,29 @@ test('candidate can finalize a secure exam session into an assessment', function
         ScreenResumeWithAi::class,
         EvaluateAssessmentWithAi::class,
     ]);
+});
+
+test('source contract keeps fullscreen entry on start click and exit reporting in proctoring', function () {
+    $examSource = file_get_contents(resource_path('js/pages/candidate/exam.tsx'));
+    $proctoringSource = file_get_contents(resource_path('js/hooks/use-exam-proctoring.ts'));
+
+    $startOffset = strpos($examSource, 'function StartExamState');
+    $activeOffset = strpos($examSource, 'function ActiveSectionExam');
+
+    expect($startOffset)->not->toBeFalse()
+        ->and($activeOffset)->not->toBeFalse()
+        ->and($activeOffset)->toBeGreaterThan($startOffset);
+
+    $startExamState = substr($examSource, $startOffset, $activeOffset - $startOffset);
+
+    expect($startExamState)
+        ->toContain('requestFullscreen')
+        ->toContain('ExamSessionController.store.url')
+        ->toContain('router.post')
+        ->and(strpos($startExamState, 'requestFullscreen'))
+        ->toBeLessThan(strpos($startExamState, 'router.post'))
+        ->and($proctoringSource)
+        ->not->toContain('requestFullscreen')
+        ->toContain('fullscreenchange')
+        ->toContain("report('fullscreen_exit')");
 });

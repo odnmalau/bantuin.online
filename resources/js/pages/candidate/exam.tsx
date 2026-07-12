@@ -92,6 +92,7 @@ type ReadyToStartProps = {
     state: 'ready_to_start';
     campaign: Campaign;
     sections: SectionSummary[];
+    secure_exam: ExamSessionProps['secure_exam'];
 };
 
 type ActiveSectionProps = {
@@ -150,6 +151,7 @@ function renderExamContent(props: Props) {
                 <StartExamState
                     campaign={props.campaign}
                     sectionCount={props.sections.length}
+                    secureExam={props.secure_exam}
                 />
             );
         case 'ready_to_finalize':
@@ -224,10 +226,71 @@ function EmptyQuestionsState() {
 function StartExamState({
     campaign,
     sectionCount,
+    secureExam,
 }: {
     campaign: Campaign;
     sectionCount: number;
+    secureExam: ExamSessionProps['secure_exam'];
 }) {
+    const [processing, setProcessing] = useState(false);
+    const [setupError, setSetupError] = useState<string | null>(null);
+
+    const startExam = async (): Promise<void> => {
+        setProcessing(true);
+        setSetupError(null);
+
+        let enteredFullscreen = false;
+
+        if (
+            secureExam.require_fullscreen &&
+            document.fullscreenElement === null
+        ) {
+            const requestFullscreen =
+                document.documentElement.requestFullscreen?.bind(
+                    document.documentElement,
+                );
+
+            if (!requestFullscreen) {
+                setSetupError(
+                    'Fullscreen is required to start this exam, but your browser does not support it.',
+                );
+                setProcessing(false);
+
+                return;
+            }
+
+            try {
+                await requestFullscreen();
+                enteredFullscreen = true;
+            } catch {
+                setSetupError(
+                    'Fullscreen is required to start this exam. Allow fullscreen and try again.',
+                );
+                setProcessing(false);
+
+                return;
+            }
+        }
+
+        router.post(
+            ExamSessionController.store.url(campaign.id),
+            {},
+            {
+                onFinish: () => {
+                    setProcessing(false);
+                },
+                onError: () => {
+                    if (
+                        enteredFullscreen &&
+                        document.fullscreenElement !== null
+                    ) {
+                        void document.exitFullscreen?.();
+                    }
+                },
+            },
+        );
+    };
+
     return (
         <div className="space-y-6 rounded-lg border border-sidebar-border/70 p-6 dark:border-sidebar-border">
             <div className="flex items-start gap-3">
@@ -247,14 +310,19 @@ function StartExamState({
                     </p>
                 </div>
             </div>
-            <Form {...ExamSessionController.store.form(campaign.id)}>
-                {({ processing }) => (
-                    <Button type="submit" disabled={processing}>
-                        {processing && <Spinner />}
-                        Start secure exam
-                    </Button>
-                )}
-            </Form>
+            <div className="space-y-2">
+                <Button
+                    type="button"
+                    disabled={processing}
+                    onClick={() => {
+                        void startExam();
+                    }}
+                >
+                    {processing && <Spinner />}
+                    Start secure exam
+                </Button>
+                <InputError message={setupError ?? undefined} />
+            </div>
         </div>
     );
 }

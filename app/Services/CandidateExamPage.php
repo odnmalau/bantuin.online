@@ -55,6 +55,7 @@ class CandidateExamPage
                 'state' => 'ready_to_start',
                 'campaign' => $this->campaignSummary($campaign),
                 'sections' => $sectionSummaries,
+                'secure_exam' => $this->secureExamConfig(),
             ];
         }
 
@@ -101,6 +102,17 @@ class CandidateExamPage
         return [
             'state' => 'no_campaign',
             'campaign' => null,
+        ];
+    }
+
+    /**
+     * @return array{require_fullscreen: bool, block_copy_paste: bool}
+     */
+    private function secureExamConfig(): array
+    {
+        return [
+            'require_fullscreen' => (bool) config('assessment.secure_exam.require_fullscreen', true),
+            'block_copy_paste' => (bool) config('assessment.secure_exam.block_copy_paste', true),
         ];
     }
 
