@@ -7,13 +7,14 @@ use App\Mail\CampaignExamInvitationMail;
 use App\Models\CampaignInvitation;
 use App\Services\CampaignInvitationService;
 use App\TeamStatus;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
-class SendCampaignExamInvitationEmail implements ShouldQueue
+class SendCampaignExamInvitationEmail implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable;
 
@@ -54,6 +55,15 @@ class SendCampaignExamInvitationEmail implements ShouldQueue
             Log::warning('Campaign exam invitation email skipped because invitation is not pending.', [
                 'invitation_id' => $invitation->id,
                 'status' => $invitation->status->value,
+            ]);
+
+            return;
+        }
+
+        if (! hash_equals($invitation->token_hash, hash('sha256', $this->plainToken))) {
+            Log::warning('Campaign exam invitation email skipped because its token is stale.', [
+                'invitation_id' => $invitation->id,
+                'team_id' => $this->teamId,
             ]);
 
             return;

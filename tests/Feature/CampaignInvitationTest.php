@@ -9,6 +9,7 @@ use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
 use App\Models\User;
 use App\Services\CampaignInvitationService;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 
@@ -90,6 +91,42 @@ test('exam invite email job rechecks its campaign team boundary', function () {
 
     Mail::assertNothingSent();
     expect($invitation->fresh()->sent_at)->toEqual($sentAt);
+});
+
+test('campaign exam invitation email job encrypts its queue payload', function () {
+    $campaign = Campaign::factory()->active()->create();
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()->createWithPlainToken([
+        'campaign_id' => $campaign->id,
+        'email' => 'candidate@example.com',
+    ]);
+
+    expect(new SendCampaignExamInvitationEmail($invitation, $plainToken))
+        ->toBeInstanceOf(ShouldBeEncrypted::class);
+});
+
+test('campaign exam invitation email job ignores a stale token', function () {
+    Mail::fake();
+
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->active()->create();
+    ['invitation' => $invitation, 'plain_token' => $staleToken] = CampaignInvitation::factory()->createWithPlainToken([
+        'campaign_id' => $campaign->id,
+        'email' => 'candidate@example.com',
+        'invited_by' => $admin->id,
+    ]);
+    $sentAt = $invitation->sent_at;
+    $staleJob = new SendCampaignExamInvitationEmail($invitation, $staleToken);
+    ['plain_token' => $currentToken] = CampaignInvitation::issueToken($invitation->fresh());
+
+    $staleJob->handle(app(CampaignInvitationService::class));
+
+    Mail::assertNothingSent();
+    expect($invitation->fresh()->sent_at)->toEqual($sentAt);
+
+    (new SendCampaignExamInvitationEmail($invitation->fresh(), $currentToken))
+        ->handle(app(CampaignInvitationService::class));
+
+    Mail::assertSent(CampaignExamInvitationMail::class, 1);
 });
 
 test('invite link stores pending redemption and redirects to login', function () {
