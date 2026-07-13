@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\Team;
 use App\Models\User;
+use App\Support\TeamCapability;
 use App\TeamMembershipRole;
 use App\TeamStatus;
 
@@ -50,18 +51,7 @@ class TeamPolicy
 
     public function invite(User $user, Team $team, TeamMembershipRole $role): bool
     {
-        if ($team->status !== TeamStatus::Active || $user->current_team_id !== $team->id) {
-            return false;
-        }
-
-        $membershipRole = $user->activeTeamMemberships()
-            ->where('team_id', $team->id)
-            ->first()
-            ?->role;
-
-        return $membershipRole === TeamMembershipRole::Owner
-            || ($membershipRole === TeamMembershipRole::Administrator
-                && $role === TeamMembershipRole::Collaborator);
+        return TeamCapability::canInvite($user, $team, $role);
     }
 
     public function transferOwnership(User $user, Team $team): bool
