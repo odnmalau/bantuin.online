@@ -103,9 +103,10 @@ test('campaign index and aggregate counts include only the current team', functi
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->loadDeferredProps(fn (Assert $reload) => $reload
-                ->has('campaigns', 1)
-                ->where('campaigns.0.id', $visible->id)
-                ->where('campaigns.0.sections_count', 1)));
+                ->where('campaigns.total', 1)
+                ->has('campaigns.data', 1)
+                ->where('campaigns.data.0.id', $visible->id)
+                ->where('campaigns.data.0.sections_count', 1)));
 });
 
 test('campaign and nested authoring endpoints reject cross team identifiers', function (string $routeName, string $method) {
