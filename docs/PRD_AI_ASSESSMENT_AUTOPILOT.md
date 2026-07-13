@@ -274,7 +274,6 @@ Campaign fields:
 - `seniority`: intern, junior, mid, senior, lead.
 - `job_description`: role description.
 - `required_skills`: required skills, stored as array/json.
-- `nice_to_have_skills`: preferred skills, stored as a nullable array/json field.
 - `language`: assessment language.
 - `status`: draft, question_review, active, archived.
 - `threshold_score`: interview threshold (campaign column; not `passing_score`).
@@ -302,7 +301,7 @@ Platform priority:
 | `fill_blank` | terminology/context completion | exact/fuzzy deterministic |
 | `matching_pairs` | concepts and relationships | deterministic |
 
-Question fields (bank & campaign snapshot):
+Campaign question fields:
 
 - `type`
 - `prompt` (question text; not a `content` column)
@@ -337,7 +336,6 @@ Generation input:
 - Role title.
 - Seniority.
 - Required skills.
-- Nice-to-have skills.
 - Job description.
 - Target language.
 - Number of questions.
@@ -631,7 +629,6 @@ Additional schema recommended for the AI Hiring Autopilot direction.
 | `seniority` | string nullable | junior/mid/senior/etc |
 | `job_description` | text nullable | role context |
 | `required_skills` | jsonb | required skill array |
-| `nice_to_have_skills` | jsonb nullable | preferred skill array |
 | `language` | string | default `id` or `en` |
 | `passing_score` | integer | campaign threshold (implementation: `threshold_score` column) |
 | `ranking_weights` | jsonb | resume/mcq/essay weights |
@@ -734,7 +731,6 @@ Additional platform statuses:
 
 - `resume_processing`: PDF resume being extracted.
 - `resume_screening`: resume being scored by Qwen.
-- `ranking_ready`: ranking computed and ready for review.
 - `needs_manual_review`: critic or business rule requires additional review.
 - `overridden`: a Team Member overrode the AI recommendation.
 
@@ -842,7 +838,6 @@ Middleware: `auth`, `current-team`, plus Team-scoped policies
 
 Pages:
 
-- `GET /admin/assessments`
 - `GET /admin/assessments/{assessment}`
 - `POST /admin/assessments/{assessment}/approve`
 - `POST /admin/assessments/{assessment}/reject`
@@ -858,6 +853,9 @@ Campaign and question generation routes:
 - `DELETE /admin/campaigns/{campaign}/sections/{section}`
 - `POST|PATCH|DELETE /admin/campaigns/{campaign}/questions` (+ approve and approve-all)
 - `GET /admin/rankings`
+
+The ranking page is the assessment collection view and links to assessment
+detail. There is no separate `/admin/assessments` index route.
 
 Note: campaign question approve uses `POST /admin/campaigns/{campaign}/questions/{question}/approve`, not flat path `campaign-questions`.
 
@@ -905,7 +903,7 @@ Unauthorized contextual access returns 403 or redirects to a safe page.
 Main Inertia pages:
 
 - `resources/js/pages/admin/campaigns/*`
-- `resources/js/pages/admin/assessments/*`
+- `resources/js/pages/admin/assessments/show.tsx`
 - `resources/js/pages/admin/rankings/index.tsx`
 - `resources/js/pages/candidate/exam.tsx`
 - `resources/js/pages/candidate/assessments/show.tsx`
@@ -1056,7 +1054,7 @@ Campaign sections and Campaign questions only.
 
 ### Phase 5: Team Member Workstation
 
-- Build assessment list and detail pages.
+- Build the ranking collection page and assessment detail page.
 - Add approve/reject endpoints.
 - Add status transition validation.
 - Add tests.

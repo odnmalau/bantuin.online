@@ -136,12 +136,14 @@ approve question snapshots directly on Campaign detail.
 Workstation:
 
 ```text
-/admin/assessments
+/admin/rankings
 ```
 
-List shows candidate name/email, scores, status, submit and evaluation timestamps.
-
-Detail shows answers, question/rubric snapshots, AI scores and justification, resume screening, ranking breakdown, critic result, agent timeline, AI audit panel, email drafts, approval/email timestamps.
+The ranking page lists candidate name/email, scores, status, and evaluation time,
+and links each row to `/admin/assessments/{assessment}`. There is no separate
+assessment index route. Detail shows answers, question/rubric snapshots, AI
+scores and justification, resume screening, ranking breakdown, critic result,
+agent timeline, AI audit panel, email drafts, and approval/email timestamps.
 
 Timeline examples: submit, resume pipeline, queue, evaluation, deterministic grading, ranking, critic, email draft, admin actions, email sent/failed.
 
@@ -238,7 +240,6 @@ Evaluator DTO `AssessmentEvaluationResult`: score 0–100, justification, email 
 | `resume_screening` | Qwen resume screening. |
 | `pending_approval` | Meets threshold gate; awaiting Team Member review. |
 | `evaluated` | Below threshold or blocked; still reviewable. |
-| `ranking_ready` | Intermediate ranking state in enum (pipeline). |
 | `needs_manual_review` | Manual review flagged. |
 | `overridden` | A Team Member overrode the ranking score. |
 | `approved` | Approved; email job dispatched. |
@@ -305,10 +306,11 @@ Local dev: `composer run dev` includes `queue:listen`, or run `php artisan queue
 | `campaign_invitations` | Candidate participation in a Campaign. |
 | `campaign_sections` / `campaign_questions` | Exam structure and snapshots. |
 | `assessment_events` | Timeline (`type`, `title`, `description`, `payload`, `occurred_at`, `actor_id`). |
-| `application_settings` | Global passing score, etc. |
 | `jobs` | Laravel queue. |
 
 Extra `assessments` columns include resume fields, hybrid scores, `ranking_payload`, `critic_payload`, `needs_manual_review`.
+The default passing score comes from `config/assessment.php`; a Campaign's
+`threshold_score` overrides it for Campaign assessments.
 
 ## Verification
 

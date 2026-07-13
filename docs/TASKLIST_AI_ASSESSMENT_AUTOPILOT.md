@@ -23,7 +23,10 @@
 
 ## Phase 1: Role Auth Foundation (Historical, Superseded)
 
-Implementation status: `[x]` Google OAuth (Socialite), `admin` / `candidate` roles, `role` middleware, login redirects, Inertia nav per role. New Google users are always `candidate`; admins come from seeder / internal provisioning.
+Historical delivery status: `[x]` Google OAuth (Socialite), global `admin` /
+`candidate` roles, `role` middleware, role redirects, and role-based navigation
+were delivered and later replaced by contextual Team Membership, Campaign
+participation, and Platform Operator authority.
 
 ### Backend
 
@@ -152,7 +155,7 @@ Implementation status: `[x]` Exam and submission are tied to the **active campai
 Acceptance criteria:
 
 - Candidate takes the **active campaign** and submits **once per campaign**.
-- Resume PDF upload is required; answers are stored as an auditable snapshot independent of library/campaign edits after submit.
+- Resume PDF upload is required; answers are stored as an auditable snapshot independent of Campaign edits after submit.
 - Submission triggers the AI pipeline asynchronously (resume screening, then assessment evaluation).
 
 ## Phase 4: AI Evaluation Pipeline
@@ -182,7 +185,7 @@ Implementation status: `[x]` Qwen evaluator via Laravel AI SDK runs with strict 
 - [x] Implement prompt assembly from assessment context:
   - candidate & campaign (role/JD/skills)
   - per answer: question, rubric, type, grading mode, answer
-  - effective threshold (`AssessmentSettings`: global UI/config or `campaign.threshold_score`)
+  - effective threshold (`AssessmentThreshold`: config default or `campaign.threshold_score`)
 - [x] Call Qwen via Laravel AI SDK.
 - [x] Qwen structured output:
   - JSON Object mode `response_format: {"type": "json_object"}`
@@ -242,19 +245,18 @@ Acceptance criteria:
 
 ## Phase 5: Admin Workstation
 
-Implementation status: `[x]` Workstation list/detail, approve/reject, and final email validation are available. UI/runtime extended (ranking, resume, timeline/audit, promote/retry/override — phases 12–16). Approve/reject use `AssessmentStatus::isReviewable()`; reject requires `reason`.
+Implementation status: `[x]` Ranking collection/detail, approve/reject, and final email validation are available. UI/runtime extended (ranking, resume, timeline/audit, promote/retry/override — phases 12–16). Approve/reject use `AssessmentStatus::isReviewable()`; reject requires `reason`.
 
 ### Backend
 
 - [x] Create Admin assessment controller (`App\Http\Controllers\Admin\AssessmentController`).
 - [x] Core routes:
-  - `GET /admin/assessments`
   - `GET /admin/assessments/{assessment}`
   - `POST /admin/assessments/{assessment}/approve`
   - `POST /admin/assessments/{assessment}/reject`
 - [x] Recovery/expansion routes (phase 16, same workstation):
   - `POST .../retry-evaluation`, `retry-email`, `promote`, `override-score`
-- [x] Assessment list shows:
+- [x] Ranking page (`GET /admin/rankings`) shows:
   - Candidate name & email
   - Scores (`ai_score` / essay, resume, MCQ, **ranking** components)
   - Status (badge)
@@ -288,10 +290,10 @@ Implementation status: `[x]` Workstation list/detail, approve/reject, and final 
 
 ### Frontend
 
-- [x] Create page `resources/js/pages/admin/assessments/index.tsx`.
+- [x] Create page `resources/js/pages/admin/rankings/index.tsx`.
 - [x] Create page `resources/js/pages/admin/assessments/show.tsx`.
 - [x] Status badge per row (no separate filter dropdown).
-- [x] Empty state on assessment list.
+- [x] Empty state on ranking list.
 - [x] Show AI justification, answer/rubric snapshot, email draft.
 - [x] Edit subject/body before approve (prefill from AI/approved draft).
 - [x] Approve & Reject buttons (reason dialog); disabled when `!can_review`.
@@ -299,7 +301,7 @@ Implementation status: `[x]` Workstation list/detail, approve/reject, and final 
 
 ### Tests
 
-- [x] Admin can view assessment list.
+- [x] Admin can view the ranking list.
 - [x] Admin can view assessment detail.
 - [x] Admin can approve reviewable assessments (`pending_approval`, `evaluated`, `needs_manual_review`, `overridden`).
 - [x] Approve saves Admin’s final subject/body.
@@ -363,41 +365,35 @@ Acceptance criteria:
 
 ## Phase 7: Threshold Configuration
 
-Implementation status: `[x]` Global threshold via config + Admin UI override (`application_settings`) + per-**campaign** override (`threshold_score`). Evaluation pipeline uses `AssessmentSettings::passingScoreFor()`; review status gate uses **ranking score** vs effective threshold (not hardcoded in job).
+Implementation status: `[x]` Default threshold via config plus per-**campaign** override (`threshold_score`). The former database-backed Admin settings UI was removed. Evaluation uses `AssessmentThreshold::passingScoreFor()`; the review status gate uses **ranking score** vs the effective threshold.
 
 ### Minimum requirements
 
 - [x] Store default threshold in `config/assessment.php` (`ASSESSMENT_PASSING_SCORE`, default 75).
-- [x] Use effective threshold in `EvaluateAssessmentWithAi` via `AssessmentSettings` (not literals in job).
+- [x] Use effective threshold in `EvaluateAssessmentWithAi` via `AssessmentThreshold` (not literals in job).
 - [x] Use effective threshold in `QwenAssessmentEvaluator` (prompt + required email draft when threshold met).
-- [x] Add tests that threshold changes (config / DB UI / campaign) affect evaluation/review status.
+- [x] Add tests that config and Campaign thresholds affect evaluation/review status.
 
-### Admin UI option
+### Removed Admin UI option
 
-- [x] UI location: `/admin/assessment-settings` (**Settings** nav).
-- [x] Page `resources/js/pages/admin/assessment-settings/edit.tsx`.
-- [x] Input `passing_score` 0–100.
-- [x] Persist to `application_settings` (`ApplicationSetting::AssessmentPassingScore`).
-- [x] Fallback to config when no stored value; show config fallback in UI.
-- [x] Request validation `UpdateAssessmentSettingsRequest` (`required`, `integer`, `min:0`, `max:100`).
-- [x] Tests: view settings, update, range validation, candidate forbidden, stored value used in evaluation.
+The earlier `/admin/assessment-settings` page and `application_settings`
+persistence were removed. The current product has no database-backed global
+threshold editor.
 
 ### Campaign override (related to Phase 9)
 
 - [x] Assessments with `campaign_id` use `campaign.threshold_score` as effective threshold (`passingScoreSource: campaign`).
-- [x] Assessments without campaign use global UI/config (`passingScoreSource: global`).
-- [x] Workstation audit panel shows effective threshold + source + global passing score.
+- [x] Assessments without a Campaign use config (`passingScoreSource: config`).
+- [x] Workstation audit panel shows effective threshold, source, and config default.
 
 ### Tests
 
-- [x] `AdminAssessmentSettingsTest` — global threshold CRUD, validation, RBAC, stored override in evaluation.
 - [x] `AiAssessmentEvaluationTest` — config and campaign threshold affect status.
-- [x] Boundary validation `0` and `100` accepted (update succeeds).
 
 Acceptance criteria:
 
 - Threshold is not hardcoded in job/evaluator.
-- Product has clear ways to change threshold: `.env`/config, Admin Assessment Settings, and per campaign.
+- Threshold can be changed through `.env`/config and per Campaign.
 
 ## Phase 8: Polish, Observability, and QA
 
@@ -405,10 +401,9 @@ Implementation status: `[x]` Empty states, processing UI, status badges, AI/emai
 
 ### UX polish
 
-- [x] Empty state Admin question libraries (`question-banks/index`, `show`).
-- [x] Empty state Admin assessment list (`assessments/index`).
+- [x] Empty states for Campaigns and rankings.
 - [x] Additional empty states: campaigns, rankings, sections/questions on campaign detail.
-- [x] Loading/processing on form submit (Spinner + `disabled={processing}`) — candidate exam, workstation, campaign, bank question, settings.
+- [x] Loading/processing on form submit (Spinner + `disabled={processing}`) — Candidate exam, workstation, and Campaign forms.
 - [x] Consistent assessment status badges (`AssessmentStatusBadge` — admin + candidate).
 - [x] Responsive layout (`md:` / `lg:` grids, `flex-wrap`, horizontal scroll tables).
 - [x] Validation errors via `InputError` + Inertia session errors.
@@ -445,7 +440,7 @@ Acceptance criteria:
 Product foundation:
 
 1. Role Auth Foundation.
-2. Question libraries & campaign snapshots (Phase 10).
+2. Campaign sections and questions (Phase 10).
 3. Candidate Exam and Assessment Submission.
 4. AI Evaluation Pipeline with Laravel AI SDK Qwen provider.
 5. Admin Workstation.
@@ -456,7 +451,7 @@ Product foundation:
 Autopilot hiring flow:
 
 1. Campaign / Role Setup.
-2. Question Types, Sections, and Libraries.
+2. Question Types and Sections.
 3. AI Assessment Generator.
 4. Resume PDF Screening.
 5. Hybrid Grading and Candidate Ranking.
@@ -467,8 +462,8 @@ Autopilot hiring flow:
 
 ## Definition of Done — Product foundation
 
-- [x] Admin/Candidate roles work and are tested.
-- [x] Admin question libraries & campaign questions work and are tested.
+- [x] Team Member and Candidate access boundaries work and are tested.
+- [x] Campaign questions work and are tested.
 - [x] Candidate can submit only one assessment **per campaign**.
 - [x] Candidate status page polls while assessment is processing.
 - [x] Assessment stores snapshot of answers, questions, and rubrics.
@@ -488,7 +483,7 @@ Autopilot hiring flow:
 - [x] Admin can create campaigns from role/JD/skills.
 - [x] Qwen can generate assessment drafts with sections, question types, rubrics, answer keys, skill tags, and points.
 - [x] AI-generated questions must be reviewed/approved by Admin before going active.
-- [x] Question library is reusable; import to campaign as copy/snapshot.
+- [x] Campaign questions are snapshotted into Candidate answers.
 - [x] Candidate must upload resume PDF.
 - [x] Resume PDF is extracted to text and scored by Qwen.
 - [x] Deterministic question types are graded without AI.
@@ -502,16 +497,11 @@ Autopilot hiring flow:
 - [x] Core backend tests pass.
 - [x] TypeScript check and frontend build pass.
 
-## Addendum: Demo data
+## Addendum: Demo data (Historical, Removed)
 
-- [x] Default Admin seeder: `admin@hirepilot.test`.
-- [x] Fresh candidate seeder: `candidate@hirepilot.test`.
-- [x] Sample active questions seeder.
-- [x] Assessment `pending_approval` seeder: `passed@hirepilot.test`.
-- [x] Assessment `evaluated` seeder: `review@hirepilot.test`.
-- [x] Assessment `email_sent` seeder: `invited@hirepilot.test`.
-- [x] Demo assessments linked to active demo campaign.
-- [x] Demo seeder idempotency test.
+The dedicated HirePilot demo users, Campaigns, assessments, and idempotency
+test were removed. `DatabaseSeeder` no longer installs that historical fixture
+set; tests create isolated data with factories.
 
 ## Autopilot hiring flow coverage
 
@@ -532,12 +522,12 @@ Admin input role/JD/skills
 
 ## Phase 9: Campaign / Role Setup
 
-Implementation status: `[x]` Campaign as hiring context (role/JD/skills, threshold, ranking weights, language). Admin CRUD + publish, default section on create, demo seeder, Wayfinder. Runtime: assessment `campaign_id`, evaluation threshold, ranking weights (`HybridScoringTest`), resume/AI prompts use campaign context.
+Implementation status: `[x]` Campaign as hiring context (role/JD/skills, threshold, ranking weights, language). Team Member CRUD + publish, default section on create, and Wayfinder are present. Runtime: assessment `campaign_id`, evaluation threshold, ranking weights (`HybridScoringTest`), and resume/AI prompts use Campaign context.
 
 ### Backend
 
 - [x] Model `Campaign` + factory + enum `CampaignStatus` (`draft`, `question_review`, `active`, `archived`).
-- [x] Migration `campaigns` + follow-up columns `ranking_weights`, `nice_to_have_skills`, `language`, `activated_at`, `ai_generation_notes`.
+- [x] Migration `campaigns` + follow-up columns `ranking_weights`, `language`, `activated_at`, `ai_generation_notes`.
 - [x] Core columns: `title`, `role_title`, `seniority`, `job_description`, `required_skills`, `threshold_score`, `status`, `created_by`.
 - [x] Admin controller `CampaignController` (index/create/store/show/edit/update/destroy/publish).
 - [x] Form requests `StoreCampaignRequest` / `UpdateCampaignRequest` + `ValidatesCampaignRankingWeights` (weights sum to 100).
@@ -551,14 +541,14 @@ Implementation status: `[x]` Campaign as hiring context (role/JD/skills, thresho
 ### Frontend
 
 - [x] Pages `admin/campaigns/{index,create,edit,show}.tsx`.
-- [x] Form `campaign-form.tsx`: role, seniority, JD, required/nice-to-have skills, language, threshold, ranking weights, status.
+- [x] Form `campaign-form.tsx`: role, seniority, JD, required skills, language, threshold, ranking weights, status.
 - [x] Status badge on index (`status_label`).
 - [x] Sidebar nav **Campaigns**.
-- [x] Campaign show: sections, questions, publish, generate (phase 11), import (phase 10).
+- [x] Campaign show: sections, questions, publish, and generate (phase 11).
 
 ### Tests
 
-- [x] `AdminCampaignTest` — view/create (+ default section), update, publish + draft guard, ranking weights, language/nice-to-have, candidate RBAC, add section/questions (overlap phase 10).
+- [x] `AdminCampaignTest` — view/create (+ default section), update, publish + draft guard, ranking weights, language, candidate RBAC, and section/question authoring.
 - [x] `CandidateAssessmentTest` — **active** campaign used for exam/submit; non-active rejected.
 - [x] `HybridScoringTest` — campaign `ranking_weights` used by ranking calculator.
 - [x] `AiAssessmentGenerationTest` — campaign status → `question_review` after generate.
@@ -575,42 +565,37 @@ Acceptance criteria:
 - Admin can create/manage hiring campaigns from role/JD/skills (including threshold & ranking weights).
 - Campaign is context for candidate exam, resume screening, AI evaluation, and transparent ranking.
 
-## Phase 10: Question Types, Sections, and Libraries (Historical, Partially Removed)
+## Phase 10: Question Types and Sections (Libraries Removed)
 
-Implementation status: `[x]` Reusable question libraries, campaign sections, `campaign_questions` snapshots, type & grading mode enums, import copy/snapshot, bank + campaign section/import CRUD UI, answer key/rubric validation. Candidate runtime sees only **approved** questions per campaign; submit answers snapshotted in `answers_payload`.
+Implementation status: `[x]` Campaign sections, Campaign-local questions, type
+and grading mode enums, and answer key/rubric validation remain. The reusable
+Question Bank models, pages, import flow, provenance column, and tests were
+removed. Candidate runtime sees only **approved** Campaign questions; submitted
+answers are snapshotted in `answers_payload`.
 
 ### Backend
 
-- [x] Historical: reusable-library and Campaign question tables were delivered; the reusable-library tables were later removed.
-- [x] Models `QuestionBank`, `BankQuestion`, `CampaignSection`, `CampaignQuestion`.
+- [x] Models `CampaignSection` and `CampaignQuestion`.
 - [x] Enum `QuestionType`: `multiple_choice`, `yes_no`, `short_text`, `long_text`, `fill_blank`, `matching_pairs`.
 - [x] Enum `QuestionGradingMode`: `deterministic`, `ai`, `manual` (+ default from type).
-- [x] Question fields: `type`, `prompt`, `options`, `correct_answer`, `expected_rubric`, `points`, `difficulty`, `skill_tags`, `grading_mode`, `ai_generated`, `status`, `sort_order` (bank & campaign snapshot).
-- [x] `source_bank_question_id` on campaign question (lineage, not live sync).
-- [x] Library → campaign import: `CampaignQuestionImportController` copies fields to new row (`approved`).
-- [x] Editing library does not change imported campaign questions (isolation test).
-- [x] Editing campaign question does not change source `BankQuestion` (isolation test).
+- [x] Campaign question fields: `type`, `prompt`, `options`, `correct_answer`, `expected_rubric`, `points`, `difficulty`, `skill_tags`, `grading_mode`, `ai_generated`, `status`, `sort_order`.
 - [x] Validation: deterministic requires answer key; AI text requires rubric; supported grading modes.
 - [x] Section store/update with `sort_order` (section order on campaign).
 
 ### Frontend
 
-- [x] `admin/question-banks/{index,create,edit,show}.tsx`.
-- [x] `admin/question-banks/questions/{create,edit}.tsx` + `bank-question-form.tsx`.
-- [x] Campaign sections & import on `admin/campaigns/show.tsx`.
-- [x] Show type, difficulty, points, skill tags, grading mode (library show + campaign detail).
+- [x] Campaign section and question authoring on `admin/campaigns/show.tsx`.
+- [x] Show type, difficulty, points, skill tags, and grading mode on Campaign detail.
 
 ### Tests
 
-- [x] `AdminQuestionBankTest` — library CRUD, bank questions (MCQ, long/short text, **yes_no**), grading validation, import copy, edit snapshot vs library, RBAC, import section ownership.
 - [x] `AdminCampaignTest` — add section (+ **`sort_order`**), add campaign MCQ/AI questions, section must belong to campaign.
 - [x] `CandidateAssessmentTest` — only **approved** questions on exam; submit snapshot.
 - [x] `HybridScoringTest` — deterministic grading by objective type (runtime).
 
 Acceptance criteria:
 
-- Question library is reusable and separate from campaign snapshot.
-- Campaign has auditable sections + questions (import/manual/generate phase 11).
+- Campaign has auditable sections and questions (manual/generate phase 11).
 - Question types support deterministic and AI-assisted grading per `QuestionType` / `QuestionGradingMode`.
 
 ## Phase 11: AI Assessment Generator
@@ -632,7 +617,6 @@ Acceptance criteria:
 - [x] Generate draft `campaign_sections` and `campaign_questions`.
 - [x] Set AI-generated questions to status `draft`.
 - [x] Add generate action from campaign.
-- [x] Add generate-more action on question bank.
 - [x] Add regenerate MCQ options action.
 - [x] Add convert text question to MCQ action.
 - [x] Add approve generated question action.
