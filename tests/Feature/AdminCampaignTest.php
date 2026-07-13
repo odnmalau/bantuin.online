@@ -31,10 +31,13 @@ test('admin can view campaigns', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/campaigns/index')
             ->loadDeferredProps(fn (Assert $reload) => $reload
-                ->has('campaigns', 1)
-                ->where('campaigns.0.id', $campaign->id)
-                ->where('campaigns.0.title', 'Backend Engineer Screening')
-                ->where('campaigns.0.questions_count', 1),
+                ->has('campaigns.data', 1)
+                ->where('campaigns.data.0.id', $campaign->id)
+                ->where('campaigns.data.0.title', 'Backend Engineer Screening')
+                ->where('campaigns.data.0.questions_count', 1)
+                ->missing('campaigns.data.0.job_description')
+                ->where('campaigns.per_page', 15)
+                ->where('campaigns.total', 1),
             ),
         );
 });
@@ -65,8 +68,31 @@ test('admin can search and filter campaigns', function () {
             ->where('filters.status', CampaignStatus::Active->value)
             ->has('statusOptions', 4)
             ->loadDeferredProps(fn (Assert $reload) => $reload
-                ->has('campaigns', 1)
-                ->where('campaigns.0.id', $matchingCampaign->id),
+                ->has('campaigns.data', 1)
+                ->where('campaigns.data.0.id', $matchingCampaign->id)
+                ->where('campaigns.total', 1),
+            ),
+        );
+});
+
+test('admin campaign index paginates results', function () {
+    $admin = User::factory()->teamOwner()->create();
+    Campaign::factory()
+        ->for($admin, 'creator')
+        ->for($admin->currentTeam)
+        ->count(16)
+        ->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.campaigns.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('admin/campaigns/index')
+            ->loadDeferredProps(fn (Assert $reload) => $reload
+                ->has('campaigns.data', 15)
+                ->where('campaigns.per_page', 15)
+                ->where('campaigns.total', 16)
+                ->where('campaigns.last_page', 2),
             ),
         );
 });

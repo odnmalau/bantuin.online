@@ -42,21 +42,20 @@ class CampaignController extends Controller
         $currentTeamId = $request->user()->current_team_id;
 
         return Inertia::render('admin/campaigns/index', [
-            'campaigns' => Inertia::defer(fn (): array => Campaign::query()
+            'campaigns' => Inertia::defer(fn () => Campaign::query()
                 ->where('team_id', $currentTeamId)
                 ->with('creator:id,name,email')
                 ->withCount(['sections', 'questions', 'assessments'])
                 ->when($search !== '', fn (Builder $query) => $this->applyCampaignSearch($query, $search))
                 ->when($status !== 'all', fn (Builder $query) => $query->where('status', $status))
                 ->latest()
-                ->get()
-                ->map(fn (Campaign $campaign): array => [
+                ->paginate(15)
+                ->withQueryString()
+                ->through(fn (Campaign $campaign): array => [
                     'id' => $campaign->id,
                     'title' => $campaign->title,
                     'role_title' => $campaign->role_title,
                     'seniority' => $campaign->seniority,
-                    'job_description' => $campaign->job_description,
-                    'required_skills' => $campaign->required_skills ?? [],
                     'language' => $campaign->language,
                     'threshold_score' => $campaign->threshold_score,
                     'status' => $campaign->status->value,
@@ -66,8 +65,7 @@ class CampaignController extends Controller
                     'assessments_count' => $campaign->assessments_count,
                     'created_by' => $campaign->creator?->name,
                     'created_at' => $campaign->created_at,
-                ])
-                ->all()),
+                ])),
             'filters' => [
                 'search' => $search,
                 'status' => $status,

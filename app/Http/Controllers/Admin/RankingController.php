@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Assessment;
 use App\Models\Campaign;
 use Carbon\CarbonInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -16,6 +17,8 @@ use Inertia\Response;
 
 class RankingController extends Controller
 {
+    private const PER_PAGE = 25;
+
     /**
      * @return array<int, array{value: string, label: string}>
      */
@@ -55,7 +58,7 @@ class RankingController extends Controller
         $dateRange = (string) ($filters['date_range'] ?? 'all');
 
         $rankings = $campaignId === null
-            ? collect()
+            ? $this->emptyRankingsPaginator()
             : $this->rankingsForCampaign($campaignId, $search, $status, $dateRange);
 
         return Inertia::render('admin/rankings/index', [
@@ -107,7 +110,7 @@ class RankingController extends Controller
     }
 
     /**
-     * @return Collection<int, array{
+     * @return LengthAwarePaginator<int, array{
      *     rank: int,
      *     assessment_id: int,
      *     candidate_name: string|null,
@@ -123,32 +126,63 @@ class RankingController extends Controller
      *     evaluated_at: string|null
      * }>
      */
-    private function rankingsForCampaign(int $campaignId, string $search, string $status, string $dateRange): Collection
+    private function rankingsForCampaign(int $campaignId, string $search, string $status, string $dateRange): LengthAwarePaginator
     {
-        $rankedAssessments = Assessment::query()
+        $assessmentsTable = (new Assessment)->getTable();
+
+        $query = Assessment::query()
             ->with([
                 'campaign:id,title,role_title',
                 'user:id,name,email',
             ])
-            ->where('campaign_id', $campaignId)
-            ->whereNotNull('ranking_score')
-            ->orderByDesc('ranking_score')
-            ->latest()
-            ->get()
-            ->values()
-            ->map(fn (Assessment $assessment, int $index): array => [
-                'assessment' => $assessment,
-                'rank' => $index + 1,
-            ]);
+            ->where("{$assessmentsTable}.campaign_id", $campaignId)
+            ->whereNotNull("{$assessmentsTable}.ranking_score")
+            ->select("{$assessmentsTable}.*")
+            ->selectSub(
+                Assessment::query()
+                    ->from("{$assessmentsTable} as higher")
+                    ->selectRaw('COUNT(*) + 1')
+                    ->whereColumn('higher.campaign_id', "{$assessmentsTable}.campaign_id")
+                    ->whereNotNull('higher.ranking_score')
+                    ->where(function (Builder $query) use ($assessmentsTable): void {
+                        $query->whereColumn('higher.ranking_score', '>', "{$assessmentsTable}.ranking_score")
+                            ->orWhere(function (Builder $query) use ($assessmentsTable): void {
+                                $query->whereColumn('higher.ranking_score', '=', "{$assessmentsTable}.ranking_score")
+                                    ->whereColumn('higher.created_at', '>', "{$assessmentsTable}.created_at");
+                            })
+                            ->orWhere(function (Builder $query) use ($assessmentsTable): void {
+                                $query->whereColumn('higher.ranking_score', '=', "{$assessmentsTable}.ranking_score")
+                                    ->whereColumn('higher.created_at', '=', "{$assessmentsTable}.created_at")
+                                    ->whereColumn('higher.id', '>', "{$assessmentsTable}.id");
+                            });
+                    }),
+                'rank',
+            )
+            ->when($search !== '', fn (Builder $query) => $this->applySearchFilter($query, $search))
+            ->when($status !== 'all', fn (Builder $query) => $query->where("{$assessmentsTable}.status", $status))
+            ->when($dateRange !== 'all', fn (Builder $query) => $this->applyDateRangeFilter($query, $dateRange, $assessmentsTable))
+            ->orderByDesc("{$assessmentsTable}.ranking_score")
+            ->latest("{$assessmentsTable}.created_at");
 
-        return $rankedAssessments
-            ->when($search !== '', fn (Collection $rankings) => $this->filterBySearch($rankings, $search))
-            ->when($status !== 'all', fn (Collection $rankings) => $rankings
-                ->filter(fn (array $row): bool => $row['assessment']->status->value === $status)
-                ->values())
-            ->when($dateRange !== 'all', fn (Collection $rankings) => $this->filterByDateRange($rankings, $dateRange))
-            ->map(fn (array $row): array => $this->toRankingRow($row['assessment'], $row['rank']))
-            ->values();
+        return $query
+            ->paginate(self::PER_PAGE)
+            ->withQueryString()
+            ->through(fn (Assessment $assessment): array => $this->toRankingRow(
+                $assessment,
+                (int) $assessment->getAttribute('rank'),
+            ));
+    }
+
+    /**
+     * @return LengthAwarePaginator<int, array<string, mixed>>
+     */
+    private function emptyRankingsPaginator(): LengthAwarePaginator
+    {
+        return Assessment::query()
+            ->whereRaw('0 = 1')
+            ->paginate(self::PER_PAGE)
+            ->withQueryString()
+            ->through(fn (Assessment $assessment): array => $this->toRankingRow($assessment, 0));
     }
 
     /**
@@ -187,40 +221,22 @@ class RankingController extends Controller
         ];
     }
 
-    /**
-     * @param  Collection<int, array{assessment: Assessment, rank: int}>  $rankings
-     * @return Collection<int, array{assessment: Assessment, rank: int}>
-     */
-    private function filterBySearch(Collection $rankings, string $search): Collection
+    private function applySearchFilter(Builder $query, string $search): void
     {
-        $term = mb_strtolower($search);
+        $term = '%'.mb_strtolower($search).'%';
 
-        return $rankings
-            ->filter(function (array $row) use ($term): bool {
-                $assessment = $row['assessment'];
-                $haystacks = [
-                    $assessment->user?->name,
-                    $assessment->user?->email,
-                    $assessment->campaign?->role_title,
-                    $assessment->campaign?->title,
-                ];
-
-                foreach ($haystacks as $haystack) {
-                    if (filled($haystack) && str_contains(mb_strtolower((string) $haystack), $term)) {
-                        return true;
-                    }
-                }
-
-                return false;
-            })
-            ->values();
+        $query->where(function (Builder $query) use ($term): void {
+            $query->whereHas('user', function (Builder $userQuery) use ($term): void {
+                $userQuery->whereRaw('LOWER(name) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(email) LIKE ?', [$term]);
+            })->orWhereHas('campaign', function (Builder $campaignQuery) use ($term): void {
+                $campaignQuery->whereRaw('LOWER(title) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(role_title) LIKE ?', [$term]);
+            });
+        });
     }
 
-    /**
-     * @param  Collection<int, array{assessment: Assessment, rank: int}>  $rankings
-     * @return Collection<int, array{assessment: Assessment, rank: int}>
-     */
-    private function filterByDateRange(Collection $rankings, string $dateRange): Collection
+    private function applyDateRangeFilter(Builder $query, string $dateRange, string $assessmentsTable): void
     {
         $now = now();
 
@@ -232,16 +248,9 @@ class RankingController extends Controller
         };
 
         if (! $from instanceof CarbonInterface || ! $to instanceof CarbonInterface) {
-            return $rankings;
+            return;
         }
 
-        return $rankings
-            ->filter(function (array $row) use ($from, $to): bool {
-                $evaluatedAt = $row['assessment']->evaluated_at;
-
-                return $evaluatedAt instanceof CarbonInterface
-                    && $evaluatedAt->betweenIncluded($from, $to);
-            })
-            ->values();
+        $query->whereBetween("{$assessmentsTable}.evaluated_at", [$from, $to]);
     }
 }

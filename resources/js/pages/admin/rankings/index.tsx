@@ -2,6 +2,10 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { Inbox, Medal } from 'lucide-react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import AssessmentStatusBadge from '@/components/assessment-status-badge';
+import {
+    PaginationControls,
+    type Paginated,
+} from '@/components/pagination-controls';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -68,7 +72,7 @@ type SelectOption = {
 };
 
 type Props = {
-    rankings: RankingRow[];
+    rankings: Paginated<RankingRow>;
     filters: RankingFilters;
     campaignOptions: SelectOption[];
     statusOptions: SelectOption[];
@@ -297,7 +301,7 @@ export default function AdminRankingsIndex({
                     </Select>
                 </form>
 
-                {rankings.length === 0 ? (
+                {rankings.data.length === 0 ? (
                     <Empty className="border border-dashed">
                         <EmptyHeader>
                             <EmptyMedia variant="icon">
@@ -320,9 +324,9 @@ export default function AdminRankingsIndex({
                         </EmptyHeader>
                     </Empty>
                 ) : (
-                    <>
+                    <div className="flex flex-col gap-4">
                         <ItemGroup className="md:hidden" data-size="sm">
-                            {rankings.map((ranking) => (
+                            {rankings.data.map((ranking) => (
                                 <Item
                                     key={ranking.assessment_id}
                                     variant="outline"
@@ -388,7 +392,7 @@ export default function AdminRankingsIndex({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {rankings.map((ranking) => (
+                                        {rankings.data.map((ranking) => (
                                             <TableRow
                                                 key={ranking.assessment_id}
                                                 className="cursor-pointer"
@@ -454,7 +458,9 @@ export default function AdminRankingsIndex({
                                 </Table>
                             </CardContent>
                         </Card>
-                    </>
+
+                        <PaginationControls paginator={rankings} />
+                    </div>
                 )}
             </div>
         </>

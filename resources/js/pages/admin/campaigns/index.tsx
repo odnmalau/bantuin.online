@@ -13,6 +13,10 @@ import { useState } from 'react';
 import CampaignController from '@/actions/App/Http/Controllers/Admin/CampaignController';
 import CampaignForm from '@/components/admin/campaign-form';
 import InputError from '@/components/input-error';
+import {
+    PaginationControls,
+    type Paginated,
+} from '@/components/pagination-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -59,8 +63,6 @@ type CampaignRow = {
     title: string;
     role_title: string;
     seniority: string | null;
-    job_description: string | null;
-    required_skills: string[];
     language: string | null;
     threshold_score: number;
     status: string;
@@ -83,7 +85,7 @@ type SelectOption = {
 };
 
 type Props = {
-    campaigns?: CampaignRow[];
+    campaigns?: Paginated<CampaignRow>;
     filters: CampaignFilters;
     statusOptions: SelectOption[];
 };
@@ -147,8 +149,6 @@ export default function AdminCampaignsIndex({
         status: filters.status ?? 'all',
     });
     const [campaignPendingDeletion, setCampaignPendingDeletion] =
-        useState<CampaignRow | null>(null);
-    const [campaignPendingEdit, setCampaignPendingEdit] =
         useState<CampaignRow | null>(null);
     const { auth } = usePage<SharedData>().props;
 
@@ -250,7 +250,7 @@ export default function AdminCampaignsIndex({
                 </div>
 
                 <Deferred data="campaigns" fallback={<CampaignsGridSkeleton />}>
-                    {campaigns !== undefined && campaigns.length === 0 ? (
+                    {campaigns !== undefined && campaigns.data.length === 0 ? (
                         <div className="rounded-lg border border-sidebar-border/70 p-8 text-center dark:border-sidebar-border">
                             <h2 className="text-base font-medium">
                                 No campaigns yet
@@ -261,144 +261,167 @@ export default function AdminCampaignsIndex({
                             </p>
                         </div>
                     ) : campaigns !== undefined ? (
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            {campaigns.map((campaign) => (
-                                <Card
-                                    key={campaign.id}
-                                    size="sm"
-                                    role="link"
-                                    tabIndex={0}
-                                    className="cursor-pointer"
-                                    onClick={() =>
-                                        router.visit(
-                                            admin.campaigns.show.url(
-                                                campaign.id,
-                                            ),
-                                        )
-                                    }
-                                    onKeyDown={(event) => {
-                                        if (
-                                            event.currentTarget !== event.target
-                                        ) {
-                                            return;
-                                        }
-
-                                        if (
-                                            event.key === 'Enter' ||
-                                            event.key === ' '
-                                        ) {
-                                            event.preventDefault();
+                        <div className="flex flex-col gap-4">
+                            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                {campaigns.data.map((campaign) => (
+                                    <Card
+                                        key={campaign.id}
+                                        size="sm"
+                                        role="link"
+                                        tabIndex={0}
+                                        className="cursor-pointer"
+                                        onClick={() =>
                                             router.visit(
                                                 admin.campaigns.show.url(
                                                     campaign.id,
                                                 ),
-                                            );
+                                            )
                                         }
-                                    }}
-                                >
-                                    <CardHeader>
-                                        <CardTitle>{campaign.title}</CardTitle>
-                                        <CardAction
-                                            className="flex items-center gap-2"
-                                            onClick={(event) =>
-                                                event.stopPropagation()
+                                        onKeyDown={(event) => {
+                                            if (
+                                                event.currentTarget !==
+                                                event.target
+                                            ) {
+                                                return;
                                             }
-                                        >
-                                            <Badge
-                                                variant={
-                                                    campaign.status === 'active'
-                                                        ? 'default'
-                                                        : 'secondary'
+
+                                            if (
+                                                event.key === 'Enter' ||
+                                                event.key === ' '
+                                            ) {
+                                                event.preventDefault();
+                                                router.visit(
+                                                    admin.campaigns.show.url(
+                                                        campaign.id,
+                                                    ),
+                                                );
+                                            }
+                                        }}
+                                    >
+                                        <CardHeader>
+                                            <CardTitle>
+                                                {campaign.title}
+                                            </CardTitle>
+                                            <CardAction
+                                                className="flex items-center gap-2"
+                                                onClick={(event) =>
+                                                    event.stopPropagation()
                                                 }
                                             >
-                                                {campaign.status_label}
-                                            </Badge>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                        type="button"
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        disabled={
-                                                            !auth.capabilities
-                                                                .manageCampaigns
-                                                        }
-                                                        aria-label="Open campaign actions"
-                                                    >
-                                                        <MoreHorizontal data-icon="inline-start" />
-                                                        <span className="sr-only">
-                                                            Open campaign
-                                                            actions
-                                                        </span>
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent
-                                                    align="end"
-                                                    className="w-44"
+                                                <Badge
+                                                    variant={
+                                                        campaign.status ===
+                                                        'active'
+                                                            ? 'default'
+                                                            : 'secondary'
+                                                    }
                                                 >
-                                                    <DropdownMenuGroup>
+                                                    {campaign.status_label}
+                                                </Badge>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger
+                                                        asChild
+                                                    >
+                                                        <Button
+                                                            type="button"
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            disabled={
+                                                                !auth
+                                                                    .capabilities
+                                                                    .manageCampaigns
+                                                            }
+                                                            aria-label="Open campaign actions"
+                                                        >
+                                                            <MoreHorizontal data-icon="inline-start" />
+                                                            <span className="sr-only">
+                                                                Open campaign
+                                                                actions
+                                                            </span>
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent
+                                                        align="end"
+                                                        className="w-44"
+                                                    >
+                                                        <DropdownMenuGroup>
+                                                            <DropdownMenuItem
+                                                                onSelect={(
+                                                                    event,
+                                                                ) => {
+                                                                    event.preventDefault();
+                                                                    router.visit(
+                                                                        admin.campaigns.edit.url(
+                                                                            campaign.id,
+                                                                        ),
+                                                                    );
+                                                                }}
+                                                            >
+                                                                Edit campaign
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuGroup>
+                                                        <DropdownMenuSeparator />
                                                         <DropdownMenuItem
+                                                            variant="destructive"
                                                             onSelect={(
                                                                 event,
                                                             ) => {
                                                                 event.preventDefault();
-                                                                setCampaignPendingEdit(
+                                                                setCampaignPendingDeletion(
                                                                     campaign,
                                                                 );
                                                             }}
                                                         >
-                                                            Edit campaign
+                                                            Delete campaign
                                                         </DropdownMenuItem>
-                                                    </DropdownMenuGroup>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        variant="destructive"
-                                                        onSelect={(event) => {
-                                                            event.preventDefault();
-                                                            setCampaignPendingDeletion(
-                                                                campaign,
-                                                            );
-                                                        }}
-                                                    >
-                                                        Delete campaign
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </CardAction>
-                                    </CardHeader>
-                                    <CardContent className="flex flex-1 flex-col gap-4">
-                                        <div className="flex flex-col gap-1">
-                                            <p className="text-sm font-medium">
-                                                {campaign.role_title}
-                                            </p>
-                                            <p className="text-sm text-muted-foreground">
-                                                {campaign.seniority ||
-                                                    'No seniority specified'}
-                                            </p>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <CampaignMetric
-                                                label="Threshold"
-                                                value={campaign.threshold_score}
-                                            />
-                                            <CampaignMetric
-                                                label="Submissions"
-                                                value={
-                                                    campaign.assessments_count
-                                                }
-                                            />
-                                            <CampaignMetric
-                                                label="Sections"
-                                                value={campaign.sections_count}
-                                            />
-                                            <CampaignMetric
-                                                label="Questions"
-                                                value={campaign.questions_count}
-                                            />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </CardAction>
+                                        </CardHeader>
+                                        <CardContent className="flex flex-1 flex-col gap-4">
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm font-medium">
+                                                    {campaign.role_title}
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {campaign.seniority ||
+                                                        'No seniority specified'}
+                                                </p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <CampaignMetric
+                                                    label="Threshold"
+                                                    value={
+                                                        campaign.threshold_score
+                                                    }
+                                                />
+                                                <CampaignMetric
+                                                    label="Submissions"
+                                                    value={
+                                                        campaign.assessments_count
+                                                    }
+                                                />
+                                                <CampaignMetric
+                                                    label="Sections"
+                                                    value={
+                                                        campaign.sections_count
+                                                    }
+                                                />
+                                                <CampaignMetric
+                                                    label="Questions"
+                                                    value={
+                                                        campaign.questions_count
+                                                    }
+                                                />
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                            <PaginationControls
+                                paginator={campaigns}
+                                only={['campaigns']}
+                            />
                         </div>
                     ) : null}
                 </Deferred>
@@ -408,14 +431,6 @@ export default function AdminCampaignsIndex({
                     onOpenChange={(open) => {
                         if (!open) {
                             setCampaignPendingDeletion(null);
-                        }
-                    }}
-                />
-                <EditCampaignSheet
-                    campaign={campaignPendingEdit}
-                    onOpenChange={(open) => {
-                        if (!open) {
-                            setCampaignPendingEdit(null);
                         }
                     }}
                 />
@@ -447,42 +462,6 @@ function CreateCampaignSheet({ children }: { children: ReactNode }) {
                     bodyClassName="flex-1 overflow-y-auto px-4"
                     footerClassName="mt-auto border-t bg-background p-4"
                 />
-            </SheetContent>
-        </Sheet>
-    );
-}
-
-function EditCampaignSheet({
-    campaign,
-    onOpenChange,
-}: {
-    campaign: CampaignRow | null;
-    onOpenChange: (open: boolean) => void;
-}) {
-    return (
-        <Sheet open={campaign !== null} onOpenChange={onOpenChange}>
-            <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
-                <SheetHeader>
-                    <SheetTitle>Edit campaign</SheetTitle>
-                    <SheetDescription>
-                        Update role context, required skills, and scoring
-                        threshold.
-                    </SheetDescription>
-                </SheetHeader>
-                {campaign !== null ? (
-                    <CampaignForm
-                        action={CampaignController.update.form.patch(
-                            campaign.id,
-                        )}
-                        submitLabel="Save changes"
-                        campaign={campaign}
-                        onSuccess={() => onOpenChange(false)}
-                        onCancel={() => onOpenChange(false)}
-                        className="flex-1 overflow-hidden"
-                        bodyClassName="flex-1 overflow-y-auto px-4"
-                        footerClassName="mt-auto border-t bg-background p-4"
-                    />
-                ) : null}
             </SheetContent>
         </Sheet>
     );
