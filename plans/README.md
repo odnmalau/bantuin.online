@@ -54,12 +54,12 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rational
 
 ## Recommended parallel tracks
 
-1. **Security/correctness track**: 001 → 002; 003 → 006; 016 → 020 → 021 → 007 → 019  
-2. **Exam UX integrity track**: 018 (coordinate with 003 on `exam.tsx`)  
-3. **Tenancy/data integrity track**: 016 → 017 → 022  
-4. **DX/docs track**: 004 ∥ 009 → 010  
-5. **Product track**: 013 ∥ 014 (after 001) → 015 (after 010)  
-6. **Perf/debt track**: 008 ∥ 011 ∥ 012  
+1. **Security/correctness track**: 001 → 002; 003 → 006; 016 → 020 → 021 → 007 → 019
+2. **Exam UX integrity track**: 018 (coordinate with 003 on `exam.tsx`)
+3. **Tenancy/data integrity track**: 016 → 017 → 022
+4. **DX/docs track**: 004 ∥ 009 → 010
+5. **Product track**: 013 ∥ 014 (after 001) → 015 (after 010)
+6. **Perf/debt track**: 008 ∥ 011 ∥ 012
 
 ## Retired plans
 
