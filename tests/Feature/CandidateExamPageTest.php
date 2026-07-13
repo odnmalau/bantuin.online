@@ -52,6 +52,10 @@ test('candidate exam page returns ready to start state', function () {
         ->and($page['sections'][0]['title'])->toBe('Knowledge Check')
         ->and($page['sections'][0]['duration_minutes'])->toBe(30)
         ->and($page['sections'][0]['question_count'])->toBe(1)
+        ->and($page['secure_exam'])->toBe([
+            'require_fullscreen' => true,
+            'block_copy_paste' => true,
+        ])
         ->and(array_key_exists('examSession', $page))->toBeFalse()
         ->and(array_key_exists('assessment', $page))->toBeFalse();
 });
@@ -84,6 +88,10 @@ test('candidate exam page returns active section state', function () {
         ->and($page['examSession']['id'])->toBe($session->id)
         ->and($page['examSession']['current_section_id'])->toBe($section->id)
         ->and($page['examSession']['ready_to_finalize'])->toBeFalse()
+        ->and($page['examSession']['secure_exam'])->toBe([
+            'require_fullscreen' => true,
+            'block_copy_paste' => true,
+        ])
         ->and(array_key_exists('assessment', $page))->toBeFalse();
 });
 
@@ -115,6 +123,10 @@ test('candidate exam page returns ready to finalize state', function () {
         ->and($page['examSession']['id'])->toBe($session->id)
         ->and($page['examSession']['current_section_id'])->toBeNull()
         ->and($page['examSession']['ready_to_finalize'])->toBeTrue()
+        ->and($page['examSession']['secure_exam'])->toBe([
+            'require_fullscreen' => true,
+            'block_copy_paste' => true,
+        ])
         ->and(array_key_exists('currentSection', $page))->toBeFalse()
         ->and(array_key_exists('questions', $page))->toBeFalse()
         ->and(array_key_exists('assessment', $page))->toBeFalse();

@@ -1,6 +1,7 @@
 import { Form, Head, Link, router } from '@inertiajs/react';
 import { AlertTriangle, CheckCircle2, FileText, Shield } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import ExamSessionController from '@/actions/App/Http/Controllers/Candidate/ExamSessionController';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -111,12 +112,17 @@ type ReadyToFinalizeProps = {
     examSession: ExamSessionProps;
 };
 
-type Props =
+type Props = (
     | NoCampaignProps
     | SubmittedProps
     | ReadyToStartProps
     | ActiveSectionProps
-    | ReadyToFinalizeProps;
+    | ReadyToFinalizeProps
+) & {
+    errors?: {
+        session?: string;
+    };
+};
 
 export default function CandidateExam(props: Props) {
     return (
@@ -133,6 +139,8 @@ export default function CandidateExam(props: Props) {
                             : ''}
                     </p>
                 ) : null}
+
+                <InputError message={props.errors?.session} />
 
                 {renderExamContent(props)}
             </div>
@@ -156,20 +164,30 @@ function renderExamContent(props: Props) {
             );
         case 'ready_to_finalize':
             return (
-                <FinalizeExamState
-                    campaign={props.campaign}
+                <SecureExamAccess
+                    campaignId={props.campaign.id}
                     examSession={props.examSession}
-                />
+                >
+                    <FinalizeExamState
+                        campaign={props.campaign}
+                        examSession={props.examSession}
+                    />
+                </SecureExamAccess>
             );
         case 'active_section':
             return (
-                <ActiveSectionExam
-                    campaign={props.campaign}
-                    sections={props.sections}
-                    currentSection={props.currentSection}
-                    questions={props.questions}
+                <SecureExamAccess
+                    campaignId={props.campaign.id}
                     examSession={props.examSession}
-                />
+                >
+                    <ActiveSectionExam
+                        campaign={props.campaign}
+                        sections={props.sections}
+                        currentSection={props.currentSection}
+                        questions={props.questions}
+                        examSession={props.examSession}
+                    />
+                </SecureExamAccess>
             );
     }
 }
@@ -241,6 +259,15 @@ function StartExamState({
 
         let enteredFullscreen = false;
 
+        const leaveFullscreenAfterFailure = (): void => {
+            if (!enteredFullscreen || document.fullscreenElement === null) {
+                return;
+            }
+
+            enteredFullscreen = false;
+            void document.exitFullscreen?.();
+        };
+
         if (
             secureExam.require_fullscreen &&
             document.fullscreenElement === null
@@ -279,14 +306,10 @@ function StartExamState({
                 onFinish: () => {
                     setProcessing(false);
                 },
-                onError: () => {
-                    if (
-                        enteredFullscreen &&
-                        document.fullscreenElement !== null
-                    ) {
-                        void document.exitFullscreen?.();
-                    }
-                },
+                onError: leaveFullscreenAfterFailure,
+                onNetworkError: leaveFullscreenAfterFailure,
+                onHttpException: leaveFullscreenAfterFailure,
+                onCancel: leaveFullscreenAfterFailure,
             },
         );
     };
@@ -324,6 +347,121 @@ function StartExamState({
                 <InputError message={setupError ?? undefined} />
             </div>
         </div>
+    );
+}
+
+function SecureExamAccess({
+    campaignId,
+    examSession,
+    children,
+}: {
+    campaignId: number;
+    examSession: ExamSessionProps;
+    children: ReactNode;
+}) {
+    const requiresFullscreen = examSession.secure_exam.require_fullscreen;
+    const [hasSecureAccess, setHasSecureAccess] = useState(
+        () =>
+            !requiresFullscreen ||
+            (typeof document !== 'undefined' &&
+                document.fullscreenElement !== null),
+    );
+    const [setupError, setSetupError] = useState<string | null>(null);
+    const [requestingFullscreen, setRequestingFullscreen] = useState(false);
+
+    useEffect(() => {
+        const updateSecureAccess = (): void => {
+            setHasSecureAccess(
+                !requiresFullscreen || document.fullscreenElement !== null,
+            );
+        };
+
+        updateSecureAccess();
+        document.addEventListener('fullscreenchange', updateSecureAccess);
+
+        return () => {
+            document.removeEventListener(
+                'fullscreenchange',
+                updateSecureAccess,
+            );
+        };
+    }, [requiresFullscreen]);
+
+    useExamProctoring({
+        campaignId,
+        sessionId: examSession.id,
+        enabled: hasSecureAccess,
+        secureExam: examSession.secure_exam,
+    });
+
+    const acquireSecureAccess = async (): Promise<void> => {
+        setRequestingFullscreen(true);
+        setSetupError(null);
+
+        const requestFullscreen =
+            document.documentElement.requestFullscreen?.bind(
+                document.documentElement,
+            );
+
+        if (!requestFullscreen) {
+            setSetupError(
+                'Fullscreen is required to continue this exam, but your browser does not support it.',
+            );
+            setRequestingFullscreen(false);
+
+            return;
+        }
+
+        try {
+            await requestFullscreen();
+            setHasSecureAccess(document.fullscreenElement !== null);
+        } catch {
+            setSetupError(
+                'Fullscreen is required to continue this exam. Allow fullscreen and try again.',
+            );
+        } finally {
+            setRequestingFullscreen(false);
+        }
+    };
+
+    return (
+        <>
+            {!hasSecureAccess ? (
+                <div className="space-y-4 rounded-lg border border-sidebar-border/70 p-6 dark:border-sidebar-border">
+                    <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
+                            <Shield className="size-5 text-muted-foreground" />
+                        </div>
+                        <div className="space-y-2">
+                            <h2 className="text-base font-medium">
+                                Fullscreen required
+                            </h2>
+                            <p className="max-w-2xl text-sm text-muted-foreground">
+                                Return to fullscreen to continue. Exam controls
+                                remain locked until fullscreen is active.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <Button
+                            type="button"
+                            disabled={requestingFullscreen}
+                            onClick={() => {
+                                void acquireSecureAccess();
+                            }}
+                        >
+                            {requestingFullscreen && <Spinner />}
+                            Enter fullscreen
+                        </Button>
+                        <InputError message={setupError ?? undefined} />
+                    </div>
+                </div>
+            ) : null}
+
+            <div hidden={!hasSecureAccess} inert={!hasSecureAccess}>
+                {children}
+            </div>
+        </>
     );
 }
 
@@ -373,12 +511,6 @@ function ActiveSectionExam({
 
     useSectionExpiryReload(isExpired);
     useExamNavigationGuard(true);
-    useExamProctoring({
-        campaignId: campaign.id,
-        sessionId: examSession.id,
-        enabled: true,
-        secureExam: examSession.secure_exam,
-    });
 
     const sectionIndex =
         sections.findIndex((section) => section.id === currentSection.id) + 1;

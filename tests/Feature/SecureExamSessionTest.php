@@ -498,7 +498,7 @@ test('candidate can finalize a secure exam session into an assessment', function
     ]);
 });
 
-test('source contract keeps fullscreen entry on start click and exit reporting in proctoring', function () {
+test('source contract gates secure exam interaction and reports fullscreen exits once', function () {
     $examSource = file_get_contents(resource_path('js/pages/candidate/exam.tsx'));
     $proctoringSource = file_get_contents(resource_path('js/hooks/use-exam-proctoring.ts'));
 
@@ -515,10 +515,22 @@ test('source contract keeps fullscreen entry on start click and exit reporting i
         ->toContain('requestFullscreen')
         ->toContain('ExamSessionController.store.url')
         ->toContain('router.post')
+        ->toContain('onNetworkError: leaveFullscreenAfterFailure')
+        ->toContain('onHttpException: leaveFullscreenAfterFailure')
         ->and(strpos($startExamState, 'requestFullscreen'))
         ->toBeLessThan(strpos($startExamState, 'router.post'))
+        ->and($examSource)
+        ->toContain('function SecureExamAccess')
+        ->toContain('hidden={!hasSecureAccess}')
+        ->toContain('enabled: hasSecureAccess')
+        ->toContain('<InputError message={props.errors?.session} />')
+        ->not->toContain('storeViolation')
+        ->and(substr_count($examSource, '<SecureExamAccess'))
+        ->toBe(2)
         ->and($proctoringSource)
         ->not->toContain('requestFullscreen')
         ->toContain('fullscreenchange')
-        ->toContain("report('fullscreen_exit')");
+        ->toContain("report('fullscreen_exit')")
+        ->and(substr_count($proctoringSource, "report('fullscreen_exit')"))
+        ->toBe(1);
 });
