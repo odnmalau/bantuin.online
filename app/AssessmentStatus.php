@@ -14,6 +14,7 @@ enum AssessmentStatus: string
     case Overridden = 'overridden';
     case Rejected = 'rejected';
     case Approved = 'approved';
+    case EmailSending = 'email_sending';
     case EmailSent = 'email_sent';
     case EmailFailed = 'email_failed';
     case EvaluationFailed = 'evaluation_failed';
@@ -38,6 +39,16 @@ enum AssessmentStatus: string
         };
     }
 
+    public function isEvaluationClaimable(): bool
+    {
+        return $this === self::Submitted;
+    }
+
+    public function isEvaluationProcessing(): bool
+    {
+        return $this === self::Evaluating;
+    }
+
     public function label(): string
     {
         return match ($this) {
@@ -51,6 +62,7 @@ enum AssessmentStatus: string
             self::Overridden => 'Overridden',
             self::Rejected => 'Rejected',
             self::Approved => 'Approved',
+            self::EmailSending => 'Email sending',
             self::EmailSent => 'Email sent',
             self::EmailFailed => 'Email failed',
             self::EvaluationFailed => 'Evaluation failed',

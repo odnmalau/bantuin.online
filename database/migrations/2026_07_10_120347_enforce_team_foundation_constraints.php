@@ -16,6 +16,20 @@ return new class extends Migration
             throw new RuntimeException('Cannot enforce Team ownership while a Campaign has no Team.');
         }
 
+        if (DB::getDriverName() === 'sqlite') {
+            Schema::withoutForeignKeyConstraints(function (): void {
+                DB::transaction(function (): void {
+                    Schema::table('campaigns', function (Blueprint $table) {
+                        $table->foreignId('team_id')->nullable(false)->change();
+                    });
+
+                    $this->createSqliteTriggers();
+                });
+            });
+
+            return;
+        }
+
         Schema::table('campaigns', function (Blueprint $table) {
             $table->foreignId('team_id')->nullable(false)->change();
         });
@@ -93,31 +107,6 @@ return new class extends Migration
             return;
         }
 
-        if (DB::getDriverName() === 'sqlite') {
-            DB::unprepared(<<<'SQL'
-                CREATE TRIGGER campaigns_team_immutable
-                BEFORE UPDATE OF team_id ON campaigns
-                FOR EACH ROW
-                WHEN NEW.team_id != OLD.team_id
-                BEGIN
-                    SELECT RAISE(ABORT, 'Campaign Team ownership is immutable');
-                END;
-
-                CREATE TRIGGER team_activities_update_immutable
-                BEFORE UPDATE ON team_activities
-                FOR EACH ROW
-                BEGIN
-                    SELECT RAISE(ABORT, 'Team Activity is append-only');
-                END;
-
-                CREATE TRIGGER team_activities_delete_immutable
-                BEFORE DELETE ON team_activities
-                FOR EACH ROW
-                BEGIN
-                    SELECT RAISE(ABORT, 'Team Activity is append-only');
-                END;
-                SQL);
-        }
     }
 
     /**
@@ -147,5 +136,32 @@ return new class extends Migration
         Schema::table('campaigns', function (Blueprint $table) {
             $table->foreignId('team_id')->nullable()->change();
         });
+    }
+
+    private function createSqliteTriggers(): void
+    {
+        DB::unprepared(<<<'SQL'
+            CREATE TRIGGER campaigns_team_immutable
+            BEFORE UPDATE OF team_id ON campaigns
+            FOR EACH ROW
+            WHEN NEW.team_id != OLD.team_id
+            BEGIN
+                SELECT RAISE(ABORT, 'Campaign Team ownership is immutable');
+            END;
+
+            CREATE TRIGGER team_activities_update_immutable
+            BEFORE UPDATE ON team_activities
+            FOR EACH ROW
+            BEGIN
+                SELECT RAISE(ABORT, 'Team Activity is append-only');
+            END;
+
+            CREATE TRIGGER team_activities_delete_immutable
+            BEFORE DELETE ON team_activities
+            FOR EACH ROW
+            BEGIN
+                SELECT RAISE(ABORT, 'Team Activity is append-only');
+            END;
+            SQL);
     }
 };

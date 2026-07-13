@@ -15,6 +15,8 @@ use Illuminate\Validation\ValidationException;
 
 class DraftQuestionMutation
 {
+    public function __construct(private CampaignLifecycleService $lifecycle) {}
+
     /**
      * @param  callable(): McqOptionsRegenerationResult  $regenerate
      */
@@ -54,24 +56,39 @@ class DraftQuestionMutation
 
     public function approveCampaignQuestion(CampaignQuestion $question): void
     {
-        $this->ensureDraftQuestionStatus(
-            $question->status,
-            'question',
-            __('Only draft questions can be approved.'),
-        );
+        $campaign = Campaign::query()->findOrFail($question->campaign_id);
 
-        $question->update([
-            'status' => QuestionStatus::Approved,
-        ]);
+        $this->lifecycle->withEditableDefinition($campaign, function (Campaign $lockedCampaign) use ($question): void {
+            $lockedQuestion = CampaignQuestion::query()->whereKey($question->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedQuestion->campaign_id !== $lockedCampaign->id) {
+                throw ValidationException::withMessages([
+                    'question' => __('The selected question does not belong to this campaign.'),
+                ]);
+            }
+
+            $this->ensureDraftQuestionStatus(
+                $lockedQuestion->status,
+                'question',
+                __('Only draft questions can be approved.'),
+            );
+
+            $lockedQuestion->update([
+                'status' => QuestionStatus::Approved,
+            ]);
+        });
     }
 
     public function approveAllCampaignDrafts(Campaign $campaign): int
     {
-        return $campaign->questions()
-            ->where('status', QuestionStatus::Draft->value)
-            ->update([
-                'status' => QuestionStatus::Approved,
-            ]);
+        return $this->lifecycle->withEditableDefinition(
+            $campaign,
+            fn (Campaign $lockedCampaign): int => $lockedCampaign->questions()
+                ->where('status', QuestionStatus::Draft->value)
+                ->update([
+                    'status' => QuestionStatus::Approved,
+                ]),
+        );
     }
 
     private function ensureDraftMcqRegeneration(CampaignQuestion $question): void
@@ -140,20 +157,35 @@ class DraftQuestionMutation
         callable $validate,
     ): void {
         DB::transaction(function () use ($question, $expectedTeamId, $attributes, $validate): void {
-            $lockedQuestion = CampaignQuestion::query()->whereKey($question->id)->lockForUpdate()->firstOrFail();
             $campaign = Campaign::query()
-                ->whereKey($lockedQuestion->campaign_id)
+                ->whereKey($question->campaign_id)
                 ->where('team_id', $expectedTeamId)
                 ->lockForUpdate()
                 ->first();
+
+            if ($campaign === null) {
+                throw ValidationException::withMessages([
+                    'question' => __('The Campaign Team is no longer writable.'),
+                ]);
+            }
+
+            $this->lifecycle->assertDefinitionEditable($campaign);
             $team = $campaign?->team()
                 ->where('status', TeamStatus::Active)
                 ->lockForUpdate()
                 ->first();
 
-            if ($campaign === null || $team === null) {
+            if ($team === null) {
                 throw ValidationException::withMessages([
                     'question' => __('The Campaign Team is no longer writable.'),
+                ]);
+            }
+
+            $lockedQuestion = CampaignQuestion::query()->whereKey($question->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedQuestion->campaign_id !== $campaign->id) {
+                throw ValidationException::withMessages([
+                    'question' => __('The selected question does not belong to this campaign.'),
                 ]);
             }
 

@@ -12,6 +12,8 @@ export type UseAppearanceReturn = {
 const listeners = new Set<() => void>();
 let currentAppearance: Appearance = 'system';
 
+type AppearanceSnapshot = `${Appearance}:${ResolvedAppearance}`;
+
 const prefersDark = (): boolean => {
     if (typeof window === 'undefined') {
         return false;
@@ -60,6 +62,12 @@ const subscribe = (callback: () => void) => {
 
 const notify = (): void => listeners.forEach((listener) => listener());
 
+const getAppearanceSnapshot = (): AppearanceSnapshot => {
+    const resolvedAppearance = isDarkMode(currentAppearance) ? 'dark' : 'light';
+
+    return `${currentAppearance}:${resolvedAppearance}`;
+};
+
 const mediaQuery = (): MediaQueryList | null => {
     if (typeof window === 'undefined') {
         return null;
@@ -68,7 +76,10 @@ const mediaQuery = (): MediaQueryList | null => {
     return window.matchMedia('(prefers-color-scheme: dark)');
 };
 
-const handleSystemThemeChange = (): void => applyTheme(currentAppearance);
+const handleSystemThemeChange = (): void => {
+    applyTheme(currentAppearance);
+    notify();
+};
 
 export function initializeTheme(): void {
     if (typeof window === 'undefined') {
@@ -88,15 +99,15 @@ export function initializeTheme(): void {
 }
 
 export function useAppearance(): UseAppearanceReturn {
-    const appearance: Appearance = useSyncExternalStore(
+    const snapshot = useSyncExternalStore(
         subscribe,
-        () => currentAppearance,
-        () => 'system',
+        getAppearanceSnapshot,
+        () => 'system:light',
     );
-
-    const resolvedAppearance: ResolvedAppearance = isDarkMode(appearance)
-        ? 'dark'
-        : 'light';
+    const [appearance, resolvedAppearance] = snapshot.split(':') as [
+        Appearance,
+        ResolvedAppearance,
+    ];
 
     const updateAppearance = (mode: Appearance): void => {
         currentAppearance = mode;

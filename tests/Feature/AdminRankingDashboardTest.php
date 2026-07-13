@@ -65,17 +65,18 @@ test('admin can view candidate ranking leaderboard ordered by ranking score with
             ->where('campaignOptions.0.value', (string) $campaign->id)
             ->has('statusOptions')
             ->has('dateRangeOptions', 4)
-            ->where('rankings.0.assessment_id', $topAssessment->id)
-            ->where('rankings.0.rank', 1)
-            ->where('rankings.0.candidate_name', 'Top Candidate')
-            ->where('rankings.0.campaign_title', 'Backend Hiring')
-            ->where('rankings.0.role_title', 'Backend Engineer')
-            ->where('rankings.0.ranking_score', 91)
-            ->where('rankings.0.evaluated_at', $topAssessment->fresh()->evaluated_at?->toIso8601String())
-            ->missing('rankings.0.matched_skills')
-            ->missing('rankings.0.section_scores')
-            ->where('rankings.1.assessment_id', $secondAssessment->id)
-            ->where('rankings.1.rank', 2),
+            ->where('rankings.per_page', 25)
+            ->where('rankings.data.0.assessment_id', $topAssessment->id)
+            ->where('rankings.data.0.rank', 1)
+            ->where('rankings.data.0.candidate_name', 'Top Candidate')
+            ->where('rankings.data.0.campaign_title', 'Backend Hiring')
+            ->where('rankings.data.0.role_title', 'Backend Engineer')
+            ->where('rankings.data.0.ranking_score', 91)
+            ->where('rankings.data.0.evaluated_at', $topAssessment->fresh()->evaluated_at?->toIso8601String())
+            ->missing('rankings.data.0.matched_skills')
+            ->missing('rankings.data.0.section_scores')
+            ->where('rankings.data.1.assessment_id', $secondAssessment->id)
+            ->where('rankings.data.1.rank', 2),
         );
 });
 
@@ -124,10 +125,10 @@ test('admin rankings are scoped per campaign and default to the first available 
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/rankings/index')
             ->where('filters.campaign', (string) $backendCampaign->id)
-            ->has('rankings', 2)
-            ->where('rankings.0.assessment_id', $backendTop->id)
-            ->where('rankings.0.rank', 1)
-            ->where('rankings.0.candidate_name', 'Backend Top'),
+            ->has('rankings.data', 2)
+            ->where('rankings.data.0.assessment_id', $backendTop->id)
+            ->where('rankings.data.0.rank', 1)
+            ->where('rankings.data.0.candidate_name', 'Backend Top'),
         );
 
     $this->actingAs($admin)
@@ -138,10 +139,10 @@ test('admin rankings are scoped per campaign and default to the first available 
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/rankings/index')
             ->where('filters.campaign', (string) $frontendCampaign->id)
-            ->has('rankings', 1)
-            ->where('rankings.0.assessment_id', $frontendTop->id)
-            ->where('rankings.0.rank', 1)
-            ->where('rankings.0.candidate_name', 'Frontend Top'),
+            ->has('rankings.data', 1)
+            ->where('rankings.data.0.assessment_id', $frontendTop->id)
+            ->where('rankings.data.0.rank', 1)
+            ->where('rankings.data.0.candidate_name', 'Frontend Top'),
         );
 });
 
@@ -197,9 +198,9 @@ test('admin ranking numbers stay stable when search status or date filters are a
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/rankings/index')
-            ->has('rankings', 1)
-            ->where('rankings.0.assessment_id', $third->id)
-            ->where('rankings.0.rank', 3)
+            ->has('rankings.data', 1)
+            ->where('rankings.data.0.assessment_id', $third->id)
+            ->where('rankings.data.0.rank', 3)
             ->where('filters.search', 'alan')
             ->where('filters.status', AssessmentStatus::PendingApproval->value)
             ->where('filters.date_range', '7d'),
@@ -213,11 +214,11 @@ test('admin ranking numbers stay stable when search status or date filters are a
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/rankings/index')
-            ->has('rankings', 2)
-            ->where('rankings.0.assessment_id', $first->id)
-            ->where('rankings.0.rank', 1)
-            ->where('rankings.1.assessment_id', $third->id)
-            ->where('rankings.1.rank', 3),
+            ->has('rankings.data', 2)
+            ->where('rankings.data.0.assessment_id', $first->id)
+            ->where('rankings.data.0.rank', 1)
+            ->where('rankings.data.1.assessment_id', $third->id)
+            ->where('rankings.data.1.rank', 3),
         );
 });
 
@@ -266,15 +267,51 @@ test('admin can search and filter candidate rankings within a campaign', functio
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/rankings/index')
-            ->has('rankings', 1)
-            ->where('rankings.0.assessment_id', $matchingAssessment->id)
-            ->where('rankings.0.rank', 1)
+            ->has('rankings.data', 1)
+            ->where('rankings.data.0.assessment_id', $matchingAssessment->id)
+            ->where('rankings.data.0.rank', 1)
             ->where('filters.campaign', (string) $campaign->id)
             ->where('filters.search', 'ada')
             ->where('filters.status', AssessmentStatus::PendingApproval->value)
             ->where('filters.date_range', '7d')
             ->has('statusOptions', count(AssessmentStatus::cases()))
             ->has('dateRangeOptions', 4),
+        );
+});
+
+test('admin ranking search treats SQL wildcard characters literally', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
+        'title' => 'Literal Search Campaign',
+        'role_title' => 'Engineer',
+    ]);
+    $matchingAssessment = Assessment::factory()
+        ->for(User::factory()->create([
+            'name' => 'Candidate 100% Match',
+            'email' => 'literal@example.com',
+        ]))
+        ->for($campaign)
+        ->create(['ranking_score' => 90]);
+    Assessment::factory()
+        ->for(User::factory()->create([
+            'name' => 'Ordinary Candidate',
+            'email' => 'ordinary@example.com',
+        ]))
+        ->for($campaign)
+        ->create(['ranking_score' => 80]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.rankings.index', [
+            'campaign' => $campaign->id,
+            'search' => '%',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('rankings.data', 1)
+            ->where('rankings.data.0.assessment_id', $matchingAssessment->id)
+            ->where('filters.search', '%'),
         );
 });
 
@@ -317,10 +354,78 @@ test('admin can filter candidate rankings by date range', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/rankings/index')
-            ->has('rankings', 1)
-            ->where('rankings.0.assessment_id', $recentAssessment->id)
-            ->where('rankings.0.rank', 2)
+            ->has('rankings.data', 1)
+            ->where('rankings.data.0.assessment_id', $recentAssessment->id)
+            ->where('rankings.data.0.rank', 2)
             ->where('filters.date_range', '7d'),
+        );
+});
+
+test('admin rankings paginate beyond the page size', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
+    ]);
+
+    foreach (range(1, 26) as $score) {
+        Assessment::factory()
+            ->for(User::factory()->create())
+            ->for($campaign)
+            ->create([
+                'ranking_score' => $score,
+                'status' => AssessmentStatus::Evaluated,
+                'evaluated_at' => now()->subMinutes($score),
+            ]);
+    }
+
+    $this->actingAs($admin)
+        ->get(route('admin.rankings.index', [
+            'campaign' => $campaign->id,
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('admin/rankings/index')
+            ->has('rankings.data', 25)
+            ->where('rankings.per_page', 25)
+            ->where('rankings.total', 26)
+            ->where('rankings.last_page', 2)
+            ->where('rankings.data.0.rank', 1)
+            ->where('rankings.data.0.ranking_score', 26),
+        );
+});
+
+test('admin ranking pagination uses assessment ids to break exact ordering ties', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
+    ]);
+    $createdAt = now()->startOfSecond();
+    $assessments = collect();
+
+    foreach (range(1, 26) as $candidateNumber) {
+        $assessments->push(Assessment::factory()
+            ->for(User::factory()->create())
+            ->for($campaign)
+            ->create([
+                'ranking_score' => 80,
+                'status' => AssessmentStatus::Evaluated,
+                'created_at' => $createdAt,
+                'updated_at' => $createdAt,
+            ]));
+    }
+
+    $this->actingAs($admin)
+        ->get(route('admin.rankings.index', [
+            'campaign' => $campaign->id,
+            'page' => 2,
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('rankings.data', 1)
+            ->where('rankings.data.0.assessment_id', $assessments->min('id'))
+            ->where('rankings.data.0.rank', 26),
         );
 });
 

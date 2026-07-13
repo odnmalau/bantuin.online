@@ -12,9 +12,9 @@ use Spatie\PdfToText\Pdf;
 class ResumeTextExtractor
 {
     /**
-     * Extract text from a stored PDF using pdftotext (Poppler).
+     * Extract and bound text from a stored PDF using pdftotext (Poppler).
      */
-    public function extract(string $path, string $disk = 'local'): string
+    public function extract(string $path, string $disk = 'local'): ResumeTextExtractionResult
     {
         if (! Storage::disk($disk)->exists($path)) {
             throw new RuntimeException('Resume PDF could not be read from storage.');
@@ -41,6 +41,6 @@ class ResumeTextExtractor
 
         $text = preg_replace('/\s+/', ' ', $text) ?: '';
 
-        return trim($text);
+        return ResumeTextExtractionResult::fromNormalizedText(trim($text));
     }
 }

@@ -21,6 +21,7 @@ use Illuminate\Support\Str;
     'accepted_at',
     'expires_at',
     'status',
+    'send_claim',
 ])]
 class CampaignInvitation extends Model
 {
@@ -94,6 +95,8 @@ class CampaignInvitation extends Model
 
         $invitation->forceFill([
             'token_hash' => hash('sha256', $plainToken),
+            'sent_at' => null,
+            'send_claim' => null,
         ])->save();
 
         return [

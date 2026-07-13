@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\CampaignStatus;
+use App\ExamSessionStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCampaignRequest;
 use App\Http\Requests\Admin\UpdateCampaignRequest;
@@ -15,6 +16,7 @@ use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use App\Services\CampaignInvitationService;
+use App\Services\CampaignLifecycleService;
 use App\TeamStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -27,6 +29,8 @@ use Inertia\Response;
 
 class CampaignController extends Controller
 {
+    public function __construct(private CampaignLifecycleService $lifecycle) {}
+
     /**
      * Display a listing of the resource.
      */
@@ -42,21 +46,36 @@ class CampaignController extends Controller
         $currentTeamId = $request->user()->current_team_id;
 
         return Inertia::render('admin/campaigns/index', [
-            'campaigns' => Inertia::defer(fn (): array => Campaign::query()
+            'campaigns' => Inertia::defer(fn () => Campaign::query()
                 ->where('team_id', $currentTeamId)
+                ->select([
+                    'id',
+                    'created_by',
+                    'title',
+                    'role_title',
+                    'seniority',
+                    'language',
+                    'threshold_score',
+                    'status',
+                    'created_at',
+                ])
                 ->with('creator:id,name,email')
                 ->withCount(['sections', 'questions', 'assessments'])
+                ->withExists([
+                    'invitations as has_invitations',
+                    'examSessions as has_exam_sessions',
+                ])
                 ->when($search !== '', fn (Builder $query) => $this->applyCampaignSearch($query, $search))
                 ->when($status !== 'all', fn (Builder $query) => $query->where('status', $status))
                 ->latest()
-                ->get()
-                ->map(fn (Campaign $campaign): array => [
+                ->latest('id')
+                ->paginate(15)
+                ->withQueryString()
+                ->through(fn (Campaign $campaign): array => [
                     'id' => $campaign->id,
                     'title' => $campaign->title,
                     'role_title' => $campaign->role_title,
                     'seniority' => $campaign->seniority,
-                    'job_description' => $campaign->job_description,
-                    'required_skills' => $campaign->required_skills ?? [],
                     'language' => $campaign->language,
                     'threshold_score' => $campaign->threshold_score,
                     'status' => $campaign->status->value,
@@ -64,10 +83,12 @@ class CampaignController extends Controller
                     'sections_count' => $campaign->sections_count,
                     'questions_count' => $campaign->questions_count,
                     'assessments_count' => $campaign->assessments_count,
+                    'definition_frozen' => $campaign->has_invitations
+                        || $campaign->has_exam_sessions
+                        || $campaign->assessments_count > 0,
                     'created_by' => $campaign->creator?->name,
                     'created_at' => $campaign->created_at,
-                ])
-                ->all()),
+                ])),
             'filters' => [
                 'search' => $search,
                 'status' => $status,
@@ -149,6 +170,10 @@ class CampaignController extends Controller
                 ]);
 
                 $publishability = $this->publishability($campaign);
+                $definitionFrozen = $this->lifecycle->hasCandidateActivity($campaign);
+                $hasInProgressExam = $campaign->examSessions()
+                    ->where('status', ExamSessionStatus::InProgress)
+                    ->exists();
 
                 return [
                     'id' => $campaign->id,
@@ -170,6 +195,9 @@ class CampaignController extends Controller
                     'draft_questions_count' => $publishability['draft_questions_count'],
                     'approved_questions_count' => $publishability['approved_questions_count'],
                     'can_publish' => $publishability['can_publish'],
+                    'definition_frozen' => $definitionFrozen,
+                    'can_archive' => ! $hasInProgressExam,
+                    'can_clone' => true,
                     'sections' => $campaign->sections->map(fn (CampaignSection $section): array => [
                         'id' => $section->id,
                         'title' => $section->title,
@@ -214,6 +242,7 @@ class CampaignController extends Controller
                 'required_skills' => $campaign->required_skills ?? [],
                 'language' => $campaign->language,
                 'threshold_score' => $campaign->threshold_score,
+                'definition_frozen' => $this->lifecycle->hasCandidateActivity($campaign),
             ],
         ]);
     }
@@ -225,7 +254,14 @@ class CampaignController extends Controller
     {
         $validated = $request->validated();
 
-        $campaign->update($validated);
+        $campaign = $this->lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign) use ($validated): Campaign {
+                $lockedCampaign->update($validated);
+
+                return $lockedCampaign;
+            },
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign updated.')]);
 
@@ -237,13 +273,19 @@ class CampaignController extends Controller
      */
     public function destroy(Campaign $campaign): RedirectResponse
     {
-        if ($campaign->assessments()->exists()) {
-            throw ValidationException::withMessages([
-                'campaign' => __('Campaigns with submitted assessments cannot be deleted. Archive the campaign instead.'),
-            ]);
-        }
+        DB::transaction(function () use ($campaign): void {
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
 
-        $campaign->delete();
+            if ($lockedCampaign->assessments()->exists()
+                || $lockedCampaign->invitations()->exists()
+                || $lockedCampaign->examSessions()->exists()) {
+                throw ValidationException::withMessages([
+                    'campaign' => __('Campaigns with invitations, exam attempts, or assessments cannot be deleted. Archive the campaign instead.'),
+                ]);
+            }
+
+            $lockedCampaign->delete();
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign deleted.')]);
 
@@ -255,12 +297,19 @@ class CampaignController extends Controller
      */
     public function publish(Campaign $campaign): RedirectResponse
     {
-        $this->ensurePublishable($campaign);
+        $campaign = $this->lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign): Campaign {
+                $this->ensurePublishable($lockedCampaign);
 
-        $campaign->update([
-            'status' => CampaignStatus::Active,
-            'activated_at' => $campaign->activated_at ?? now(),
-        ]);
+                $lockedCampaign->update([
+                    'status' => CampaignStatus::Active,
+                    'activated_at' => $lockedCampaign->activated_at ?? now(),
+                ]);
+
+                return $lockedCampaign;
+            },
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign published.')]);
 
@@ -269,13 +318,17 @@ class CampaignController extends Controller
 
     private function applyCampaignSearch(Builder $query, string $search): void
     {
-        $term = '%'.mb_strtolower($search).'%';
+        $term = '%'.str_replace(
+            ['!', '%', '_'],
+            ['!!', '!%', '!_'],
+            mb_strtolower($search),
+        ).'%';
 
         $query->where(function (Builder $query) use ($term): void {
             $query
-                ->whereRaw('LOWER(title) LIKE ?', [$term])
-                ->orWhereRaw('LOWER(role_title) LIKE ?', [$term])
-                ->orWhereRaw('LOWER(COALESCE(seniority, \'\')) LIKE ?', [$term]);
+                ->whereRaw("LOWER(title) LIKE ? ESCAPE '!'", [$term])
+                ->orWhereRaw("LOWER(role_title) LIKE ? ESCAPE '!'", [$term])
+                ->orWhereRaw("LOWER(COALESCE(seniority, '')) LIKE ? ESCAPE '!'", [$term]);
         });
     }
 
@@ -360,6 +413,7 @@ class CampaignController extends Controller
 
         $errorMessage = match (true) {
             $campaign->status === CampaignStatus::Archived => 'Archived campaigns cannot be published.',
+            $this->lifecycle->hasCandidateActivity($campaign) => 'This campaign definition is frozen because candidates have already been invited. Clone it as a new draft to make changes.',
             $draftQuestionsCount > 0 => 'Approve or remove draft questions before publishing this campaign.',
             $approvedQuestionsCount === 0 => 'Add at least one approved question before publishing this campaign.',
             default => null,

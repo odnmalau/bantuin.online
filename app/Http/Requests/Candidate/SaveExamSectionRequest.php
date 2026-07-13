@@ -17,9 +17,11 @@ class SaveExamSectionRequest extends FormRequest
      */
     public function rules(): array
     {
+        $maxAnswerCharacters = (int) config('assessment.secure_exam.max_answer_characters');
+
         return [
             'answers' => ['required', 'array'],
-            'answers.*' => ['nullable', 'string'],
+            'answers.*' => ['nullable', 'string', 'max:'.$maxAnswerCharacters],
         ];
     }
 }

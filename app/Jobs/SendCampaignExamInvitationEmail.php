@@ -2,18 +2,18 @@
 
 namespace App\Jobs;
 
-use App\CampaignInvitationStatus;
 use App\Mail\CampaignExamInvitationMail;
 use App\Models\CampaignInvitation;
 use App\Services\CampaignInvitationService;
-use App\TeamStatus;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Throwable;
 
-class SendCampaignExamInvitationEmail implements ShouldQueue
+class SendCampaignExamInvitationEmail implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable;
 
@@ -23,11 +23,14 @@ class SendCampaignExamInvitationEmail implements ShouldQueue
 
     public int $teamId;
 
+    public ?string $deliveryClaim = null;
+
     public function __construct(
         public CampaignInvitation $invitation,
         public string $plainToken,
     ) {
         $this->teamId = (int) $invitation->campaign()->value('team_id');
+        $this->deliveryClaim = (string) Str::uuid();
     }
 
     /**
@@ -35,27 +38,15 @@ class SendCampaignExamInvitationEmail implements ShouldQueue
      */
     public function handle(CampaignInvitationService $invitations): void
     {
-        $invitation = $this->invitation->fresh(['campaign.team']);
+        $deliveryClaim = $this->deliveryClaim ?? $this->legacyDeliveryClaim();
+        $invitation = $invitations->claimEmailDelivery(
+            $this->invitation->id,
+            $this->plainToken,
+            $deliveryClaim,
+            $this->teamId,
+        );
 
-        if ($invitation === null || $invitation->campaign === null) {
-            return;
-        }
-
-        if ($invitation->campaign->team_id !== $this->teamId || $invitation->campaign->team?->status !== TeamStatus::Active) {
-            Log::warning('Campaign exam invitation email skipped because its Team is no longer writable.', [
-                'invitation_id' => $invitation->id,
-                'team_id' => $this->teamId,
-            ]);
-
-            return;
-        }
-
-        if ($invitation->status !== CampaignInvitationStatus::Pending) {
-            Log::warning('Campaign exam invitation email skipped because invitation is not pending.', [
-                'invitation_id' => $invitation->id,
-                'status' => $invitation->status->value,
-            ]);
-
+        if ($invitation === null) {
             return;
         }
 
@@ -68,6 +59,7 @@ class SendCampaignExamInvitationEmail implements ShouldQueue
                 inviteUrl: $inviteUrl,
             ));
         } catch (Throwable $exception) {
+            $invitations->releaseEmailDelivery($invitation->id, $deliveryClaim);
             report($exception);
             Log::warning('Campaign exam invitation email failed.', [
                 'invitation_id' => $invitation->id,
@@ -77,9 +69,7 @@ class SendCampaignExamInvitationEmail implements ShouldQueue
             throw $exception;
         }
 
-        $invitation->update([
-            'sent_at' => now(),
-        ]);
+        $invitations->completeEmailDelivery($invitation->id, $this->plainToken, $deliveryClaim);
     }
 
     /**
@@ -88,5 +78,19 @@ class SendCampaignExamInvitationEmail implements ShouldQueue
     public function backoff(): array
     {
         return [1, 5, 10];
+    }
+
+    private function legacyDeliveryClaim(): string
+    {
+        $hash = hash('sha256', 'legacy:'.$this->plainToken);
+
+        return sprintf(
+            '%s-%s-%s-%s-%s',
+            substr($hash, 0, 8),
+            substr($hash, 8, 4),
+            substr($hash, 12, 4),
+            substr($hash, 16, 4),
+            substr($hash, 20, 12),
+        );
     }
 }

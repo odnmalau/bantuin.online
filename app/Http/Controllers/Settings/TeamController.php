@@ -11,7 +11,6 @@ use App\OwnershipTransferStatus;
 use App\Services\TeamLifecycleService;
 use App\TeamInvitationStatus;
 use App\TeamMembershipRole;
-use App\TeamStatus;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -24,7 +23,6 @@ class TeamController extends Controller
         $team = $user->currentTeam()->firstOrFail();
         $viewerMembership = $user->activeTeamMemberships()->whereBelongsTo($team)->firstOrFail();
         $canViewActivity = $user->can('viewActivity', $team);
-        $isMutable = $team->status === TeamStatus::Active;
         $viewerRole = $viewerMembership->role;
         $deletionBlocker = $lifecycle->emptyTeamDeletionBlocker($team);
         $canDelete = $user->can('delete', $team) && $deletionBlocker === null;
@@ -41,14 +39,8 @@ class TeamController extends Controller
                 'name' => $membership->user->name,
                 'email' => $membership->user->email,
                 'role' => $membership->role->value,
-                'can_change_role' => $isMutable
-                    && $viewerRole === TeamMembershipRole::Owner
-                    && $membership->role !== TeamMembershipRole::Owner,
-                'can_remove' => $isMutable
-                    && $membership->role !== TeamMembershipRole::Owner
-                    && ($viewerRole === TeamMembershipRole::Owner
-                        || ($viewerRole === TeamMembershipRole::Administrator
-                            && $membership->role === TeamMembershipRole::Collaborator)),
+                'can_change_role' => $user->can('changeRole', $membership),
+                'can_remove' => $user->can('remove', $membership),
             ])->all(),
             'invitations' => $canViewActivity
                 ? $team->invitations()
@@ -61,15 +53,8 @@ class TeamController extends Controller
                         'role' => $invitation->role->value,
                         'status' => $invitation->status->value,
                         'expires_at' => $invitation->expires_at->toISOString(),
-                        'can_revoke' => $isMutable
-                            && $invitation->status === TeamInvitationStatus::Pending
-                            && ($viewerRole === TeamMembershipRole::Owner
-                                || ($viewerRole === TeamMembershipRole::Administrator
-                                    && $invitation->role === TeamMembershipRole::Collaborator)),
-                        'can_resend' => $isMutable
-                            && ($viewerRole === TeamMembershipRole::Owner
-                                || ($viewerRole === TeamMembershipRole::Administrator
-                                    && $invitation->role === TeamMembershipRole::Collaborator)),
+                        'can_revoke' => $user->can('revoke', $invitation),
+                        'can_resend' => $user->can('resend', $invitation),
                     ])->all()
                 : [],
             'pendingTransfer' => $this->pendingTransfer($team),
@@ -78,7 +63,7 @@ class TeamController extends Controller
                 'inviteCollaborator' => $user->can('invite', [$team, TeamMembershipRole::Collaborator]),
                 'transferOwnership' => $user->can('transferOwnership', $team),
                 'viewActivity' => $canViewActivity,
-                'leave' => $isMutable && $viewerMembership->role !== TeamMembershipRole::Owner,
+                'leave' => $user->can('leave', $viewerMembership),
                 'deactivate' => $user->can('deactivate', $team),
                 'reactivate' => $user->can('reactivate', $team),
                 'delete' => $canDelete,

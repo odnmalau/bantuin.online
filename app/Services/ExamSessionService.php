@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\CampaignInvitationStatus;
+use App\CampaignStatus;
 use App\ExamSessionStatus;
 use App\Models\Assessment;
 use App\Models\Campaign;
@@ -35,30 +37,38 @@ class ExamSessionService
 
     public function startSession(User $user, Campaign $campaign): ExamSession
     {
-        return DB::transaction(function () use ($user, $campaign): ExamSession {
-            $team = Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
+        $session = DB::transaction(function () use ($user, $campaign): ExamSession {
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+            $team = Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
 
-            if ($team->status !== TeamStatus::Active) {
+            if ($lockedCampaign->status !== CampaignStatus::Active || $team->status !== TeamStatus::Active) {
                 throw ValidationException::withMessages([
-                    'session' => __('This Team is not accepting new Exam Sessions.'),
+                    'session' => __('This Campaign is not accepting new Exam Sessions.'),
                 ]);
             }
 
-            if ($user->assessments()->whereBelongsTo($campaign)->exists()) {
+            if (! $lockedCampaign->invitations()
+                ->where('user_id', $user->id)
+                ->where('status', CampaignInvitationStatus::Accepted)
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'session' => __('You do not have an accepted invitation for this Campaign.'),
+                ]);
+            }
+
+            if ($user->assessments()->whereBelongsTo($lockedCampaign)->exists()) {
                 throw ValidationException::withMessages([
                     'session' => __('You have already submitted your assessment for this campaign.'),
                 ]);
             }
 
-            $existing = $this->findActiveSession($user, $campaign);
+            $existing = $this->findActiveSession($user, $lockedCampaign);
 
             if ($existing !== null) {
-                $this->syncSectionExpiry($existing, $campaign);
-
-                return $existing->fresh();
+                return $existing;
             }
 
-            $sections = $this->orderedExamSections($campaign);
+            $sections = $this->orderedExamSections($lockedCampaign);
 
             if ($sections->isEmpty()) {
                 throw ValidationException::withMessages([
@@ -70,7 +80,7 @@ class ExamSessionService
 
             return ExamSession::query()->create([
                 'user_id' => $user->id,
-                'campaign_id' => $campaign->id,
+                'campaign_id' => $lockedCampaign->id,
                 'status' => ExamSessionStatus::InProgress,
                 'current_section_id' => $firstSection->id,
                 'current_section_started_at' => now(),
@@ -81,6 +91,10 @@ class ExamSessionService
                 'answer_drafts' => [],
             ]);
         });
+
+        $this->syncSectionExpiry($session, $campaign);
+
+        return $session->fresh();
     }
 
     /**
@@ -88,26 +102,46 @@ class ExamSessionService
      */
     public function saveCurrentSectionAnswers(ExamSession $session, Campaign $campaign, array $answers): ExamSession
     {
-        $this->assertSessionActive($session, $campaign);
-        $this->syncSectionExpiry($session, $campaign);
+        $decision = DB::transaction(function () use ($session, $campaign, $answers): array {
+            $locked = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
+            $this->assertSessionActive($locked, $campaign);
 
-        $section = $this->currentSectionOrFail($session, $campaign);
-        $questions = $this->approvedQuestionsForSection($section);
-        $drafts = $session->answer_drafts ?? [];
-
-        foreach ($questions as $question) {
-            $key = (string) $question->id;
-
-            if (array_key_exists($key, $answers)) {
-                $drafts[$key] = $answers[$key];
+            if ($this->sectionExpiryIsDue($locked)) {
+                return [
+                    'needs_expiry_sync' => true,
+                    'session' => $locked,
+                ];
             }
+
+            $section = $this->currentSectionOrFail($locked, $campaign);
+            $questions = $this->approvedQuestionsForSection($section);
+            $drafts = $locked->answer_drafts ?? [];
+
+            foreach ($questions as $question) {
+                $key = (string) $question->id;
+
+                if (array_key_exists($key, $answers)) {
+                    $drafts[$key] = $answers[$key];
+                }
+            }
+
+            $locked->update([
+                'answer_drafts' => $drafts,
+            ]);
+
+            return [
+                'needs_expiry_sync' => false,
+                'session' => $locked->fresh(),
+            ];
+        });
+
+        if ($decision['needs_expiry_sync']) {
+            $this->syncSectionExpiry($decision['session'], $campaign);
+
+            return $decision['session']->fresh();
         }
 
-        $session->update([
-            'answer_drafts' => $drafts,
-        ]);
-
-        return $session->fresh();
+        return $decision['session'];
     }
 
     /**
@@ -116,7 +150,24 @@ class ExamSessionService
     public function advanceSection(ExamSession $session, Campaign $campaign): array
     {
         $this->assertSessionActive($session, $campaign);
-        $this->syncSectionExpiry($session, $campaign);
+        $result = $this->syncSectionExpiry($session, $campaign);
+
+        if ($result['finalized']) {
+            return [
+                'session' => $session->fresh(),
+                'completed' => true,
+            ];
+        }
+
+        if ($result['advanced']) {
+            $session = $session->fresh();
+
+            return [
+                'session' => $session,
+                'completed' => $session->current_section_id === null,
+            ];
+        }
+
         $this->assertCurrentSectionNotExpired($session);
 
         $section = $this->currentSectionOrFail($session, $campaign);
@@ -135,28 +186,34 @@ class ExamSessionService
      */
     public function recordViolation(ExamSession $session, Campaign $campaign, string $type): array
     {
-        $this->assertSessionActive($session, $campaign);
+        $mutation = DB::transaction(function () use ($session, $campaign, $type): array {
+            $locked = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
+            $this->assertSessionActive($locked, $campaign);
 
-        $events = $session->integrity_events ?? [];
-        $events[] = [
-            'type' => $type,
-            'occurred_at' => now()->toIso8601String(),
-        ];
+            $events = $locked->integrity_events ?? [];
+            $events[] = [
+                'type' => $type,
+                'occurred_at' => now()->toIso8601String(),
+            ];
 
-        $warningCount = $session->warning_count + 1;
-        $maxWarnings = $this->maxIntegrityWarnings();
-        $autoSubmit = (bool) config('assessment.secure_exam.auto_submit_on_max_warnings', true);
+            $warningCount = $locked->warning_count + 1;
+            $maxWarnings = $this->maxIntegrityWarnings();
+            $autoSubmit = (bool) config('assessment.secure_exam.auto_submit_on_max_warnings', true);
 
-        $session->update([
-            'integrity_events' => $events,
-            'warning_count' => $warningCount,
-        ]);
+            $locked->update([
+                'integrity_events' => $events,
+                'warning_count' => $warningCount,
+            ]);
 
-        $session = $session->fresh();
+            return [
+                'session' => $locked->fresh(),
+                'should_finalize' => $autoSubmit && $warningCount >= $maxWarnings,
+            ];
+        });
 
-        if ($autoSubmit && $warningCount >= $maxWarnings) {
+        if ($mutation['should_finalize']) {
             $assessment = $this->finalizeSession(
-                $session,
+                $mutation['session'],
                 $campaign,
                 submissionReason: 'integrity_max_warnings',
                 status: ExamSessionStatus::AutoSubmitted,
@@ -164,14 +221,14 @@ class ExamSessionService
             );
 
             return [
-                'session' => $session->fresh(),
+                'session' => $mutation['session']->fresh(),
                 'auto_submitted' => true,
                 'assessment' => $assessment,
             ];
         }
 
         return [
-            'session' => $session,
+            'session' => $mutation['session'],
             'auto_submitted' => false,
             'assessment' => null,
         ];
@@ -201,6 +258,7 @@ class ExamSessionService
     public function sessionPayloadForInertia(ExamSession $session, Campaign $campaign): array
     {
         $this->syncSectionExpiry($session, $campaign);
+        $session = $session->fresh();
 
         return [
             'id' => $session->id,
@@ -212,7 +270,8 @@ class ExamSessionService
             'warning_count' => $session->warning_count,
             'max_warnings' => $this->maxIntegrityWarnings(),
             'answer_drafts' => $session->answer_drafts ?? [],
-            'ready_to_finalize' => $session->current_section_id === null
+            'ready_to_finalize' => $session->isActive()
+                && $session->current_section_id === null
                 && count($session->completed_section_ids ?? []) === $this->orderedExamSections($campaign)->count(),
             'secure_exam' => [
                 'require_fullscreen' => (bool) config('assessment.secure_exam.require_fullscreen', true),
@@ -249,33 +308,94 @@ class ExamSessionService
             ->values();
     }
 
-    public function syncSectionExpiry(ExamSession $session, Campaign $campaign): void
+    /**
+     * Past section timers advance a complete section, or auto-finalize the Exam Session
+     * when answers are incomplete. Incomplete expiry never soft-locks the session.
+     *
+     * @return array{advanced: bool, finalized: bool, assessment: ?Assessment}
+     */
+    public function syncSectionExpiry(ExamSession $session, Campaign $campaign): array
     {
-        if (! $session->isActive() || $session->current_section_id === null) {
-            return;
+        $noop = [
+            'advanced' => false,
+            'finalized' => false,
+            'assessment' => null,
+        ];
+
+        $decision = DB::transaction(function () use ($session, $campaign, $noop): array {
+            $locked = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
+
+            if (! $locked->isActive()) {
+                if ($session->isActive() && $locked->assessment_id !== null) {
+                    return [
+                        'advanced' => false,
+                        'finalized' => true,
+                        'assessment' => $locked->assessment()->firstOrFail(),
+                    ];
+                }
+
+                return $noop;
+            }
+
+            if ($session->current_section_id !== null
+                && $session->current_section_id !== $locked->current_section_id
+                && in_array($session->current_section_id, $locked->completed_section_ids ?? [], true)) {
+                return [
+                    'advanced' => true,
+                    'finalized' => false,
+                    'assessment' => null,
+                ];
+            }
+
+            if ($locked->current_section_id === null) {
+                return $noop;
+            }
+
+            if (! (bool) config('assessment.secure_exam.enforce_section_timers', true)) {
+                return $noop;
+            }
+
+            $expiresAt = $locked->current_section_expires_at;
+
+            if ($expiresAt === null || $expiresAt->isFuture()) {
+                return $noop;
+            }
+
+            $section = $this->currentSectionOrFail($locked, $campaign);
+
+            if ($this->sectionAnswersAreComplete($locked, $section)) {
+                $this->completeSectionAndAdvance($locked, $campaign, $section);
+
+                return [
+                    'advanced' => true,
+                    'finalized' => false,
+                    'assessment' => null,
+                ];
+            }
+
+            return $noop + [
+                'needs_finalization' => true,
+                'session' => $locked,
+            ];
+        });
+
+        if (! ($decision['needs_finalization'] ?? false)) {
+            return $decision;
         }
 
-        if (! (bool) config('assessment.secure_exam.enforce_section_timers', true)) {
-            return;
-        }
+        $assessment = $this->finalizeSession(
+            $decision['session'],
+            $campaign,
+            submissionReason: 'section_timer_expired',
+            status: ExamSessionStatus::AutoSubmitted,
+            allowIncompleteAnswers: true,
+        );
 
-        $expiresAt = $session->current_section_expires_at;
-
-        if ($expiresAt === null || $expiresAt->isFuture()) {
-            return;
-        }
-
-        $section = $this->currentSectionOrFail($session, $campaign);
-
-        try {
-            $this->assertSectionAnswersComplete($session, $section);
-        } catch (ValidationException) {
-            throw ValidationException::withMessages([
-                'session' => __('Time expired for this section. Answer every question before the timer ends.'),
-            ]);
-        }
-
-        $this->completeSectionAndAdvance($session, $campaign, $section);
+        return [
+            'advanced' => false,
+            'finalized' => true,
+            'assessment' => $assessment,
+        ];
     }
 
     /**
@@ -346,6 +466,21 @@ class ExamSessionService
         }
     }
 
+    private function sectionExpiryIsDue(ExamSession $session): bool
+    {
+        if (! $session->isActive() || $session->current_section_id === null) {
+            return false;
+        }
+
+        if (! (bool) config('assessment.secure_exam.enforce_section_timers', true)) {
+            return false;
+        }
+
+        $expiresAt = $session->current_section_expires_at;
+
+        return $expiresAt !== null && $expiresAt->isPast();
+    }
+
     private function assertCurrentSectionNotExpired(ExamSession $session): void
     {
         if (! (bool) config('assessment.secure_exam.enforce_section_timers', true)) {
@@ -394,6 +529,21 @@ class ExamSessionService
         ]);
 
         return $section->questions->values();
+    }
+
+    private function sectionAnswersAreComplete(ExamSession $session, CampaignSection $section): bool
+    {
+        $drafts = $session->answer_drafts ?? [];
+
+        foreach ($this->approvedQuestionsForSection($section) as $question) {
+            $answer = $drafts[(string) $question->id] ?? null;
+
+            if (! is_string($answer) || trim($answer) === '') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function assertSectionAnswersComplete(ExamSession $session, CampaignSection $section): void

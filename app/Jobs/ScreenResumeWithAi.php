@@ -4,14 +4,12 @@ namespace App\Jobs;
 
 use App\AssessmentStatus;
 use App\Models\Assessment;
-use App\Models\Team;
 use App\Services\Ai\QwenResumeScreener;
-use App\Services\AssessmentEventRecorder;
+use App\Services\AssessmentEvaluationOutcome;
+use App\Services\AssessmentExternalWorkCoordinator;
 use App\Services\ResumeTextExtractor;
-use App\TeamStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -21,7 +19,7 @@ class ScreenResumeWithAi implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $timeout = 45;
+    public int $timeout;
 
     public readonly ?int $teamId;
 
@@ -29,6 +27,7 @@ class ScreenResumeWithAi implements ShouldQueue
     {
         $teamId = $assessment->campaign()->value('team_id');
         $this->teamId = $teamId === null ? null : (int) $teamId;
+        $this->timeout = (int) config('assessment.queue.resume_timeout');
     }
 
     /**
@@ -37,84 +36,69 @@ class ScreenResumeWithAi implements ShouldQueue
     public function handle(
         ResumeTextExtractor $extractor,
         QwenResumeScreener $screener,
-        AssessmentEventRecorder $events,
+        AssessmentExternalWorkCoordinator $coordinator,
     ): void {
-        DB::transaction(function () use ($extractor, $screener, $events): void {
-            if ($this->teamId !== null) {
-                Team::query()->whereKey($this->teamId)->lockForUpdate()->firstOrFail();
-            }
+        $claimed = $coordinator->claimResumeScreening($this->assessment, $this->teamId);
 
-            $this->process($extractor, $screener, $events);
-        }, attempts: 3);
-    }
-
-    private function process(
-        ResumeTextExtractor $extractor,
-        QwenResumeScreener $screener,
-        AssessmentEventRecorder $events,
-    ): void {
-        $assessment = $this->assessment->fresh(['user', 'campaign.team']);
-
-        if ($assessment === null
-            || ($this->teamId !== null && ($assessment->campaign?->team_id !== $this->teamId
-                || $assessment->campaign->team?->status !== TeamStatus::Active))
-            || blank($assessment->resume_path)) {
+        if ($claimed === null) {
             return;
         }
 
-        $assessment->update([
-            'status' => AssessmentStatus::ResumeProcessing,
-        ]);
-
-        $events->record(
-            assessment: $assessment,
-            type: 'resume_processing_started',
-            title: __('Resume processing started'),
-            description: __('The private resume PDF is being extracted for screening.'),
-        );
+        $assessment = $claimed->assessment;
 
         try {
-            $resumeText = $extractor->extract($assessment->resume_path);
+            $extraction = $extractor->extract($assessment->resume_path);
+            $resumeText = $extraction->text;
 
-            $assessment->update([
-                'resume_text' => $resumeText,
-                'status' => AssessmentStatus::ResumeScreening,
-            ]);
-
-            $events->record(
-                assessment: $assessment,
-                type: 'resume_extracted',
-                title: __('Resume text extracted'),
-                description: __('Resume text extraction completed.'),
-                payload: [
-                    'character_count' => mb_strlen($resumeText),
-                    'has_text' => filled($resumeText),
-                ],
-            );
-
+            $assessment->resume_text = $resumeText;
             $result = $screener->screen($assessment);
-            $needsManualReview = $result->confidence < 50 || ! empty($result->riskFlags);
+            $needsManualReview = $extraction->wasTruncated
+                || $result->confidence < 50
+                || ! empty($result->riskFlags);
 
-            $assessment->update([
-                'resume_score' => $result->score,
-                'resume_justification' => $result->justification,
-                'resume_payload' => $result->payload(),
-                'needs_manual_review' => $needsManualReview,
-                'status' => AssessmentStatus::Submitted,
-            ]);
+            $resumePayload = $result->payload();
 
-            $events->record(
+            if ($extraction->wasTruncated) {
+                $resumePayload['input_truncated'] = true;
+            }
+
+            $coordinator->finalizeResumeScreening(
                 assessment: $assessment,
-                type: 'resume_screened',
-                title: __('Resume screened by AI'),
-                description: __('Qwen resume screening completed.'),
-                payload: [
+                attemptId: $claimed->attemptId,
+                attributes: [
+                    'resume_text' => $resumeText,
                     'resume_score' => $result->score,
-                    'confidence' => $result->confidence,
-                    'matched_skills_count' => count($result->matchedSkills),
-                    'missing_skills_count' => count($result->missingSkills),
-                    'risk_flags_count' => count($result->riskFlags),
+                    'resume_justification' => $result->justification,
+                    'resume_payload' => $resumePayload,
                     'needs_manual_review' => $needsManualReview,
+                    'status' => AssessmentStatus::Submitted,
+                ],
+                events: [
+                    AssessmentEvaluationOutcome::event(
+                        type: 'resume_extracted',
+                        title: __('Resume text extracted'),
+                        description: __('Resume text extraction completed.'),
+                        payload: [
+                            'original_character_count' => $extraction->originalCharacterCount,
+                            'retained_character_count' => $extraction->retainedCharacterCount,
+                            'was_truncated' => $extraction->wasTruncated,
+                            'has_text' => filled($resumeText),
+                        ],
+                    ),
+                    AssessmentEvaluationOutcome::event(
+                        type: 'resume_screened',
+                        title: __('Resume screened by AI'),
+                        description: __('Qwen resume screening completed.'),
+                        payload: [
+                            'resume_score' => $result->score,
+                            'confidence' => $result->confidence,
+                            'matched_skills_count' => count($result->matchedSkills),
+                            'missing_skills_count' => count($result->missingSkills),
+                            'risk_flags_count' => count($result->riskFlags),
+                            'needs_manual_review' => $needsManualReview,
+                            'was_truncated' => $extraction->wasTruncated,
+                        ],
+                    ),
                 ],
             );
         } catch (Throwable $exception) {
@@ -125,19 +109,23 @@ class ScreenResumeWithAi implements ShouldQueue
                 'exception' => $exception::class,
             ]);
 
-            $assessment->update([
-                'resume_justification' => __('Resume screening failed and needs manual review.'),
-                'needs_manual_review' => true,
-                'status' => AssessmentStatus::Submitted,
-            ]);
-
-            $events->record(
+            $coordinator->finalizeResumeScreening(
                 assessment: $assessment,
-                type: 'resume_screening_failed',
-                title: __('Resume screening failed'),
-                description: __('Resume screening failed and requires manual review.'),
-                payload: [
-                    'exception' => $exception::class,
+                attemptId: $claimed->attemptId,
+                attributes: [
+                    'resume_justification' => __('Resume screening failed and needs manual review.'),
+                    'needs_manual_review' => true,
+                    'status' => AssessmentStatus::Submitted,
+                ],
+                events: [
+                    AssessmentEvaluationOutcome::event(
+                        type: 'resume_screening_failed',
+                        title: __('Resume screening failed'),
+                        description: __('Resume screening failed and requires manual review.'),
+                        payload: [
+                            'exception' => $exception::class,
+                        ],
+                    ),
                 ],
             );
         }

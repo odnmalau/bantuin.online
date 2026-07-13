@@ -37,13 +37,14 @@ class CampaignInvitationService
         $plainToken = Str::random(64);
 
         $invitation = DB::transaction(function () use ($campaign, $normalizedEmail, $plainToken, $invitedBy): CampaignInvitation {
-            Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+            Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
 
             $existingUserId = User::query()
                 ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
                 ->value('id');
             $hasMembershipHistory = TeamMembership::query()
-                ->where('team_id', $campaign->team_id)
+                ->where('team_id', $lockedCampaign->team_id)
                 ->where(function ($query) use ($normalizedEmail, $existingUserId): void {
                     $query->whereHas('user', fn ($userQuery) => $userQuery->whereRaw('LOWER(email) = ?', [$normalizedEmail]));
 
@@ -60,7 +61,7 @@ class CampaignInvitationService
             }
 
             $existingInvitation = CampaignInvitation::query()
-                ->where('campaign_id', $campaign->id)
+                ->where('campaign_id', $lockedCampaign->id)
                 ->where(function ($query) use ($normalizedEmail, $existingUserId): void {
                     $query->whereRaw('LOWER(email) = ?', [$normalizedEmail]);
 
@@ -74,6 +75,12 @@ class CampaignInvitationService
             if ($existingInvitation?->status === CampaignInvitationStatus::Accepted) {
                 throw ValidationException::withMessages([
                     'email' => __('This person already has Candidate history for this Campaign.'),
+                ]);
+            }
+
+            if ($existingInvitation?->send_claim !== null) {
+                throw ValidationException::withMessages([
+                    'email' => __('This Campaign Invitation is currently being sent. Try again shortly.'),
                 ]);
             }
 
@@ -96,7 +103,7 @@ class CampaignInvitationService
 
             return CampaignInvitation::query()->create([
                 ...$attributes,
-                'campaign_id' => $campaign->id,
+                'campaign_id' => $lockedCampaign->id,
             ]);
         });
 
@@ -113,6 +120,124 @@ class CampaignInvitationService
             'invite_url' => $inviteUrl,
             'plain_token' => $plainToken,
         ];
+    }
+
+    public function revoke(CampaignInvitation $invitation): void
+    {
+        DB::transaction(function () use ($invitation): void {
+            $lockedInvitation = CampaignInvitation::query()->whereKey($invitation->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedInvitation->status !== CampaignInvitationStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('Only pending Campaign Invitations may be revoked.'),
+                ]);
+            }
+
+            if ($lockedInvitation->send_claim !== null) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('This Campaign Invitation is currently being sent. Try again shortly.'),
+                ]);
+            }
+
+            $lockedInvitation->update([
+                'status' => CampaignInvitationStatus::Revoked,
+            ]);
+        });
+    }
+
+    public function resend(CampaignInvitation $invitation): void
+    {
+        $plainToken = Str::random(64);
+
+        $lockedInvitation = DB::transaction(function () use ($invitation, $plainToken): CampaignInvitation {
+            $lockedInvitation = CampaignInvitation::query()->whereKey($invitation->id)->lockForUpdate()->firstOrFail();
+
+            if (! in_array($lockedInvitation->status, [CampaignInvitationStatus::Pending, CampaignInvitationStatus::Expired], true)) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('This Campaign Invitation cannot be resent.'),
+                ]);
+            }
+
+            if ($lockedInvitation->send_claim !== null) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('This Campaign Invitation is currently being sent. Try again shortly.'),
+                ]);
+            }
+
+            $lockedInvitation->update([
+                'token_hash' => hash('sha256', $plainToken),
+                'status' => CampaignInvitationStatus::Pending,
+                'expires_at' => now()->addDays(14),
+                'sent_at' => null,
+            ]);
+
+            return $lockedInvitation;
+        });
+
+        SendCampaignExamInvitationEmail::dispatch($lockedInvitation, $plainToken);
+    }
+
+    public function claimEmailDelivery(
+        int $invitationId,
+        string $plainToken,
+        string $deliveryClaim,
+        int $teamId,
+    ): ?CampaignInvitation {
+        $tokenHash = hash('sha256', $plainToken);
+        $claimed = CampaignInvitation::query()
+            ->whereKey($invitationId)
+            ->where('status', CampaignInvitationStatus::Pending)
+            ->where('token_hash', $tokenHash)
+            ->whereNull('sent_at')
+            ->where(function ($query) use ($deliveryClaim): void {
+                $query->whereNull('send_claim')->orWhere('send_claim', $deliveryClaim);
+            })
+            ->whereHas('campaign', fn ($query) => $query
+                ->where('team_id', $teamId)
+                ->whereHas('team', fn ($teamQuery) => $teamQuery->where('status', TeamStatus::Active)))
+            ->update([
+                'send_claim' => $deliveryClaim,
+            ]);
+
+        if ($claimed !== 1) {
+            return null;
+        }
+
+        return CampaignInvitation::query()
+            ->with('campaign.team')
+            ->find($invitationId);
+    }
+
+    public function completeEmailDelivery(
+        int $invitationId,
+        string $plainToken,
+        string $deliveryClaim,
+    ): bool {
+        $completed = CampaignInvitation::query()
+            ->whereKey($invitationId)
+            ->where('status', CampaignInvitationStatus::Pending)
+            ->where('token_hash', hash('sha256', $plainToken))
+            ->where('send_claim', $deliveryClaim)
+            ->update([
+                'sent_at' => now(),
+                'send_claim' => null,
+            ]) === 1;
+
+        if (! $completed) {
+            $this->releaseEmailDelivery($invitationId, $deliveryClaim);
+        }
+
+        return $completed;
+    }
+
+    public function releaseEmailDelivery(int $invitationId, string $deliveryClaim): void
+    {
+        CampaignInvitation::query()
+            ->whereKey($invitationId)
+            ->where('send_claim', $deliveryClaim)
+            ->update([
+                'send_claim' => null,
+            ]);
     }
 
     public function inviteUrlForToken(string $plainToken): string
@@ -151,11 +276,16 @@ class CampaignInvitationService
     public function acceptForUser(CampaignInvitation $invitation, User $user): CampaignInvitation
     {
         $accepted = DB::transaction(function () use ($invitation, $user): ?CampaignInvitation {
+            $campaignId = CampaignInvitation::query()->whereKey($invitation->id)->value('campaign_id');
+            $campaign = Campaign::query()->whereKey($campaignId)->lockForUpdate()->firstOrFail();
+            $team = Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
             $lockedInvitation = CampaignInvitation::query()->whereKey($invitation->id)->lockForUpdate()->firstOrFail();
-            $team = Team::query()
-                ->whereKey($lockedInvitation->campaign()->value('team_id'))
-                ->lockForUpdate()
-                ->firstOrFail();
+
+            if ($lockedInvitation->campaign_id !== $campaign->id) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('This invitation is no longer available.'),
+                ]);
+            }
 
             $this->ensureInvitationMatchesUser($lockedInvitation, $user);
 
@@ -272,6 +402,11 @@ class CampaignInvitationService
             'accepted_at' => $invitation->accepted_at,
             'expires_at' => $invitation->expires_at,
             'invite_url' => $inviteUrl,
+            'can_revoke' => $invitation->status === CampaignInvitationStatus::Pending,
+            'can_resend' => in_array($invitation->status, [
+                CampaignInvitationStatus::Pending,
+                CampaignInvitationStatus::Expired,
+            ], true),
         ];
     }
 

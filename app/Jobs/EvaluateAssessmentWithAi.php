@@ -3,12 +3,10 @@
 namespace App\Jobs;
 
 use App\Models\Assessment;
-use App\Models\Team;
 use App\Services\AssessmentEvaluationPipeline;
-use App\TeamStatus;
+use App\Services\AssessmentExternalWorkCoordinator;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\DB;
 
 class EvaluateAssessmentWithAi implements ShouldQueue
 {
@@ -16,7 +14,7 @@ class EvaluateAssessmentWithAi implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $timeout = 30;
+    public int $timeout;
 
     public readonly ?int $teamId;
 
@@ -24,28 +22,24 @@ class EvaluateAssessmentWithAi implements ShouldQueue
     {
         $teamId = $assessment->campaign()->value('team_id');
         $this->teamId = $teamId === null ? null : (int) $teamId;
+        $this->timeout = (int) config('assessment.queue.evaluation_timeout');
     }
 
     /**
      * Execute the job.
      */
-    public function handle(AssessmentEvaluationPipeline $pipeline): void
-    {
-        DB::transaction(function () use ($pipeline): void {
-            if ($this->teamId !== null) {
-                Team::query()->whereKey($this->teamId)->lockForUpdate()->firstOrFail();
-            }
+    public function handle(
+        AssessmentEvaluationPipeline $pipeline,
+        AssessmentExternalWorkCoordinator $coordinator,
+    ): void {
+        $claimed = $coordinator->claimEvaluation($this->assessment, $this->teamId);
 
-            $assessment = $this->assessment->fresh('campaign.team');
+        if ($claimed === null) {
+            return;
+        }
 
-            if ($assessment === null
-                || ($this->teamId !== null && ($assessment->campaign?->team_id !== $this->teamId
-                    || $assessment->campaign->team?->status !== TeamStatus::Active))) {
-                return;
-            }
-
-            $pipeline->evaluate($assessment);
-        }, attempts: 3);
+        $outcome = $pipeline->compute($claimed->assessment);
+        $coordinator->finalizeEvaluation($claimed->assessment, $claimed->attemptId, $outcome);
     }
 
     /**

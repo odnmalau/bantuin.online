@@ -33,6 +33,13 @@ class AssessmentController extends Controller
             return redirect()->route('candidate.campaigns.exam', $accessibleCampaigns->first());
         }
 
+        if ($accessibleCampaigns->count() > 1) {
+            return Inertia::render(
+                'candidate/exam',
+                $this->examPage->picker($request->user(), $accessibleCampaigns),
+            );
+        }
+
         return $this->renderExam($request, null);
     }
 

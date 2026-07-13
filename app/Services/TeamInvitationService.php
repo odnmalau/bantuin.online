@@ -7,6 +7,7 @@ use App\Models\TeamInvitation;
 use App\Models\TeamMembership;
 use App\Models\User;
 use App\Notifications\TeamInvitationNotification;
+use App\Support\TeamCapability;
 use App\TeamInvitationStatus;
 use App\TeamMembershipRole;
 use App\TeamStatus;
@@ -53,8 +54,7 @@ class TeamInvitationService
             $isAuthorizedOperator = $actorContext === 'platform_operator' && $inviter->isPlatformOperator();
 
             if ($lockedTeam->status !== TeamStatus::Active
-                || (! $isAuthorizedOperator && $inviterRole !== TeamMembershipRole::Owner
-                    && ! ($inviterRole === TeamMembershipRole::Administrator && $role === TeamMembershipRole::Collaborator))) {
+                || (! $isAuthorizedOperator && ! TeamCapability::canManageRole($inviterRole, $role))) {
                 throw ValidationException::withMessages([
                     'invitation' => __('You are no longer authorized to issue this Team Invitation.'),
                 ]);
@@ -180,8 +180,7 @@ class TeamInvitationService
                 ?->role;
             $inviterIsAuthorized = $lockedInvitation->actor_context === 'platform_operator'
                 ? User::query()->find($lockedInvitation->invited_by)?->isPlatformOperator() === true
-                : $inviterRole === TeamMembershipRole::Owner
-                    || ($inviterRole === TeamMembershipRole::Administrator && $lockedInvitation->role === TeamMembershipRole::Collaborator);
+                : TeamCapability::canManageRole($inviterRole, $lockedInvitation->role);
 
             if (! $inviterIsAuthorized) {
                 throw ValidationException::withMessages([

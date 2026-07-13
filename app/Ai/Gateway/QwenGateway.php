@@ -55,7 +55,10 @@ class QwenGateway implements TextGateway
             ->baseUrl($this->baseUrl($provider))
             ->withToken($provider->providerCredentials()['key'])
             ->timeout($timeout ?? $this->timeout($provider))
-            ->retry(2, 300)
+            ->retry(
+                times: (int) config('assessment.qwen.transport_attempt_count', 2),
+                sleepMilliseconds: (int) config('assessment.qwen.transport_retry_sleep_ms', 300),
+            )
             ->acceptJson()
             ->asJson()
             ->throw()

@@ -21,7 +21,7 @@ class QwenAssessmentCritic
         int $reviewScore,
         int $passingScore,
     ): AssessmentCriticResult {
-        $assessment->loadMissing('user', 'campaign');
+        $assessment->loadMissing('campaign');
 
         $this->assertQwenApiKeyConfigured(AssessmentCriticException::class);
 
@@ -50,10 +50,7 @@ class QwenAssessmentCritic
             'instruction' => 'Critic-check this assessment package. Output JSON matching the structured schema.',
             'threshold' => $passingScore,
             'review_score' => $reviewScore,
-            'candidate' => [
-                'name' => $assessment->user?->name,
-                'email' => $assessment->user?->email,
-            ],
+            'assessment_id' => $assessment->id,
             'campaign' => [
                 'title' => $assessment->campaign?->title,
                 'role_title' => $assessment->campaign?->role_title,
@@ -66,18 +63,20 @@ class QwenAssessmentCritic
                 'ranking_score' => $ranking['score'] ?? null,
                 'ranking_payload' => $ranking['payload'] ?? null,
             ],
-            'essay_evaluation' => [
-                'score' => $evaluation->score,
-                'justification' => $evaluation->justification,
-            ],
-            'resume_screening' => [
-                'score' => $assessment->resume_score,
-                'justification' => $assessment->resume_justification,
-                'payload' => $assessment->resume_payload,
-            ],
-            'email_draft' => [
-                'subject' => $evaluation->emailSubject,
-                'body' => $evaluation->emailBody,
+            'untrusted_model_output' => [
+                'essay_evaluation' => [
+                    'score' => $evaluation->score,
+                    'justification' => $evaluation->justification,
+                ],
+                'resume_screening' => [
+                    'score' => $assessment->resume_score,
+                    'justification' => $assessment->resume_justification,
+                    'payload' => $assessment->resume_payload,
+                ],
+                'email_draft' => [
+                    'subject' => $evaluation->emailSubject,
+                    'body' => $evaluation->emailBody,
+                ],
             ],
             'policy' => [
                 'email_must_be_generic' => true,

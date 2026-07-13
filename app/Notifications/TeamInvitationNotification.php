@@ -5,8 +5,8 @@ namespace App\Notifications;
 use App\Models\TeamInvitation;
 use App\Models\TeamMembership;
 use App\Models\User;
+use App\Support\TeamCapability;
 use App\TeamInvitationStatus;
-use App\TeamMembershipRole;
 use App\TeamStatus;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
@@ -69,9 +69,7 @@ class TeamInvitationNotification extends Notification implements ShouldBeEncrypt
             return User::query()->find($invitation->invited_by)?->isPlatformOperator() === true;
         }
 
-        return $inviterRole === TeamMembershipRole::Owner
-            || ($inviterRole === TeamMembershipRole::Administrator
-                && $invitation->role === TeamMembershipRole::Collaborator);
+        return TeamCapability::canManageRole($inviterRole, $invitation->role);
     }
 
     /**

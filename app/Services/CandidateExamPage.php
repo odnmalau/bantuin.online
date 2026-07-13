@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\ExamSessionStatus;
 use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\ExamSession;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -15,6 +17,56 @@ class CandidateExamPage
         private ExamSessionService $examSessions,
         private AssessmentSubmissionBuilder $submissionBuilder,
     ) {}
+
+    /**
+     * @param  Collection<int, Campaign>  $campaigns
+     * @return array<string, mixed>
+     */
+    public function picker(User $user, Collection $campaigns): array
+    {
+        $campaignIds = $campaigns->pluck('id')->all();
+        $submittedCampaignIds = Assessment::query()
+            ->whereBelongsTo($user)
+            ->whereIn('campaign_id', $campaignIds)
+            ->pluck('campaign_id')
+            ->unique()
+            ->all();
+        $inProgressCampaignIds = ExamSession::query()
+            ->whereBelongsTo($user)
+            ->whereIn('campaign_id', $campaignIds)
+            ->where('status', ExamSessionStatus::InProgress)
+            ->pluck('campaign_id')
+            ->all();
+
+        (new Campaign)->newCollection($campaigns->all())->loadMissing('team:id,name');
+
+        return [
+            'state' => 'campaign_picker',
+            'campaign' => null,
+            'campaigns' => $campaigns
+                ->map(function (Campaign $campaign) use ($submittedCampaignIds, $inProgressCampaignIds): array {
+                    $progress = 'not_started';
+
+                    if (in_array($campaign->id, $submittedCampaignIds, true)) {
+                        $progress = 'submitted';
+                    } elseif (in_array($campaign->id, $inProgressCampaignIds, true)) {
+                        $progress = 'in_progress';
+                    }
+
+                    return [
+                        'id' => $campaign->id,
+                        'title' => $campaign->title,
+                        'role_title' => $campaign->role_title,
+                        'team' => [
+                            'name' => $campaign->team->name,
+                        ],
+                        'progress' => $progress,
+                    ];
+                })
+                ->values()
+                ->all(),
+        ];
+    }
 
     /**
      * @return array<string, mixed>
@@ -55,10 +107,22 @@ class CandidateExamPage
                 'state' => 'ready_to_start',
                 'campaign' => $this->campaignSummary($campaign),
                 'sections' => $sectionSummaries,
+                'secure_exam' => $this->secureExamConfig(),
             ];
         }
 
         $examSession = $this->examSessions->sessionPayloadForInertia($session, $campaign);
+
+        $assessment = $this->currentAssessment($user, $campaign);
+
+        if ($assessment !== null) {
+            return [
+                'state' => 'submitted',
+                'campaign' => $this->campaignSummary($campaign),
+                'assessment' => $this->assessmentSummary($assessment),
+            ];
+        }
+
         $session = $session->fresh();
 
         if ($examSession['ready_to_finalize'] === true) {
@@ -90,6 +154,17 @@ class CandidateExamPage
         return [
             'state' => 'no_campaign',
             'campaign' => null,
+        ];
+    }
+
+    /**
+     * @return array{require_fullscreen: bool, block_copy_paste: bool}
+     */
+    private function secureExamConfig(): array
+    {
+        return [
+            'require_fullscreen' => (bool) config('assessment.secure_exam.require_fullscreen', true),
+            'block_copy_paste' => (bool) config('assessment.secure_exam.block_copy_paste', true),
         ];
     }
 

@@ -7,6 +7,8 @@ return [
         'provider' => env('QWEN_PROVIDER', 'qwen'),
         'model' => env('QWEN_MODEL', 'qwen3.7-plus'),
         'timeout' => (int) env('QWEN_TIMEOUT', 30),
+        'transport_attempt_count' => (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2),
+        'transport_retry_sleep_ms' => (int) env('ASSESSMENT_QWEN_TRANSPORT_RETRY_SLEEP_MS', 300),
     ],
 
     'generator' => [
@@ -19,6 +21,7 @@ return [
 
     'resume' => [
         'max_kilobytes' => (int) env('ASSESSMENT_RESUME_MAX_KB', 5120),
+        'max_extracted_characters' => (int) env('ASSESSMENT_RESUME_MAX_EXTRACTED_CHARACTERS', 30000),
         'pdftotext_bin' => env('ASSESSMENT_PDFTOTEXT_BIN'),
     ],
 
@@ -30,11 +33,42 @@ return [
         ],
     ],
 
+    'queue' => [
+        /*
+         * Supported evaluation calls: initial evaluator + configured repair attempts + critic.
+         * attemptSeconds = qwen_timeout * transport_attempt_count
+         * resume_timeout must exceed one attemptSeconds budget + processing margin.
+         * evaluation_timeout must exceed supported_calls * attemptSeconds + processing margin.
+         * queue retry_after/visibility and stale_after must exceed all job timeouts.
+         */
+        'resume_processing_margin' => (int) env('ASSESSMENT_RESUME_PROCESSING_MARGIN', 30),
+        'evaluation_processing_margin' => (int) env('ASSESSMENT_EVALUATION_PROCESSING_MARGIN', 30),
+        'retry_after_safety_margin' => (int) env('ASSESSMENT_QUEUE_RETRY_AFTER_SAFETY_MARGIN', 60),
+        'resume_timeout' => (int) env(
+            'ASSESSMENT_RESUME_JOB_TIMEOUT',
+            ((int) env('QWEN_TIMEOUT', 30)
+                * (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2))
+            + (int) env('ASSESSMENT_RESUME_PROCESSING_MARGIN', 30),
+        ),
+        'evaluation_timeout' => (int) env(
+            'ASSESSMENT_EVALUATION_JOB_TIMEOUT',
+            ((int) env('QWEN_TIMEOUT', 30)
+                * (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2)
+                * (1 + (int) env('ASSESSMENT_EVALUATION_REPAIR_ATTEMPTS', 1) + 1))
+            + (int) env('ASSESSMENT_EVALUATION_PROCESSING_MARGIN', 30),
+        ),
+        'external_work_stale_after' => (int) env(
+            'ASSESSMENT_EXTERNAL_WORK_STALE_AFTER',
+            (int) env('ASSESSMENT_QUEUE_RETRY_AFTER', 270),
+        ),
+    ],
+
     'secure_exam' => [
         'require_fullscreen' => (bool) env('ASSESSMENT_EXAM_REQUIRE_FULLSCREEN', true),
         'max_integrity_warnings' => (int) env('ASSESSMENT_EXAM_MAX_INTEGRITY_WARNINGS', 3),
         'auto_submit_on_max_warnings' => (bool) env('ASSESSMENT_EXAM_AUTO_SUBMIT_ON_MAX_WARNINGS', true),
         'block_copy_paste' => (bool) env('ASSESSMENT_EXAM_BLOCK_COPY_PASTE', true),
         'enforce_section_timers' => (bool) env('ASSESSMENT_EXAM_ENFORCE_SECTION_TIMERS', true),
+        'max_answer_characters' => (int) env('ASSESSMENT_EXAM_MAX_ANSWER_CHARACTERS', 20000),
     ],
 ];

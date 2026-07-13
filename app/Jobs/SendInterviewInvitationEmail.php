@@ -5,23 +5,25 @@ namespace App\Jobs;
 use App\AssessmentStatus;
 use App\Mail\InterviewInvitationMail;
 use App\Models\Assessment;
-use App\Models\Team;
-use App\Services\AssessmentEventRecorder;
-use App\TeamStatus;
+use App\Services\AssessmentEvaluationOutcome;
+use App\Services\AssessmentExternalWorkCoordinator;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use LogicException;
 use Throwable;
 
-class SendInterviewInvitationEmail implements ShouldQueue
+class SendInterviewInvitationEmail implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
     public int $tries = 3;
 
     public int $timeout = 30;
+
+    public int $uniqueFor = 120;
 
     public readonly ?int $teamId;
 
@@ -31,51 +33,44 @@ class SendInterviewInvitationEmail implements ShouldQueue
         $this->teamId = $teamId === null ? null : (int) $teamId;
     }
 
+    public function uniqueId(): string
+    {
+        return 'interview-email-'.$this->assessment->id;
+    }
+
     /**
      * Execute the job.
      */
-    public function handle(?AssessmentEventRecorder $events = null): void
+    public function handle(?AssessmentExternalWorkCoordinator $coordinator = null): void
     {
-        DB::transaction(function () use ($events): void {
-            if ($this->teamId !== null) {
-                Team::query()->whereKey($this->teamId)->lockForUpdate()->firstOrFail();
+        $coordinator ??= app(AssessmentExternalWorkCoordinator::class);
+        $claimed = $coordinator->claimEmailDelivery($this->assessment, $this->teamId);
+
+        if ($claimed === true) {
+            return;
+        }
+
+        if ($claimed === null) {
+            $assessment = $this->assessment->fresh();
+
+            if ($assessment?->status === AssessmentStatus::EmailSending) {
+                $coordinator->abandonStaleEmailDelivery($this->assessment, $this->teamId);
+
+                return;
             }
 
-            $this->send($events);
-        }, attempts: 3);
-    }
-
-    private function send(?AssessmentEventRecorder $events): void
-    {
-        $events ??= app(AssessmentEventRecorder::class);
-        $assessment = $this->assessment->fresh(['user', 'campaign.team']);
-
-        if ($assessment === null
-            || ($this->teamId !== null && ($assessment->campaign?->team_id !== $this->teamId
-                || $assessment->campaign->team?->status !== TeamStatus::Active))) {
-            return;
-        }
-
-        if (! $this->assessmentIsSendable($assessment)) {
-            Log::warning('Interview invitation email skipped because assessment is not sendable.', [
-                'assessment_id' => $assessment->id,
-                'candidate_id' => $assessment->user_id,
-                'status' => $assessment->status->value,
-            ]);
-
-            $this->markEmailFailed(
-                assessment: $assessment,
-                events: $events,
-                title: __('Interview email skipped'),
-                description: __('Interview email could not be sent because the assessment is not sendable.'),
-                payload: [
-                    'from_status' => $assessment->status->value,
-                    'to_status' => AssessmentStatus::EmailFailed->value,
-                ],
-            );
+            if ($assessment !== null) {
+                Log::warning('Interview invitation email skipped because assessment is not sendable.', [
+                    'assessment_id' => $assessment->id,
+                    'candidate_id' => $assessment->user_id,
+                    'status' => $assessment->status->value,
+                ]);
+            }
 
             return;
         }
+
+        $assessment = $claimed->assessment;
 
         try {
             Mail::to($assessment->user->email)->send(new InterviewInvitationMail(
@@ -90,34 +85,50 @@ class SendInterviewInvitationEmail implements ShouldQueue
                 'exception' => $exception::class,
             ]);
 
-            $this->markEmailFailed(
+            $coordinator->finalizeEmailDelivery(
                 assessment: $assessment,
-                events: $events,
-                title: __('Interview email failed'),
-                description: __('Interview invitation email failed during delivery.'),
-                payload: [
-                    'exception' => $exception::class,
+                attemptId: $claimed->attemptId,
+                attributes: [
+                    'status' => AssessmentStatus::EmailFailed,
+                ],
+                events: [
+                    AssessmentEvaluationOutcome::event(
+                        type: 'email_failed',
+                        title: __('Interview email failed'),
+                        description: __('Interview invitation email failed during delivery.'),
+                        payload: [
+                            'exception' => $exception::class,
+                        ],
+                    ),
                 ],
             );
 
             return;
         }
 
-        $assessment->update([
-            'status' => AssessmentStatus::EmailSent,
-            'email_sent_at' => now(),
-        ]);
-
-        $events->record(
+        $finalized = $coordinator->finalizeEmailDelivery(
             assessment: $assessment,
-            type: 'email_sent',
-            title: __('Interview email sent'),
-            description: __('Interview invitation email was sent to the candidate.'),
-            payload: [
-                'recipient' => $assessment->user->email,
-                'subject' => $assessment->approved_email_subject,
+            attemptId: $claimed->attemptId,
+            attributes: [
+                'status' => AssessmentStatus::EmailSent,
+                'email_sent_at' => now(),
+            ],
+            events: [
+                AssessmentEvaluationOutcome::event(
+                    type: 'email_sent',
+                    title: __('Interview email sent'),
+                    description: __('Interview invitation email was sent to the candidate.'),
+                    payload: [
+                        'recipient' => $assessment->user->email,
+                        'subject' => $assessment->approved_email_subject,
+                    ],
+                ),
             ],
         );
+
+        if (! $finalized) {
+            throw new LogicException('Interview invitation email was sent but could not be finalized.');
+        }
     }
 
     /**
@@ -126,36 +137,5 @@ class SendInterviewInvitationEmail implements ShouldQueue
     public function backoff(): array
     {
         return [1, 5, 10];
-    }
-
-    private function assessmentIsSendable(Assessment $assessment): bool
-    {
-        return $assessment->status === AssessmentStatus::Approved
-            && filled($assessment->approved_email_subject)
-            && filled($assessment->approved_email_body)
-            && filled($assessment->user?->email);
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function markEmailFailed(
-        Assessment $assessment,
-        AssessmentEventRecorder $events,
-        string $title,
-        string $description,
-        array $payload,
-    ): void {
-        $assessment->update([
-            'status' => AssessmentStatus::EmailFailed,
-        ]);
-
-        $events->record(
-            assessment: $assessment,
-            type: 'email_failed',
-            title: $title,
-            description: $description,
-            payload: $payload,
-        );
     }
 }

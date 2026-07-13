@@ -39,9 +39,9 @@ class ExamSessionFinalizer
         bool $allowIncompleteAnswers = false,
     ): Assessment {
         [$assessment, $shouldQueueProcessing] = DB::transaction(function () use ($session, $campaign, $resume, $submissionReason, $status, $allowIncompleteAnswers): array {
-            $lockedSession = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
             $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
             Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
+            $lockedSession = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
 
             if ($lockedSession->campaign_id !== $lockedCampaign->id
                 || $lockedCampaign->status !== CampaignStatus::Active
@@ -93,7 +93,7 @@ class ExamSessionFinalizer
             ]);
         }
 
-        $this->syncSectionExpiry($session, $campaign);
+        $this->syncSectionExpiry($session, $campaign, $allowIncompleteAnswers);
 
         if (! $allowIncompleteAnswers) {
             $this->assertReadyToSubmit($session, $campaign);
@@ -112,7 +112,9 @@ class ExamSessionFinalizer
         $this->storeResume($session, $resume);
         $session->refresh();
 
-        if ($session->resume_path === null) {
+        $allowsResumeLess = $this->allowsResumeLessAutoSubmit($submissionReason, $allowIncompleteAnswers);
+
+        if ($session->resume_path === null && ! $allowsResumeLess) {
             throw ValidationException::withMessages([
                 'resume' => __('Upload your resume PDF before submitting.'),
             ]);
@@ -245,20 +247,23 @@ class ExamSessionFinalizer
                 'question_count' => $questions->count(),
                 'submission_reason' => $session->submission_reason,
                 'warning_count' => $session->warning_count,
+                'resume_uploaded' => filled($assessment->resume_path),
             ],
             actor: $user instanceof User ? $user : null,
         );
 
-        $this->events->record(
-            assessment: $assessment,
-            type: 'resume_uploaded',
-            title: __('Resume uploaded'),
-            description: __('Candidate uploaded a resume PDF for screening.'),
-            payload: [
-                'original_name' => $assessment->resume_original_name,
-            ],
-            actor: $user instanceof User ? $user : null,
-        );
+        if (filled($assessment->resume_path)) {
+            $this->events->record(
+                assessment: $assessment,
+                type: 'resume_uploaded',
+                title: __('Resume uploaded'),
+                description: __('Candidate uploaded a resume PDF for screening.'),
+                payload: [
+                    'original_name' => $assessment->resume_original_name,
+                ],
+                actor: $user instanceof User ? $user : null,
+            );
+        }
 
         if ($session->warning_count > 0 || ($session->integrity_events ?? []) !== []) {
             $this->events->record(
@@ -277,7 +282,7 @@ class ExamSessionFinalizer
     private function queueAssessmentProcessing(Assessment $assessment): void
     {
         Bus::chain([
-            new ScreenResumeWithAi($assessment),
+            (new ScreenResumeWithAi($assessment))->afterCommit(),
             new EvaluateAssessmentWithAi($assessment),
         ])->dispatch();
 
@@ -305,7 +310,7 @@ class ExamSessionFinalizer
             ->values();
     }
 
-    private function syncSectionExpiry(ExamSession $session, Campaign $campaign): void
+    private function syncSectionExpiry(ExamSession $session, Campaign $campaign, bool $allowIncompleteAnswers = false): void
     {
         if (! $session->isActive() || $session->current_section_id === null) {
             return;
@@ -323,15 +328,43 @@ class ExamSessionFinalizer
 
         $section = $this->currentSectionOrFail($session, $campaign);
 
-        try {
-            $this->assertSectionAnswersComplete($session, $section);
-        } catch (ValidationException) {
-            throw ValidationException::withMessages([
-                'session' => __('Time expired for this section. Answer every question before the timer ends.'),
-            ]);
+        if ($this->sectionAnswersAreComplete($session, $section)) {
+            $this->completeSectionAndAdvance($session, $campaign, $section);
+
+            return;
         }
 
-        $this->completeSectionAndAdvance($session, $campaign, $section);
+        // Incomplete auto-submit paths must not re-validate or soft-lock on expiry.
+        if ($allowIncompleteAnswers) {
+            return;
+        }
+    }
+
+    private function allowsResumeLessAutoSubmit(?string $submissionReason, bool $allowIncompleteAnswers): bool
+    {
+        if (! $allowIncompleteAnswers) {
+            return false;
+        }
+
+        return in_array($submissionReason, [
+            'integrity_max_warnings',
+            'section_timer_expired',
+        ], true);
+    }
+
+    private function sectionAnswersAreComplete(ExamSession $session, CampaignSection $section): bool
+    {
+        $drafts = $session->answer_drafts ?? [];
+
+        foreach ($this->approvedQuestionsForSection($section) as $question) {
+            $answer = $drafts[(string) $question->id] ?? null;
+
+            if (! is_string($answer) || trim($answer) === '') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

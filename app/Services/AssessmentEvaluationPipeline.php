@@ -19,29 +19,29 @@ class AssessmentEvaluationPipeline
         private AssessmentThreshold $threshold,
         private DeterministicAssessmentGrader $deterministicGrader,
         private CandidateRankingCalculator $rankingCalculator,
-        private AssessmentEventRecorder $events,
+        private AssessmentExternalWorkCoordinator $coordinator,
     ) {}
 
     public function evaluate(Assessment $assessment): ?Assessment
     {
         $assessment = $assessment->fresh(['campaign']);
 
-        if ($assessment === null) {
+        if ($assessment === null
+            || ! $assessment->status->isEvaluationProcessing()
+            || blank($assessment->evaluation_attempt_id)) {
             return null;
         }
 
+        $attemptId = $assessment->evaluation_attempt_id;
+        $outcome = $this->compute($assessment);
+
+        return $this->coordinator->finalizeEvaluation($assessment, $attemptId, $outcome);
+    }
+
+    public function compute(Assessment $assessment): AssessmentEvaluationOutcome
+    {
+        $assessment = $assessment->fresh(['campaign']) ?? $assessment;
         $passingScore = $this->threshold->passingScoreFor($assessment);
-
-        $assessment->update([
-            'status' => AssessmentStatus::Evaluating,
-        ]);
-
-        $this->events->record(
-            assessment: $assessment,
-            type: 'evaluation_started',
-            title: __('Assessment evaluation started'),
-            description: __('The queued AI evaluation job started processing answers.'),
-        );
 
         try {
             $result = $this->evaluator->evaluate($assessment);
@@ -53,33 +53,20 @@ class AssessmentEvaluationPipeline
                 'exception' => $exception::class,
             ]);
 
-            $assessment->update([
-                'status' => AssessmentStatus::EvaluationFailed,
-            ]);
-
-            $this->events->record(
-                assessment: $assessment,
-                type: 'evaluation_failed',
-                title: __('Assessment evaluation failed'),
-                description: __('The AI evaluator failed and the assessment needs retry or manual follow-up.'),
-                payload: [
-                    'exception' => $exception::class,
-                ],
-            );
-
-            return $assessment->fresh();
+            return AssessmentEvaluationOutcome::failure($exception::class);
         }
 
-        $this->events->record(
-            assessment: $assessment,
-            type: 'qwen_essay_evaluation_completed',
-            title: __('Qwen essay evaluation completed'),
-            description: __('Qwen returned a validated structured assessment evaluation.'),
-            payload: [
-                'score' => $result->score,
-                'email_draft_present' => filled($result->emailSubject) && filled($result->emailBody),
-            ],
-        );
+        $events = [
+            AssessmentEvaluationOutcome::event(
+                type: 'qwen_essay_evaluation_completed',
+                title: __('Qwen essay evaluation completed'),
+                description: __('Qwen returned a validated structured assessment evaluation.'),
+                payload: [
+                    'score' => $result->score,
+                    'email_draft_present' => filled($result->emailSubject) && filled($result->emailBody),
+                ],
+            ),
+        ];
 
         $deterministicBreakdown = $this->deterministicGrader->breakdown($assessment);
         $mcqScore = $deterministicBreakdown['score'];
@@ -90,8 +77,7 @@ class AssessmentEvaluationPipeline
         $criticBlocksAutopilotApproval = false;
         $criticResult = null;
 
-        $this->events->record(
-            assessment: $assessment,
+        $events[] = AssessmentEvaluationOutcome::event(
             type: 'deterministic_grading_completed',
             title: __('Deterministic grading completed'),
             description: __('Objective answer snapshots were graded without AI where available.'),
@@ -101,8 +87,7 @@ class AssessmentEvaluationPipeline
             ],
         );
 
-        $this->events->record(
-            assessment: $assessment,
+        $events[] = AssessmentEvaluationOutcome::event(
             type: 'ranking_calculated',
             title: __('Candidate ranking calculated'),
             description: __('Backend ranking score was calculated from available score components.'),
@@ -127,8 +112,7 @@ class AssessmentEvaluationPipeline
             $criticBlocksAutopilotApproval = $criticResult->blocksAutopilotApproval();
             $needsManualReview = $needsManualReview || $criticResult->manualReviewRequired;
 
-            $this->events->record(
-                assessment: $assessment,
+            $events[] = AssessmentEvaluationOutcome::event(
                 type: 'critic_completed',
                 title: __('Critic review completed'),
                 description: __('Qwen critic checked the assessment package for consistency and safety.'),
@@ -151,8 +135,7 @@ class AssessmentEvaluationPipeline
             $criticBlocksAutopilotApproval = true;
             $criticPayload = $this->failedCriticPayload($exception);
 
-            $this->events->record(
-                assessment: $assessment,
+            $events[] = AssessmentEvaluationOutcome::event(
                 type: 'critic_failed',
                 title: __('Critic review failed'),
                 description: __('Critic pass failed and the assessment requires manual review.'),
@@ -170,24 +153,8 @@ class AssessmentEvaluationPipeline
             $criticBlocksAutopilotApproval,
         );
 
-        $assessment->update([
-            'ai_score' => $result->score,
-            'essay_score' => $result->score,
-            'mcq_score' => $mcqScore,
-            'ranking_score' => $ranking['score'],
-            'ranking_payload' => $ranking['payload'],
-            'critic_payload' => $criticPayload,
-            'needs_manual_review' => $needsManualReview,
-            'ai_justification' => $result->justification,
-            'ai_email_subject' => $emailSubject,
-            'ai_email_body' => $emailBody,
-            'evaluated_at' => now(),
-            'status' => $status,
-        ]);
-
         if (filled($emailSubject) && filled($emailBody)) {
-            $this->events->record(
-                assessment: $assessment,
+            $events[] = AssessmentEvaluationOutcome::event(
                 type: 'draft_email_generated',
                 title: __('Draft interview email prepared'),
                 description: __('A draft interview email is ready for Admin review.'),
@@ -197,8 +164,7 @@ class AssessmentEvaluationPipeline
             );
         }
 
-        $this->events->record(
-            assessment: $assessment,
+        $events[] = AssessmentEvaluationOutcome::event(
             type: 'evaluation_completed',
             title: __('Assessment evaluation completed'),
             description: __('Assessment scores, ranking, critic result, and review status were saved.'),
@@ -211,7 +177,26 @@ class AssessmentEvaluationPipeline
             ],
         );
 
-        return $assessment->fresh();
+        return new AssessmentEvaluationOutcome(
+            failed: false,
+            attributes: [
+                'ai_score' => $result->score,
+                'essay_score' => $result->score,
+                'mcq_score' => $mcqScore,
+                'ranking_score' => $ranking['score'],
+                'ranking_payload' => $ranking['payload'],
+                'critic_payload' => $criticPayload,
+                'needs_manual_review' => $needsManualReview,
+                'ai_justification' => $result->justification,
+                'ai_email_subject' => $emailSubject,
+                'ai_email_body' => $emailBody,
+                'evaluated_at' => now(),
+                'status' => $status,
+            ],
+            events: $events,
+            evaluation: $result,
+            critic: $criticResult,
+        );
     }
 
     /**
