@@ -14,10 +14,8 @@ import CampaignCloneController from '@/actions/App/Http/Controllers/Admin/Campai
 import CampaignController from '@/actions/App/Http/Controllers/Admin/CampaignController';
 import CampaignForm from '@/components/admin/campaign-form';
 import InputError from '@/components/input-error';
-import {
-    PaginationControls,
-    type Paginated,
-} from '@/components/pagination-controls';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -360,7 +358,8 @@ export default function AdminCampaignsIndex({
                                                                         );
                                                                     }}
                                                                 >
-                                                                    Edit campaign
+                                                                    Edit
+                                                                    campaign
                                                                 </DropdownMenuItem>
                                                             ) : null}
                                                             <DropdownMenuItem
@@ -375,7 +374,8 @@ export default function AdminCampaignsIndex({
                                                                     );
                                                                 }}
                                                             >
-                                                                Clone as new draft
+                                                                Clone as new
+                                                                draft
                                                             </DropdownMenuItem>
                                                         </DropdownMenuGroup>
                                                         {!campaign.definition_frozen ? (
@@ -392,7 +392,8 @@ export default function AdminCampaignsIndex({
                                                                         );
                                                                     }}
                                                                 >
-                                                                    Delete campaign
+                                                                    Delete
+                                                                    campaign
                                                                 </DropdownMenuItem>
                                                             </>
                                                         ) : null}

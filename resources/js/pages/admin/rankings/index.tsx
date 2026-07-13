@@ -2,10 +2,8 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { Inbox, Medal } from 'lucide-react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import AssessmentStatusBadge from '@/components/assessment-status-badge';
-import {
-    PaginationControls,
-    type Paginated,
-} from '@/components/pagination-controls';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';

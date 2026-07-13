@@ -129,6 +129,7 @@ test('candidate exam page returns active section state', function () {
             'prompt' => 'Explain dependency injection.',
             'status' => QuestionStatus::Approved,
         ]);
+    assignCandidateToCampaignExam($candidate, $campaign);
     $session = app(ExamSessionService::class)->startSession($candidate, $campaign);
 
     $page = app(CandidateExamPage::class)->for($candidate, $campaign);
@@ -161,6 +162,7 @@ test('candidate exam page returns ready to finalize state', function () {
         ->create([
             'status' => QuestionStatus::Approved,
         ]);
+    assignCandidateToCampaignExam($candidate, $campaign);
     $sessions = app(ExamSessionService::class);
     $session = $sessions->startSession($candidate, $campaign);
 

@@ -19,7 +19,11 @@ export function PaginationControls({
 }: {
     paginator: Pick<
         Paginated<unknown>,
-        'current_page' | 'last_page' | 'total' | 'prev_page_url' | 'next_page_url'
+        | 'current_page'
+        | 'last_page'
+        | 'total'
+        | 'prev_page_url'
+        | 'next_page_url'
     >;
     only?: string[];
 }) {

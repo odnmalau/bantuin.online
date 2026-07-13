@@ -558,7 +558,6 @@ Implementation status: `[x]` Campaign as hiring context (role/JD/skills, thresho
 
 - `question_review`: usually after AI assessment generator (Phase 11).
 - Campaign threshold: Phase 7 (`passingScoreFor`).
-- Active demo campaign: `DemoCampaignSeeder` + `DemoSeederTest`.
 
 Acceptance criteria:
 
