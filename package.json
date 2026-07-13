@@ -10,7 +10,7 @@
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",
-        "lint:check": "eslint .",
+        "lint:check": "php artisan wayfinder:generate --with-form --no-interaction && eslint .",
         "types:check": "php artisan wayfinder:generate --with-form --no-interaction && tsc --noEmit"
     },
     "devDependencies": {
