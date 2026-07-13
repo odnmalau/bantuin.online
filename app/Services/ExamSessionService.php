@@ -35,7 +35,7 @@ class ExamSessionService
 
     public function startSession(User $user, Campaign $campaign): ExamSession
     {
-        return DB::transaction(function () use ($user, $campaign): ExamSession {
+        $session = DB::transaction(function () use ($user, $campaign): ExamSession {
             $team = Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
 
             if ($team->status !== TeamStatus::Active) {
@@ -53,9 +53,7 @@ class ExamSessionService
             $existing = $this->findActiveSession($user, $campaign);
 
             if ($existing !== null) {
-                $this->syncSectionExpiry($existing, $campaign);
-
-                return $existing->fresh();
+                return $existing;
             }
 
             $sections = $this->orderedExamSections($campaign);
@@ -81,6 +79,10 @@ class ExamSessionService
                 'answer_drafts' => [],
             ]);
         });
+
+        $this->syncSectionExpiry($session, $campaign);
+
+        return $session->fresh();
     }
 
     /**
@@ -308,34 +310,69 @@ class ExamSessionService
             'assessment' => null,
         ];
 
-        if (! $session->isActive() || $session->current_section_id === null) {
-            return $noop;
-        }
+        $decision = DB::transaction(function () use ($session, $campaign, $noop): array {
+            $locked = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
 
-        if (! (bool) config('assessment.secure_exam.enforce_section_timers', true)) {
-            return $noop;
-        }
+            if (! $locked->isActive()) {
+                if ($session->isActive() && $locked->assessment_id !== null) {
+                    return [
+                        'advanced' => false,
+                        'finalized' => true,
+                        'assessment' => $locked->assessment()->firstOrFail(),
+                    ];
+                }
 
-        $expiresAt = $session->current_section_expires_at;
+                return $noop;
+            }
 
-        if ($expiresAt === null || $expiresAt->isFuture()) {
-            return $noop;
-        }
+            if ($session->current_section_id !== null
+                && $session->current_section_id !== $locked->current_section_id
+                && in_array($session->current_section_id, $locked->completed_section_ids ?? [], true)) {
+                return [
+                    'advanced' => true,
+                    'finalized' => false,
+                    'assessment' => null,
+                ];
+            }
 
-        $section = $this->currentSectionOrFail($session, $campaign);
+            if ($locked->current_section_id === null) {
+                return $noop;
+            }
 
-        if ($this->sectionAnswersAreComplete($session, $section)) {
-            $this->completeSectionAndAdvance($session, $campaign, $section);
+            if (! (bool) config('assessment.secure_exam.enforce_section_timers', true)) {
+                return $noop;
+            }
 
-            return [
-                'advanced' => true,
-                'finalized' => false,
-                'assessment' => null,
+            $expiresAt = $locked->current_section_expires_at;
+
+            if ($expiresAt === null || $expiresAt->isFuture()) {
+                return $noop;
+            }
+
+            $section = $this->currentSectionOrFail($locked, $campaign);
+
+            if ($this->sectionAnswersAreComplete($locked, $section)) {
+                $this->completeSectionAndAdvance($locked, $campaign, $section);
+
+                return [
+                    'advanced' => true,
+                    'finalized' => false,
+                    'assessment' => null,
+                ];
+            }
+
+            return $noop + [
+                'needs_finalization' => true,
+                'session' => $locked,
             ];
+        });
+
+        if (! ($decision['needs_finalization'] ?? false)) {
+            return $decision;
         }
 
         $assessment = $this->finalizeSession(
-            $session,
+            $decision['session'],
             $campaign,
             submissionReason: 'section_timer_expired',
             status: ExamSessionStatus::AutoSubmitted,

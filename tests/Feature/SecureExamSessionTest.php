@@ -8,8 +8,11 @@ use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\ExamSession;
 use App\Models\User;
 use App\QuestionStatus;
+use App\Services\ExamSessionService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
 
@@ -230,6 +233,96 @@ test('complete section timer expiry advances only to the next section', function
         ->current_section_id->toBe($secondSection->id)
         ->completed_section_ids->toBe([$firstSection->id])
         ->and(Assessment::query()->whereBelongsTo($candidate)->exists())->toBeFalse();
+});
+
+test('section expiry uses fresh locked answers instead of a stale session model', function () {
+    Bus::fake();
+
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create([
+        'duration_minutes' => 5,
+    ]);
+    $question = CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+    $staleSession = startCandidateExamSession($candidate, $campaign);
+
+    ExamSession::query()->whereKey($staleSession->id)->update([
+        'current_section_expires_at' => now()->subMinute(),
+        'answer_drafts' => [
+            (string) $question->id => 'Completed before expiry.',
+        ],
+    ]);
+
+    $result = app(ExamSessionService::class)->syncSectionExpiry($staleSession, $campaign);
+
+    expect($result)
+        ->toMatchArray([
+            'advanced' => true,
+            'finalized' => false,
+            'assessment' => null,
+        ])
+        ->and($staleSession->fresh())
+        ->status->toBe(ExamSessionStatus::InProgress)
+        ->current_section_id->toBeNull()
+        ->completed_section_ids->toBe([$section->id])
+        ->and(Assessment::query()->whereBelongsTo($candidate)->exists())->toBeFalse();
+});
+
+test('duplicate stale expiry requests do not reset the next section timer', function () {
+    $this->travelTo(Carbon::parse('2026-07-13 10:00:00'));
+
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $firstSection = CampaignSection::factory()->for($campaign)->create([
+        'duration_minutes' => 5,
+        'sort_order' => 1,
+    ]);
+    $secondSection = CampaignSection::factory()->for($campaign)->create([
+        'duration_minutes' => 10,
+        'sort_order' => 2,
+    ]);
+    $firstQuestion = CampaignQuestion::factory()->for($campaign)->for($firstSection, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+    CampaignQuestion::factory()->for($campaign)->for($secondSection, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+    $session = startCandidateExamSession($candidate, $campaign);
+    $session->update([
+        'current_section_expires_at' => now()->subMinute(),
+        'answer_drafts' => [
+            (string) $firstQuestion->id => 'Completed before expiry.',
+        ],
+    ]);
+    $firstRequestSession = $session->fresh();
+    $duplicateRequestSession = $session->fresh();
+    $sessions = app(ExamSessionService::class);
+
+    $firstResult = $sessions->syncSectionExpiry($firstRequestSession, $campaign);
+    $advancedSession = $session->fresh();
+    $nextSectionStartedAt = $advancedSession->current_section_started_at;
+    $nextSectionExpiresAt = $advancedSession->current_section_expires_at;
+
+    $this->travel(2)->minutes();
+    $duplicateResult = $sessions->syncSectionExpiry($duplicateRequestSession, $campaign);
+    $afterDuplicate = $session->fresh();
+
+    expect($firstResult['advanced'])->toBeTrue()
+        ->and($duplicateResult)
+        ->toMatchArray([
+            'advanced' => true,
+            'finalized' => false,
+            'assessment' => null,
+        ])
+        ->and($afterDuplicate)
+        ->current_section_id->toBe($secondSection->id)
+        ->completed_section_ids->toBe([$firstSection->id])
+        ->and($afterDuplicate->current_section_started_at->equalTo($nextSectionStartedAt))->toBeTrue()
+        ->and($afterDuplicate->current_section_expires_at->equalTo($nextSectionExpiresAt))->toBeTrue();
 });
 
 test('integrity violations increment warning count on the session', function () {
