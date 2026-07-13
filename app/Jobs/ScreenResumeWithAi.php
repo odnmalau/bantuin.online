@@ -19,7 +19,7 @@ class ScreenResumeWithAi implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $timeout = 45;
+    public int $timeout;
 
     public readonly ?int $teamId;
 
@@ -27,6 +27,7 @@ class ScreenResumeWithAi implements ShouldQueue
     {
         $teamId = $assessment->campaign()->value('team_id');
         $this->teamId = $teamId === null ? null : (int) $teamId;
+        $this->timeout = (int) config('assessment.queue.resume_timeout');
     }
 
     /**

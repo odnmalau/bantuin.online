@@ -51,7 +51,10 @@ test('first committed decision wins when stale instances race approve then rejec
         ->and($assessment->events()->where('type', 'admin_approved')->count())->toBe(1)
         ->and($assessment->events()->where('type', 'admin_rejected')->count())->toBe(0);
 
-    Queue::assertPushed(SendInterviewInvitationEmail::class, 1);
+    Queue::assertPushed(
+        SendInterviewInvitationEmail::class,
+        fn (SendInterviewInvitationEmail $job): bool => $job->afterCommit === true,
+    );
 });
 
 test('approve creates one event and queues one email job', function () {
@@ -196,7 +199,10 @@ test('retry evaluation from evaluation failed resets and queues once', function 
         ->evaluated_at->toBeNull()
         ->and($assessment->events()->where('type', 'admin_retried_evaluation')->count())->toBe(1);
 
-    Queue::assertPushed(EvaluateAssessmentWithAi::class, 1);
+    Queue::assertPushed(
+        EvaluateAssessmentWithAi::class,
+        fn (EvaluateAssessmentWithAi $job): bool => $job->afterCommit === true,
+    );
 });
 
 test('accepted transitions write exactly one event and roll back when recording fails', function () {

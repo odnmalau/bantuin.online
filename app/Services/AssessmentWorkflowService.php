@@ -46,7 +46,7 @@ class AssessmentWorkflowService
             return $locked->fresh() ?? $locked;
         }, attempts: 3);
 
-        EvaluateAssessmentWithAi::dispatch($updated);
+        EvaluateAssessmentWithAi::dispatch($updated)->afterCommit();
 
         return $updated;
     }
@@ -88,7 +88,7 @@ class AssessmentWorkflowService
             return $locked->fresh() ?? $locked;
         }, attempts: 3);
 
-        SendInterviewInvitationEmail::dispatch($updated);
+        SendInterviewInvitationEmail::dispatch($updated)->afterCommit();
 
         return $updated;
     }
@@ -213,7 +213,7 @@ class AssessmentWorkflowService
             return $locked->fresh() ?? $locked;
         }, attempts: 3);
 
-        SendInterviewInvitationEmail::dispatch($updated);
+        SendInterviewInvitationEmail::dispatch($updated)->afterCommit();
 
         return $updated;
     }

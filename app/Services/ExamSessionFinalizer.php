@@ -282,7 +282,7 @@ class ExamSessionFinalizer
     private function queueAssessmentProcessing(Assessment $assessment): void
     {
         Bus::chain([
-            new ScreenResumeWithAi($assessment),
+            (new ScreenResumeWithAi($assessment))->afterCommit(),
             new EvaluateAssessmentWithAi($assessment),
         ])->dispatch();
 

@@ -76,7 +76,7 @@ test('exam session finalizer creates the assessment and queues processing', func
 
     Storage::disk('local')->assertExists($assessment->resume_path);
     Bus::assertChained([
-        ScreenResumeWithAi::class,
+        fn (ScreenResumeWithAi $job): bool => $job->afterCommit === true,
         EvaluateAssessmentWithAi::class,
     ]);
 

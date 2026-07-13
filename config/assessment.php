@@ -36,17 +36,29 @@ return [
         /*
          * Supported evaluation calls: initial evaluator + configured repair attempts + critic.
          * attemptSeconds = qwen_timeout * transport_attempt_count
+         * resume_timeout must exceed one attemptSeconds budget + processing margin.
          * evaluation_timeout must exceed supported_calls * attemptSeconds + processing margin.
-         * database/redis retry_after must exceed evaluation_timeout + safety margin.
+         * queue retry_after/visibility and stale_after must exceed all job timeouts.
          */
+        'resume_processing_margin' => (int) env('ASSESSMENT_RESUME_PROCESSING_MARGIN', 30),
         'evaluation_processing_margin' => (int) env('ASSESSMENT_EVALUATION_PROCESSING_MARGIN', 30),
         'retry_after_safety_margin' => (int) env('ASSESSMENT_QUEUE_RETRY_AFTER_SAFETY_MARGIN', 60),
+        'resume_timeout' => (int) env(
+            'ASSESSMENT_RESUME_JOB_TIMEOUT',
+            ((int) env('QWEN_TIMEOUT', 30)
+                * (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2))
+            + (int) env('ASSESSMENT_RESUME_PROCESSING_MARGIN', 30),
+        ),
         'evaluation_timeout' => (int) env(
             'ASSESSMENT_EVALUATION_JOB_TIMEOUT',
             ((int) env('QWEN_TIMEOUT', 30)
                 * (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2)
                 * (1 + (int) env('ASSESSMENT_EVALUATION_REPAIR_ATTEMPTS', 1) + 1))
             + (int) env('ASSESSMENT_EVALUATION_PROCESSING_MARGIN', 30),
+        ),
+        'external_work_stale_after' => (int) env(
+            'ASSESSMENT_EXTERNAL_WORK_STALE_AFTER',
+            (int) env('ASSESSMENT_QUEUE_RETRY_AFTER', 270),
         ),
     ],
 

@@ -6,6 +6,7 @@ use App\AssessmentStatus;
 use App\Models\Assessment;
 use App\Models\Team;
 use App\TeamStatus;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -19,7 +20,7 @@ class AssessmentExternalWorkCoordinator
             $locked = $this->lockAssessmentForTeam($assessment, $expectedTeamId);
 
             if ($locked === null
-                || $locked->status !== AssessmentStatus::Submitted
+                || ! $this->resumeScreeningIsClaimable($locked)
                 || blank($locked->resume_path)) {
                 return null;
             }
@@ -87,7 +88,7 @@ class AssessmentExternalWorkCoordinator
         return DB::transaction(function () use ($assessment, $expectedTeamId): ?ClaimedAssessmentWork {
             $locked = $this->lockAssessmentForTeam($assessment, $expectedTeamId);
 
-            if ($locked === null || ! $locked->status->isEvaluationClaimable()) {
+            if ($locked === null || ! $this->evaluationIsClaimable($locked)) {
                 return null;
             }
 
@@ -233,44 +234,6 @@ class AssessmentExternalWorkCoordinator
     }
 
     /**
-     * Mark a stuck EmailSending attempt as failed without sending mail.
-     */
-    public function abandonEmailDelivery(Assessment $assessment, ?int $expectedTeamId): bool
-    {
-        return DB::transaction(function () use ($assessment, $expectedTeamId): bool {
-            $locked = $this->lockAssessmentForTeam($assessment, $expectedTeamId, ['user', 'campaign.team']);
-
-            if ($locked === null
-                || $locked->status !== AssessmentStatus::EmailSending
-                || blank($locked->email_delivery_attempt_id)) {
-                return false;
-            }
-
-            $attemptId = $locked->email_delivery_attempt_id;
-
-            $locked->update([
-                'status' => AssessmentStatus::EmailFailed,
-                'email_delivery_attempt_id' => null,
-                'email_delivery_started_at' => null,
-            ]);
-
-            $this->events->record(
-                assessment: $locked,
-                type: 'email_failed',
-                title: __('Interview email outcome unknown'),
-                description: __('Interview email delivery was interrupted and must be retried manually.'),
-                payload: [
-                    'outcome' => 'unknown',
-                    'attempt_id' => $attemptId,
-                    'requires_manual_retry' => true,
-                ],
-            );
-
-            return true;
-        }, attempts: 3);
-    }
-
-    /**
      * @param  list<string>  $with
      */
     private function lockAssessmentForTeam(Assessment $assessment, ?int $expectedTeamId, array $with = ['campaign.team']): ?Assessment
@@ -307,5 +270,32 @@ class AssessmentExternalWorkCoordinator
         return filled($assessment->approved_email_subject)
             && filled($assessment->approved_email_body)
             && filled($assessment->user?->email);
+    }
+
+    private function resumeScreeningIsClaimable(Assessment $assessment): bool
+    {
+        return $assessment->status === AssessmentStatus::Submitted
+            || ($assessment->status === AssessmentStatus::ResumeProcessing
+                && $this->attemptIsStale(
+                    $assessment->resume_screening_attempt_id,
+                    $assessment->resume_screening_started_at,
+                ));
+    }
+
+    private function evaluationIsClaimable(Assessment $assessment): bool
+    {
+        return $assessment->status->isEvaluationClaimable()
+            || ($assessment->status->isEvaluationProcessing()
+                && $this->attemptIsStale(
+                    $assessment->evaluation_attempt_id,
+                    $assessment->evaluation_started_at,
+                ));
+    }
+
+    private function attemptIsStale(?string $attemptId, ?CarbonInterface $startedAt): bool
+    {
+        $staleAfter = max(1, (int) config('assessment.queue.external_work_stale_after'));
+
+        return filled($attemptId) && $startedAt?->lte(now()->subSeconds($staleAfter));
     }
 }

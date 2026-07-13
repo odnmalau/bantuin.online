@@ -12,6 +12,7 @@ use App\Models\Campaign;
 use App\Models\User;
 use App\Services\Ai\QwenResumeScreener;
 use App\Services\Ai\ResumeScreeningResult;
+use App\Services\AssessmentEvaluationOutcome;
 use App\Services\AssessmentEvaluationPipeline;
 use App\Services\AssessmentExternalWorkCoordinator;
 use App\Services\ClaimedAssessmentWork;
@@ -76,7 +77,9 @@ test('resume screening extractor and screener do not open nested transactions', 
         ->and($assessment->resume_screening_attempt_id)->toBeNull();
 });
 
-test('stale resume screening attempt cannot overwrite a newer claim', function () {
+test('stale resume screening attempt is reclaimed and cannot overwrite the newer claim', function () {
+    config()->set('assessment.queue.external_work_stale_after', 60);
+
     $assessment = Assessment::factory()
         ->for(User::factory())
         ->create([
@@ -95,13 +98,12 @@ test('stale resume screening attempt cannot overwrite a newer claim', function (
     expect($first)->not->toBeNull();
 
     Assessment::query()->whereKey($assessment->id)->update([
-        'status' => AssessmentStatus::Submitted,
-        'resume_screening_attempt_id' => null,
-        'resume_screening_started_at' => null,
+        'resume_screening_started_at' => now()->subSeconds(61),
     ]);
     $second = $coordinator->claimResumeScreening($assessment->fresh(), (int) $teamId);
 
-    expect($second)->not->toBeNull();
+    expect($second)->not->toBeNull()
+        ->and($second->attemptId)->not->toBe($first->attemptId);
     expect($coordinator->finalizeResumeScreening(
         assessment: $assessment->fresh(),
         attemptId: $first->attemptId,
@@ -122,6 +124,34 @@ test('stale resume screening attempt cannot overwrite a newer claim', function (
         events: [],
     ))->toBeTrue();
     expect($assessment->refresh()->resume_text)->toBe('fresh');
+});
+
+test('live processing claims cannot be stolen but stale evaluation claims can be reclaimed', function () {
+    config()->set('assessment.queue.external_work_stale_after', 60);
+
+    $assessment = Assessment::factory()
+        ->for(User::factory())
+        ->create(['status' => AssessmentStatus::Submitted]);
+    $teamId = $assessment->campaign->team_id;
+    $coordinator = app(AssessmentExternalWorkCoordinator::class);
+
+    $first = $coordinator->claimEvaluation($assessment, $teamId);
+
+    expect($first)->not->toBeNull()
+        ->and($coordinator->claimEvaluation($assessment->fresh(), $teamId))->toBeNull();
+
+    $assessment->update(['evaluation_started_at' => now()->subSeconds(61)]);
+    $second = $coordinator->claimEvaluation($assessment->fresh(), $teamId);
+
+    expect($second)->not->toBeNull()
+        ->and($second->attemptId)->not->toBe($first->attemptId)
+        ->and($assessment->refresh()->evaluation_attempt_id)->toBe($second->attemptId);
+
+    $staleOutcome = AssessmentEvaluationOutcome::failure(RuntimeException::class);
+
+    expect($coordinator->finalizeEvaluation($assessment->fresh(), $first->attemptId, $staleOutcome))->toBeNull()
+        ->and($assessment->refresh()->status)->toBe(AssessmentStatus::Evaluating)
+        ->and($assessment->evaluation_attempt_id)->toBe($second->attemptId);
 });
 
 test('evaluation compute runs outside transactions and stale attempts are ignored', function () {
@@ -230,25 +260,29 @@ test('duplicate interview email jobs send once and post send finalize failure do
 
     expect($assessment->refresh()->status)->toBe(AssessmentStatus::EmailSending);
 
+    $liveAttemptId = $assessment->refresh()->email_delivery_attempt_id;
+
     app()->call([(new SendInterviewInvitationEmail($assessment->fresh())), 'handle']);
 
     Mail::assertSent(InterviewInvitationMail::class, 2);
     expect($assessment->refresh())
-        ->status->toBe(AssessmentStatus::EmailFailed)
-        ->and($assessment->events()->where('type', 'email_failed')->latest('id')->first()?->payload)
-        ->toMatchArray([
-            'outcome' => 'unknown',
-            'requires_manual_retry' => true,
-        ]);
+        ->status->toBe(AssessmentStatus::EmailSending)
+        ->email_delivery_attempt_id->toBe($liveAttemptId)
+        ->and($assessment->events()->where('type', 'email_failed')->count())->toBe(0);
 });
 
-test('evaluation job timeout is driven by assessment queue budget config', function () {
+test('external work job timeouts are driven by assessment queue budget config', function () {
     $assessment = Assessment::factory()->create([
         'status' => AssessmentStatus::Submitted,
     ]);
 
     $job = new EvaluateAssessmentWithAi($assessment);
+    $resumeJob = new ScreenResumeWithAi($assessment);
 
     expect($job->timeout)->toBe((int) config('assessment.queue.evaluation_timeout'))
-        ->and($job->timeout)->toBeGreaterThan(30);
+        ->and($job->timeout)->toBeGreaterThan(30)
+        ->and($resumeJob->timeout)->toBe((int) config('assessment.queue.resume_timeout'))
+        ->and($resumeJob->timeout)->toBeGreaterThan(
+            (int) config('assessment.qwen.timeout') * (int) config('assessment.qwen.transport_attempt_count'),
+        );
 });
