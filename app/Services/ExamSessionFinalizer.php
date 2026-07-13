@@ -39,9 +39,9 @@ class ExamSessionFinalizer
         bool $allowIncompleteAnswers = false,
     ): Assessment {
         [$assessment, $shouldQueueProcessing] = DB::transaction(function () use ($session, $campaign, $resume, $submissionReason, $status, $allowIncompleteAnswers): array {
-            $lockedSession = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
             $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
             Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
+            $lockedSession = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
 
             if ($lockedSession->campaign_id !== $lockedCampaign->id
                 || $lockedCampaign->status !== CampaignStatus::Active

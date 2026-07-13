@@ -11,6 +11,7 @@ use App\QuestionType;
 use App\Services\Ai\Concerns\ConfiguresQwenAssessmentAgent;
 use App\Services\Ai\Concerns\LimitsGeneratedQuestionCount;
 use App\Services\Ai\Concerns\NormalizesGeneratedQuestions;
+use App\Services\CampaignLifecycleService;
 use App\TeamStatus;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,8 @@ class QwenAssessmentGenerator
     use ConfiguresQwenAssessmentAgent;
     use LimitsGeneratedQuestionCount;
     use NormalizesGeneratedQuestions;
+
+    public function __construct(private CampaignLifecycleService $lifecycle) {}
 
     /**
      * Generate draft sections and questions for a campaign.
@@ -54,6 +57,7 @@ class QwenAssessmentGenerator
 
         return DB::transaction(function () use ($campaign, $expectedTeamId, $sections, $options): int {
             $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+            $this->lifecycle->assertDefinitionEditable($lockedCampaign);
             $this->ensureCampaignTeamIsWritable($lockedCampaign, $expectedTeamId, true);
 
             return $this->persistDrafts($lockedCampaign, $sections, $options);

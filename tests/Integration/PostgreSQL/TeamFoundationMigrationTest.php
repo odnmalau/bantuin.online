@@ -2,6 +2,10 @@
 
 use App\CampaignInvitationStatus;
 use App\ExamSessionStatus;
+use App\Models\Campaign;
+use App\Models\User;
+use App\Services\CampaignInvitationService;
+use App\Services\CampaignLifecycleService;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -507,6 +511,70 @@ test('postgresql restricts campaign deletion when invitations or exam sessions e
     } finally {
         config(['database.default' => $previousDefault]);
         DB::purge($connection);
+        dropTeamFoundationPostgresSchema($connection, $schema);
+    }
+});
+
+test('postgresql campaign row lock serializes definition writes cloning and first invitation', function () {
+    ['connection' => $connection, 'schema' => $schema] = createTeamFoundationPostgresSchema();
+    $previousDefault = config('database.default');
+    $contender = 'campaign_lock_contender';
+
+    try {
+        migrateTeamFoundationPaths($connection, allDatabaseMigrationPaths());
+        $seeded = seedModernTeamCampaign($connection, 'campaign-lock');
+        DB::connection($connection)->table('campaigns')->where('id', $seeded['campaign_id'])->update([
+            'status' => 'active',
+        ]);
+
+        config([
+            "database.connections.{$contender}" => [
+                ...config("database.connections.{$connection}"),
+                'search_path' => $schema,
+            ],
+            'database.default' => $contender,
+        ]);
+        DB::purge($contender);
+        DB::connection($contender)->statement("SET lock_timeout = '100ms'");
+
+        $locker = DB::connection($connection);
+        $locker->beginTransaction();
+        $locker->table('campaigns')->where('id', $seeded['campaign_id'])->lockForUpdate()->first();
+
+        $campaign = Campaign::query()->findOrFail($seeded['campaign_id']);
+        $actor = User::query()->findOrFail($seeded['user_id']);
+
+        expect(fn () => app(CampaignLifecycleService::class)->withEditableDefinition(
+            $campaign,
+            fn (Campaign $lockedCampaign) => $lockedCampaign->update(['title' => 'Blocked definition']),
+        ))->toThrow(QueryException::class)
+            ->and(fn () => app(CampaignLifecycleService::class)->cloneToDraft($campaign, $actor))
+            ->toThrow(QueryException::class)
+            ->and(fn () => app(CampaignInvitationService::class)->create(
+                $campaign,
+                'campaign-lock-candidate@example.com',
+                $actor,
+                sendEmail: false,
+            ))->toThrow(QueryException::class);
+
+        $locker->rollBack();
+
+        app(CampaignInvitationService::class)->create(
+            $campaign,
+            'campaign-lock-candidate@example.com',
+            $actor,
+            sendEmail: false,
+        );
+
+        expect(DB::connection($contender)->table('campaign_invitations')->count())->toBe(1)
+            ->and(DB::connection($contender)->table('campaigns')->value('title'))->not->toBe('Blocked definition');
+    } finally {
+        if (isset($locker) && $locker->transactionLevel() > 0) {
+            $locker->rollBack();
+        }
+
+        config(['database.default' => $previousDefault]);
+        DB::purge($contender);
         dropTeamFoundationPostgresSchema($connection, $schema);
     }
 });

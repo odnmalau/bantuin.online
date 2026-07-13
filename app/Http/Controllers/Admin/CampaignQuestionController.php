@@ -10,6 +10,7 @@ use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Services\Ai\QwenMcqOptionsRegenerator;
 use App\Services\Ai\QwenTextQuestionToMcqConverter;
+use App\Services\CampaignLifecycleService;
 use App\Services\DraftQuestionMutation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
@@ -21,9 +22,19 @@ class CampaignQuestionController extends Controller
     /**
      * Store a campaign question snapshot.
      */
-    public function store(StoreCampaignQuestionRequest $request, Campaign $campaign): RedirectResponse
-    {
-        $campaign->questions()->create($request->questionAttributes());
+    public function store(
+        StoreCampaignQuestionRequest $request,
+        Campaign $campaign,
+        CampaignLifecycleService $lifecycle,
+    ): RedirectResponse {
+        $campaign = $lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign) use ($request): Campaign {
+                $lockedCampaign->questions()->create($request->questionAttributes());
+
+                return $lockedCampaign;
+            },
+        );
 
         $this->flashSuccessToast(__('Question added to campaign.'));
 
@@ -33,11 +44,22 @@ class CampaignQuestionController extends Controller
     /**
      * Update a campaign question.
      */
-    public function update(UpdateCampaignQuestionRequest $request, Campaign $campaign, CampaignQuestion $question): RedirectResponse
-    {
-        $this->ensureQuestionBelongsToCampaign($campaign, $question);
+    public function update(
+        UpdateCampaignQuestionRequest $request,
+        Campaign $campaign,
+        CampaignQuestion $question,
+        CampaignLifecycleService $lifecycle,
+    ): RedirectResponse {
+        $campaign = $lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign) use ($request, $question): Campaign {
+                $lockedQuestion = CampaignQuestion::query()->whereKey($question->id)->lockForUpdate()->firstOrFail();
+                $this->ensureQuestionBelongsToCampaign($lockedCampaign, $lockedQuestion);
+                $lockedQuestion->update($request->questionAttributes());
 
-        $question->update($request->questionAttributes());
+                return $lockedCampaign;
+            },
+        );
 
         $this->flashSuccessToast(__('Question updated.'));
 
@@ -125,11 +147,21 @@ class CampaignQuestionController extends Controller
     /**
      * Delete a campaign question snapshot.
      */
-    public function destroy(Campaign $campaign, CampaignQuestion $question): RedirectResponse
-    {
-        $this->ensureQuestionBelongsToCampaign($campaign, $question);
+    public function destroy(
+        Campaign $campaign,
+        CampaignQuestion $question,
+        CampaignLifecycleService $lifecycle,
+    ): RedirectResponse {
+        $campaign = $lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign) use ($question): Campaign {
+                $lockedQuestion = CampaignQuestion::query()->whereKey($question->id)->lockForUpdate()->firstOrFail();
+                $this->ensureQuestionBelongsToCampaign($lockedCampaign, $lockedQuestion);
+                $lockedQuestion->delete();
 
-        $question->delete();
+                return $lockedCampaign;
+            },
+        );
 
         $this->flashSuccessToast(__('Question removed from campaign.'));
 

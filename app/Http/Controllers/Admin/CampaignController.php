@@ -242,7 +242,14 @@ class CampaignController extends Controller
     {
         $validated = $request->validated();
 
-        $campaign->update($validated);
+        $campaign = $this->lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign) use ($validated): Campaign {
+                $lockedCampaign->update($validated);
+
+                return $lockedCampaign;
+            },
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign updated.')]);
 
@@ -278,12 +285,19 @@ class CampaignController extends Controller
      */
     public function publish(Campaign $campaign): RedirectResponse
     {
-        $this->ensurePublishable($campaign);
+        $campaign = $this->lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign): Campaign {
+                $this->ensurePublishable($lockedCampaign);
 
-        $campaign->update([
-            'status' => CampaignStatus::Active,
-            'activated_at' => $campaign->activated_at ?? now(),
-        ]);
+                $lockedCampaign->update([
+                    'status' => CampaignStatus::Active,
+                    'activated_at' => $lockedCampaign->activated_at ?? now(),
+                ]);
+
+                return $lockedCampaign;
+            },
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign published.')]);
 

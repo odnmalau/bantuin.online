@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\CampaignInvitationStatus;
+use App\CampaignStatus;
 use App\ExamSessionStatus;
 use App\Models\Assessment;
 use App\Models\Campaign;
@@ -36,27 +38,37 @@ class ExamSessionService
     public function startSession(User $user, Campaign $campaign): ExamSession
     {
         $session = DB::transaction(function () use ($user, $campaign): ExamSession {
-            $team = Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+            $team = Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
 
-            if ($team->status !== TeamStatus::Active) {
+            if ($lockedCampaign->status !== CampaignStatus::Active || $team->status !== TeamStatus::Active) {
                 throw ValidationException::withMessages([
-                    'session' => __('This Team is not accepting new Exam Sessions.'),
+                    'session' => __('This Campaign is not accepting new Exam Sessions.'),
                 ]);
             }
 
-            if ($user->assessments()->whereBelongsTo($campaign)->exists()) {
+            if (! $lockedCampaign->invitations()
+                ->where('user_id', $user->id)
+                ->where('status', CampaignInvitationStatus::Accepted)
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'session' => __('You do not have an accepted invitation for this Campaign.'),
+                ]);
+            }
+
+            if ($user->assessments()->whereBelongsTo($lockedCampaign)->exists()) {
                 throw ValidationException::withMessages([
                     'session' => __('You have already submitted your assessment for this campaign.'),
                 ]);
             }
 
-            $existing = $this->findActiveSession($user, $campaign);
+            $existing = $this->findActiveSession($user, $lockedCampaign);
 
             if ($existing !== null) {
                 return $existing;
             }
 
-            $sections = $this->orderedExamSections($campaign);
+            $sections = $this->orderedExamSections($lockedCampaign);
 
             if ($sections->isEmpty()) {
                 throw ValidationException::withMessages([
@@ -68,7 +80,7 @@ class ExamSessionService
 
             return ExamSession::query()->create([
                 'user_id' => $user->id,
-                'campaign_id' => $campaign->id,
+                'campaign_id' => $lockedCampaign->id,
                 'status' => ExamSessionStatus::InProgress,
                 'current_section_id' => $firstSection->id,
                 'current_section_started_at' => now(),

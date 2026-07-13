@@ -12,6 +12,8 @@ use App\Services\CampaignInvitationService;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 test('admin can create a campaign exam invitation', function () {
     Mail::fake();
@@ -127,6 +129,58 @@ test('campaign exam invitation email job ignores a stale token', function () {
         ->handle(app(CampaignInvitationService::class));
 
     Mail::assertSent(CampaignExamInvitationMail::class, 1);
+});
+
+test('delivery claim serializes sending against revoke and token rotation', function () {
+    Queue::fake();
+
+    $campaign = Campaign::factory()->active()->create();
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()
+        ->for($campaign)
+        ->createWithPlainToken([
+            'sent_at' => null,
+        ]);
+    $invitations = app(CampaignInvitationService::class);
+    $deliveryClaim = (string) Str::uuid();
+
+    expect($invitations->claimEmailDelivery(
+        $invitation->id,
+        $plainToken,
+        $deliveryClaim,
+        $campaign->team_id,
+    ))->not->toBeNull()
+        ->and(fn () => $invitations->revoke($invitation->fresh()))
+        ->toThrow(ValidationException::class, 'currently being sent')
+        ->and(fn () => $invitations->resend($invitation->fresh()))
+        ->toThrow(ValidationException::class, 'currently being sent');
+
+    $invitations->releaseEmailDelivery($invitation->id, $deliveryClaim);
+    $invitations->resend($invitation->fresh());
+
+    expect($invitations->completeEmailDelivery($invitation->id, $plainToken, $deliveryClaim))->toBeFalse()
+        ->and($invitation->fresh()->sent_at)->toBeNull()
+        ->and($invitation->fresh()->token_hash)->not->toBe(hash('sha256', $plainToken));
+});
+
+test('revoked invitation cannot be claimed by a queued email job', function () {
+    Mail::fake();
+
+    $campaign = Campaign::factory()->active()->create();
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()
+        ->for($campaign)
+        ->createWithPlainToken([
+            'sent_at' => null,
+        ]);
+    $job = new SendCampaignExamInvitationEmail($invitation, $plainToken);
+
+    app(CampaignInvitationService::class)->revoke($invitation);
+    $job->handle(app(CampaignInvitationService::class));
+
+    Mail::assertNothingSent();
+    expect($invitation->fresh())
+        ->status->toBe(CampaignInvitationStatus::Revoked)
+        ->sent_at->toBeNull()
+        ->send_claim->toBeNull();
 });
 
 test('owner can revoke a pending Campaign Invitation', function () {

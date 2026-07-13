@@ -10,6 +10,7 @@ use App\Models\CampaignSection;
 use App\Models\Team;
 use App\Models\User;
 use App\TeamStatus;
+use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -40,6 +41,25 @@ class CampaignLifecycleService
     }
 
     /**
+     * Run a definition mutation while serializing it with candidate activity and cloning.
+     *
+     * @template TValue
+     *
+     * @param  Closure(Campaign): TValue  $mutation
+     * @return TValue
+     */
+    public function withEditableDefinition(Campaign $campaign, Closure $mutation): mixed
+    {
+        return DB::transaction(function () use ($campaign, $mutation): mixed {
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+
+            $this->assertDefinitionEditable($lockedCampaign);
+
+            return $mutation($lockedCampaign);
+        });
+    }
+
+    /**
      * Allow archive only when no exam session is still in progress.
      */
     public function assertCanArchive(Campaign $campaign): void
@@ -53,6 +73,21 @@ class CampaignLifecycleService
         ]);
     }
 
+    public function archive(Campaign $campaign): Campaign
+    {
+        return DB::transaction(function () use ($campaign): Campaign {
+            $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+
+            $this->assertCanArchive($lockedCampaign);
+            $lockedCampaign->update([
+                'status' => CampaignStatus::Archived,
+                'activated_at' => null,
+            ]);
+
+            return $lockedCampaign;
+        });
+    }
+
     /**
      * Clone candidate-facing definition into a new same-Team draft without history.
      */
@@ -60,24 +95,24 @@ class CampaignLifecycleService
     {
         return DB::transaction(function () use ($source, $actor): Campaign {
             $user = User::query()->whereKey($actor->id)->lockForUpdate()->firstOrFail();
-            $team = Team::query()->whereKey($source->team_id)->lockForUpdate()->firstOrFail();
-
-            $this->assertActorCanClone($team, $user);
-
             $lockedSource = Campaign::query()
                 ->whereKey($source->id)
                 ->lockForUpdate()
-                ->with([
-                    'sections' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
-                    'sections.questions' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
-                ])
                 ->firstOrFail();
+            $team = Team::query()->whereKey($lockedSource->team_id)->lockForUpdate()->firstOrFail();
+
+            $this->assertActorCanClone($team, $user);
 
             if ($lockedSource->team_id !== $team->id) {
                 throw ValidationException::withMessages([
                     'campaign' => __('Campaigns can only be cloned within the same Team.'),
                 ]);
             }
+
+            $lockedSource->load([
+                'sections' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+                'sections.questions' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
+            ]);
 
             $clone = Campaign::query()->create([
                 'team_id' => $team->id,

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCampaignSectionRequest;
 use App\Models\Campaign;
 use App\Models\CampaignSection;
+use App\Services\CampaignLifecycleService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -15,9 +16,19 @@ class CampaignSectionController extends Controller
     /**
      * Store a section in the campaign.
      */
-    public function store(StoreCampaignSectionRequest $request, Campaign $campaign): RedirectResponse
-    {
-        $campaign->sections()->create($request->validated());
+    public function store(
+        StoreCampaignSectionRequest $request,
+        Campaign $campaign,
+        CampaignLifecycleService $lifecycle,
+    ): RedirectResponse {
+        $campaign = $lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign) use ($request): Campaign {
+                $lockedCampaign->sections()->create($request->validated());
+
+                return $lockedCampaign;
+            },
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Section added.')]);
 
@@ -27,11 +38,21 @@ class CampaignSectionController extends Controller
     /**
      * Delete a campaign section and its questions.
      */
-    public function destroy(Campaign $campaign, CampaignSection $section): RedirectResponse
-    {
-        $this->ensureSectionBelongsToCampaign($campaign, $section);
+    public function destroy(
+        Campaign $campaign,
+        CampaignSection $section,
+        CampaignLifecycleService $lifecycle,
+    ): RedirectResponse {
+        $campaign = $lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign) use ($section): Campaign {
+                $lockedSection = CampaignSection::query()->whereKey($section->id)->lockForUpdate()->firstOrFail();
+                $this->ensureSectionBelongsToCampaign($lockedCampaign, $lockedSection);
+                $lockedSection->delete();
 
-        $section->delete();
+                return $lockedCampaign;
+            },
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Section deleted.')]);
 

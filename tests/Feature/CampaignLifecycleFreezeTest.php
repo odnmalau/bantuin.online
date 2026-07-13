@@ -12,8 +12,11 @@ use App\Models\User;
 use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
+use App\Services\CampaignInvitationService;
 use App\Services\CampaignLifecycleService;
+use App\Services\ExamSessionService;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -49,6 +52,61 @@ test('campaign lifecycle detects pending invitations sessions and assessments as
     'exam session',
     'assessment',
 ]);
+
+test('definition mutation atomically rechecks activity created from a stale campaign view', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->active()->create([
+        'title' => 'Original title',
+    ]);
+    $staleCampaign = $campaign->fresh();
+
+    app(CampaignInvitationService::class)->create(
+        $campaign,
+        'candidate@example.com',
+        $admin,
+        sendEmail: false,
+    );
+
+    expect(fn () => app(CampaignLifecycleService::class)->withEditableDefinition(
+        $staleCampaign,
+        fn (Campaign $lockedCampaign) => $lockedCampaign->update(['title' => 'Stale write']),
+    ))->toThrow(ValidationException::class, 'definition is frozen')
+        ->and($campaign->fresh()->title)->toBe('Original title');
+});
+
+test('archived campaign is revalidated when a stale request tries to start an exam', function () {
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+    $staleCampaign = $campaign->fresh();
+
+    app(CampaignLifecycleService::class)->archive($campaign);
+
+    expect(fn () => app(ExamSessionService::class)->startSession($candidate, $staleCampaign))
+        ->toThrow(ValidationException::class, 'not accepting new Exam Sessions')
+        ->and($campaign->examSessions()->exists())->toBeFalse();
+});
+
+test('archive rechecks sessions created after a stale archive view', function () {
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    assignCandidateToCampaignExam($candidate, $campaign);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'status' => QuestionStatus::Approved,
+    ]);
+    $staleCampaign = $campaign->fresh();
+
+    app(ExamSessionService::class)->startSession($candidate, $campaign);
+
+    expect(fn () => app(CampaignLifecycleService::class)->archive($staleCampaign))
+        ->toThrow(ValidationException::class, 'exam is in progress')
+        ->and($campaign->fresh()->status)->toBe(CampaignStatus::Active);
+});
 
 test('frozen campaign definition mutations are rejected', function (string $routeName, string $method, callable $payload) {
     $admin = User::factory()->teamOwner()->create();
