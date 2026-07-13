@@ -8,6 +8,8 @@ use App\Models\User;
 use App\QuestionStatus;
 use App\Services\CandidateExamPage;
 use App\Services\ExamSessionService;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 
 test('candidate exam page returns no campaign state', function () {
     $candidate = User::factory()->create();
@@ -47,12 +49,20 @@ test('candidate exam page returns campaign picker state with progress badges', f
             ->create(['status' => QuestionStatus::Approved]);
     }
 
+    assignCandidateToCampaignExam($candidate, $inProgress);
     app(ExamSessionService::class)->startSession($candidate, $inProgress);
     Assessment::factory()->for($candidate)->for($submitted)->create();
+    $notStartedTeamName = $notStarted->team->name;
+    $teamQueries = [];
+    DB::listen(function (QueryExecuted $query) use (&$teamQueries): void {
+        if (preg_match('/^select "id", "name" from "teams"/i', $query->sql) === 1) {
+            $teamQueries[] = $query->sql;
+        }
+    });
 
     $page = app(CandidateExamPage::class)->picker(
         $candidate,
-        collect([$notStarted->fresh('team'), $inProgress->fresh('team'), $submitted->fresh('team')]),
+        collect([$notStarted->fresh(), $inProgress->fresh(), $submitted->fresh()]),
     );
 
     expect($page['state'])->toBe('campaign_picker')
@@ -62,11 +72,12 @@ test('candidate exam page returns campaign picker state with progress badges', f
             'id' => $notStarted->id,
             'title' => 'Not Started Campaign',
             'role_title' => 'Analyst',
-            'team' => ['name' => $notStarted->team->name],
+            'team' => ['name' => $notStartedTeamName],
             'progress' => 'not_started',
         ])
         ->and($page['campaigns'][1]['progress'])->toBe('in_progress')
-        ->and($page['campaigns'][2]['progress'])->toBe('submitted');
+        ->and($page['campaigns'][2]['progress'])->toBe('submitted')
+        ->and($teamQueries)->toHaveCount(1);
 });
 
 test('candidate exam page returns ready to start state', function () {

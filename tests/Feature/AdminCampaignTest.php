@@ -79,6 +79,27 @@ test('admin can search and filter campaigns', function () {
         );
 });
 
+test('admin campaign search treats SQL wildcard characters literally', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $matchingCampaign = Campaign::factory()->for($admin, 'creator')->create([
+        'title' => '100% Remote Hiring',
+    ]);
+    Campaign::factory()->for($admin, 'creator')->create([
+        'title' => 'Office Hiring',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.campaigns.index', ['search' => '%']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.search', '%')
+            ->loadDeferredProps(fn (Assert $reload) => $reload
+                ->has('campaigns.data', 1)
+                ->where('campaigns.data.0.id', $matchingCampaign->id),
+            ),
+        );
+});
+
 test('admin campaign index paginates results', function () {
     $admin = User::factory()->teamOwner()->create();
     Campaign::factory()
@@ -97,6 +118,29 @@ test('admin campaign index paginates results', function () {
                 ->where('campaigns.per_page', 15)
                 ->where('campaigns.total', 16)
                 ->where('campaigns.last_page', 2),
+            ),
+        );
+});
+
+test('admin campaign pagination uses campaign ids to break created at ties', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $createdAt = now()->startOfSecond();
+    $campaigns = Campaign::factory()
+        ->for($admin, 'creator')
+        ->for($admin->currentTeam)
+        ->count(16)
+        ->create([
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+        ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.campaigns.index', ['page' => 2]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps(fn (Assert $reload) => $reload
+                ->has('campaigns.data', 1)
+                ->where('campaigns.data.0.id', $campaigns->min('id')),
             ),
         );
 });

@@ -63,18 +63,20 @@ class QwenAssessmentCritic
                 'ranking_score' => $ranking['score'] ?? null,
                 'ranking_payload' => $ranking['payload'] ?? null,
             ],
-            'essay_evaluation' => [
-                'score' => $evaluation->score,
-                'justification' => $evaluation->justification,
-            ],
-            'resume_screening' => [
-                'score' => $assessment->resume_score,
-                'justification' => $assessment->resume_justification,
-                'payload' => $assessment->resume_payload,
-            ],
-            'email_draft' => [
-                'subject' => $evaluation->emailSubject,
-                'body' => $evaluation->emailBody,
+            'untrusted_model_output' => [
+                'essay_evaluation' => [
+                    'score' => $evaluation->score,
+                    'justification' => $evaluation->justification,
+                ],
+                'resume_screening' => [
+                    'score' => $assessment->resume_score,
+                    'justification' => $assessment->resume_justification,
+                    'payload' => $assessment->resume_payload,
+                ],
+                'email_draft' => [
+                    'subject' => $evaluation->emailSubject,
+                    'body' => $evaluation->emailBody,
+                ],
             ],
             'policy' => [
                 'email_must_be_generic' => true,

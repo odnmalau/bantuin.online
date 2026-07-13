@@ -279,6 +279,42 @@ test('admin can search and filter candidate rankings within a campaign', functio
         );
 });
 
+test('admin ranking search treats SQL wildcard characters literally', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
+        'title' => 'Literal Search Campaign',
+        'role_title' => 'Engineer',
+    ]);
+    $matchingAssessment = Assessment::factory()
+        ->for(User::factory()->create([
+            'name' => 'Candidate 100% Match',
+            'email' => 'literal@example.com',
+        ]))
+        ->for($campaign)
+        ->create(['ranking_score' => 90]);
+    Assessment::factory()
+        ->for(User::factory()->create([
+            'name' => 'Ordinary Candidate',
+            'email' => 'ordinary@example.com',
+        ]))
+        ->for($campaign)
+        ->create(['ranking_score' => 80]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.rankings.index', [
+            'campaign' => $campaign->id,
+            'search' => '%',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('rankings.data', 1)
+            ->where('rankings.data.0.assessment_id', $matchingAssessment->id)
+            ->where('filters.search', '%'),
+        );
+});
+
 test('admin can filter candidate rankings by date range', function () {
     $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->create([
@@ -356,6 +392,40 @@ test('admin rankings paginate beyond the page size', function () {
             ->where('rankings.last_page', 2)
             ->where('rankings.data.0.rank', 1)
             ->where('rankings.data.0.ranking_score', 26),
+        );
+});
+
+test('admin ranking pagination uses assessment ids to break exact ordering ties', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->create([
+        'team_id' => $admin->current_team_id,
+        'created_by' => $admin->id,
+    ]);
+    $createdAt = now()->startOfSecond();
+    $assessments = collect();
+
+    foreach (range(1, 26) as $candidateNumber) {
+        $assessments->push(Assessment::factory()
+            ->for(User::factory()->create())
+            ->for($campaign)
+            ->create([
+                'ranking_score' => 80,
+                'status' => AssessmentStatus::Evaluated,
+                'created_at' => $createdAt,
+                'updated_at' => $createdAt,
+            ]));
+    }
+
+    $this->actingAs($admin)
+        ->get(route('admin.rankings.index', [
+            'campaign' => $campaign->id,
+            'page' => 2,
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('rankings.data', 1)
+            ->where('rankings.data.0.assessment_id', $assessments->min('id'))
+            ->where('rankings.data.0.rank', 26),
         );
 });
 

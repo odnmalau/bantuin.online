@@ -90,6 +90,7 @@ class RankingController extends Controller
             ->where('team_id', $teamId)
             ->whereHas('assessments', fn (Builder $query) => $query->whereNotNull('ranking_score'))
             ->orderBy('title')
+            ->orderBy('id')
             ->get(['id', 'title']);
     }
 
@@ -137,7 +138,19 @@ class RankingController extends Controller
             ])
             ->where("{$assessmentsTable}.campaign_id", $campaignId)
             ->whereNotNull("{$assessmentsTable}.ranking_score")
-            ->select("{$assessmentsTable}.*")
+            ->select([
+                "{$assessmentsTable}.id",
+                "{$assessmentsTable}.user_id",
+                "{$assessmentsTable}.campaign_id",
+                "{$assessmentsTable}.ranking_score",
+                "{$assessmentsTable}.resume_score",
+                "{$assessmentsTable}.essay_score",
+                "{$assessmentsTable}.mcq_score",
+                "{$assessmentsTable}.status",
+                "{$assessmentsTable}.needs_manual_review",
+                "{$assessmentsTable}.evaluated_at",
+                "{$assessmentsTable}.created_at",
+            ])
             ->selectSub(
                 Assessment::query()
                     ->from("{$assessmentsTable} as higher")
@@ -162,7 +175,8 @@ class RankingController extends Controller
             ->when($status !== 'all', fn (Builder $query) => $query->where("{$assessmentsTable}.status", $status))
             ->when($dateRange !== 'all', fn (Builder $query) => $this->applyDateRangeFilter($query, $dateRange, $assessmentsTable))
             ->orderByDesc("{$assessmentsTable}.ranking_score")
-            ->latest("{$assessmentsTable}.created_at");
+            ->orderByDesc("{$assessmentsTable}.created_at")
+            ->orderByDesc("{$assessmentsTable}.id");
 
         return $query
             ->paginate(self::PER_PAGE)
@@ -223,15 +237,19 @@ class RankingController extends Controller
 
     private function applySearchFilter(Builder $query, string $search): void
     {
-        $term = '%'.mb_strtolower($search).'%';
+        $term = '%'.str_replace(
+            ['!', '%', '_'],
+            ['!!', '!%', '!_'],
+            mb_strtolower($search),
+        ).'%';
 
         $query->where(function (Builder $query) use ($term): void {
             $query->whereHas('user', function (Builder $userQuery) use ($term): void {
-                $userQuery->whereRaw('LOWER(name) LIKE ?', [$term])
-                    ->orWhereRaw('LOWER(email) LIKE ?', [$term]);
+                $userQuery->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$term])
+                    ->orWhereRaw("LOWER(email) LIKE ? ESCAPE '!'", [$term]);
             })->orWhereHas('campaign', function (Builder $campaignQuery) use ($term): void {
-                $campaignQuery->whereRaw('LOWER(title) LIKE ?', [$term])
-                    ->orWhereRaw('LOWER(role_title) LIKE ?', [$term]);
+                $campaignQuery->whereRaw("LOWER(title) LIKE ? ESCAPE '!'", [$term])
+                    ->orWhereRaw("LOWER(role_title) LIKE ? ESCAPE '!'", [$term]);
             });
         });
     }

@@ -38,7 +38,7 @@ class CandidateExamPage
             ->pluck('campaign_id')
             ->all();
 
-        $campaigns->each(fn (Campaign $campaign) => $campaign->loadMissing('team:id,name'));
+        (new Campaign)->newCollection($campaigns->all())->loadMissing('team:id,name');
 
         return [
             'state' => 'campaign_picker',

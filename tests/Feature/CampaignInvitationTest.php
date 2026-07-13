@@ -106,6 +106,26 @@ test('campaign exam invitation email job encrypts its queue payload', function (
         ->toBeInstanceOf(ShouldBeEncrypted::class);
 });
 
+test('campaign exam invitation email job is a no-op for a non-pending invitation', function () {
+    Mail::fake();
+
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()
+        ->for($campaign)
+        ->accepted($candidate)
+        ->createWithPlainToken();
+
+    (new SendCampaignExamInvitationEmail($invitation, $plainToken))
+        ->handle(app(CampaignInvitationService::class));
+
+    Mail::assertNothingSent();
+    expect($invitation->fresh())
+        ->status->toBe(CampaignInvitationStatus::Accepted)
+        ->sent_at->toBeNull()
+        ->send_claim->toBeNull();
+});
+
 test('campaign exam invitation email job ignores a stale token', function () {
     Mail::fake();
 

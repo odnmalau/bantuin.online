@@ -50,5 +50,16 @@ test('resume text truncation is multibyte safe', function () {
         ->text->toBe('日本語テキ')
         ->originalCharacterCount->toBe(7)
         ->retainedCharacterCount->toBe(5)
-        ->wasTruncated->toBeTrue();
+        ->wasTruncated->toBeTrue()
+        ->and(strlen($result->text))->toBeLessThanOrEqual(20);
+});
+
+test('resume text normalizes malformed UTF-8 before applying its bounds', function () {
+    $result = ResumeTextExtractionResult::fromNormalizedText("valid\xC3\x28tail");
+
+    expect(mb_check_encoding($result->text, 'UTF-8'))->toBeTrue()
+        ->and($result->text)->toBe('valid?(tail')
+        ->and($result->originalCharacterCount)->toBe(11)
+        ->and($result->retainedCharacterCount)->toBe(11)
+        ->and($result->wasTruncated)->toBeFalse();
 });

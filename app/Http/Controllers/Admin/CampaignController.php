@@ -48,6 +48,17 @@ class CampaignController extends Controller
         return Inertia::render('admin/campaigns/index', [
             'campaigns' => Inertia::defer(fn () => Campaign::query()
                 ->where('team_id', $currentTeamId)
+                ->select([
+                    'id',
+                    'created_by',
+                    'title',
+                    'role_title',
+                    'seniority',
+                    'language',
+                    'threshold_score',
+                    'status',
+                    'created_at',
+                ])
                 ->with('creator:id,name,email')
                 ->withCount(['sections', 'questions', 'assessments'])
                 ->withExists([
@@ -57,6 +68,7 @@ class CampaignController extends Controller
                 ->when($search !== '', fn (Builder $query) => $this->applyCampaignSearch($query, $search))
                 ->when($status !== 'all', fn (Builder $query) => $query->where('status', $status))
                 ->latest()
+                ->latest('id')
                 ->paginate(15)
                 ->withQueryString()
                 ->through(fn (Campaign $campaign): array => [
@@ -306,13 +318,17 @@ class CampaignController extends Controller
 
     private function applyCampaignSearch(Builder $query, string $search): void
     {
-        $term = '%'.mb_strtolower($search).'%';
+        $term = '%'.str_replace(
+            ['!', '%', '_'],
+            ['!!', '!%', '!_'],
+            mb_strtolower($search),
+        ).'%';
 
         $query->where(function (Builder $query) use ($term): void {
             $query
-                ->whereRaw('LOWER(title) LIKE ?', [$term])
-                ->orWhereRaw('LOWER(role_title) LIKE ?', [$term])
-                ->orWhereRaw('LOWER(COALESCE(seniority, \'\')) LIKE ?', [$term]);
+                ->whereRaw("LOWER(title) LIKE ? ESCAPE '!'", [$term])
+                ->orWhereRaw("LOWER(role_title) LIKE ? ESCAPE '!'", [$term])
+                ->orWhereRaw("LOWER(COALESCE(seniority, '')) LIKE ? ESCAPE '!'", [$term]);
         });
     }
 
