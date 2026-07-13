@@ -100,6 +100,6 @@ team tenancy:
 - [Product and domain context](CONTEXT.md)
 - [ADR 0001: contextual identities for team tenancy](docs/adr/0001-use-contextual-identities-for-team-tenancy.md)
 
-The Autopilot documents matching `docs/*AUTOPILOT*` may still describe the
-pre-Team authentication model and can lag behind the current codebase until
-they are refreshed. Prefer `CONTEXT.md` and ADR 0001 when they conflict.
+The Autopilot documents matching `docs/*AUTOPILOT*` are historical assessment
+pipeline records. Prefer `CONTEXT.md` and ADR 0001 for current domain and
+authorization decisions.
