@@ -215,6 +215,7 @@ test('evaluation compute runs outside transactions and stale attempts are ignore
 
 test('duplicate interview email jobs send once and post send finalize failure does not resend', function () {
     Mail::fake();
+    config()->set('assessment.queue.external_work_stale_after', 60);
 
     $assessment = Assessment::factory()
         ->approved()
@@ -269,6 +270,21 @@ test('duplicate interview email jobs send once and post send finalize failure do
         ->status->toBe(AssessmentStatus::EmailSending)
         ->email_delivery_attempt_id->toBe($liveAttemptId)
         ->and($assessment->events()->where('type', 'email_failed')->count())->toBe(0);
+
+    $assessment->update(['email_delivery_started_at' => now()->subSeconds(61)]);
+
+    app()->call([(new SendInterviewInvitationEmail($assessment->fresh())), 'handle']);
+
+    Mail::assertSent(InterviewInvitationMail::class, 2);
+    expect($assessment->refresh())
+        ->status->toBe(AssessmentStatus::EmailFailed)
+        ->email_delivery_attempt_id->toBeNull()
+        ->and($assessment->events()->where('type', 'email_failed')->latest('id')->first()?->payload)
+        ->toMatchArray([
+            'outcome' => 'unknown',
+            'attempt_id' => $liveAttemptId,
+            'requires_manual_retry' => true,
+        ]);
 });
 
 test('external work job timeouts are driven by assessment queue budget config', function () {

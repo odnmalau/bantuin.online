@@ -53,6 +53,12 @@ class SendInterviewInvitationEmail implements ShouldBeUnique, ShouldQueue
         if ($claimed === null) {
             $assessment = $this->assessment->fresh();
 
+            if ($assessment?->status === AssessmentStatus::EmailSending) {
+                $coordinator->abandonStaleEmailDelivery($this->assessment, $this->teamId);
+
+                return;
+            }
+
             if ($assessment !== null) {
                 Log::warning('Interview invitation email skipped because assessment is not sendable.', [
                     'assessment_id' => $assessment->id,

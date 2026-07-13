@@ -233,6 +233,44 @@ class AssessmentExternalWorkCoordinator
         }, attempts: 3);
     }
 
+    public function abandonStaleEmailDelivery(Assessment $assessment, ?int $expectedTeamId): bool
+    {
+        return DB::transaction(function () use ($assessment, $expectedTeamId): bool {
+            $locked = $this->lockAssessmentForTeam($assessment, $expectedTeamId, ['user', 'campaign.team']);
+
+            if ($locked === null
+                || $locked->status !== AssessmentStatus::EmailSending
+                || ! $this->attemptIsStale(
+                    $locked->email_delivery_attempt_id,
+                    $locked->email_delivery_started_at,
+                )) {
+                return false;
+            }
+
+            $attemptId = $locked->email_delivery_attempt_id;
+
+            $locked->update([
+                'status' => AssessmentStatus::EmailFailed,
+                'email_delivery_attempt_id' => null,
+                'email_delivery_started_at' => null,
+            ]);
+
+            $this->events->record(
+                assessment: $locked,
+                type: 'email_failed',
+                title: __('Interview email outcome unknown'),
+                description: __('Interview email delivery was interrupted and must be retried manually.'),
+                payload: [
+                    'outcome' => 'unknown',
+                    'attempt_id' => $attemptId,
+                    'requires_manual_retry' => true,
+                ],
+            );
+
+            return true;
+        }, attempts: 3);
+    }
+
     /**
      * @param  list<string>  $with
      */
