@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import ExamSessionController from '@/actions/App/Http/Controllers/Candidate/ExamSessionController';
 import InputError from '@/components/input-error';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useExamNavigationGuard } from '@/hooks/use-exam-navigation-guard';
@@ -83,6 +84,22 @@ type NoCampaignProps = {
     campaign: null;
 };
 
+type PickerCampaign = {
+    id: number;
+    title: string;
+    role_title: string;
+    team: {
+        name: string;
+    };
+    progress: 'not_started' | 'in_progress' | 'submitted';
+};
+
+type CampaignPickerProps = {
+    state: 'campaign_picker';
+    campaign: null;
+    campaigns: PickerCampaign[];
+};
+
 type SubmittedProps = {
     state: 'submitted';
     campaign: Campaign;
@@ -114,6 +131,7 @@ type ReadyToFinalizeProps = {
 
 type Props = (
     | NoCampaignProps
+    | CampaignPickerProps
     | SubmittedProps
     | ReadyToStartProps
     | ActiveSectionProps
@@ -154,6 +172,8 @@ function renderExamContent(props: Props) {
             return <SubmittedState assessment={props.assessment} />;
         case 'no_campaign':
             return <EmptyQuestionsState />;
+        case 'campaign_picker':
+            return <CampaignPickerState campaigns={props.campaigns} />;
         case 'ready_to_start':
             return (
                 <StartExamState
@@ -237,6 +257,56 @@ function EmptyQuestionsState() {
                     </p>
                 </div>
             </div>
+        </div>
+    );
+}
+
+const progressLabels: Record<
+    PickerCampaign['progress'],
+    { label: string; variant: 'default' | 'secondary' | 'outline' }
+> = {
+    not_started: { label: 'Not started', variant: 'outline' },
+    in_progress: { label: 'In progress', variant: 'default' },
+    submitted: { label: 'Submitted', variant: 'secondary' },
+};
+
+function CampaignPickerState({ campaigns }: { campaigns: PickerCampaign[] }) {
+    return (
+        <div className="space-y-4">
+            <div className="space-y-1">
+                <h2 className="text-base font-medium">Choose an exam</h2>
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                    You have more than one assigned campaign. Select an exam to
+                    continue.
+                </p>
+            </div>
+            <ul className="divide-y divide-sidebar-border/70 rounded-lg border border-sidebar-border/70 dark:divide-sidebar-border dark:border-sidebar-border">
+                {campaigns.map((campaign) => {
+                    const progress = progressLabels[campaign.progress];
+
+                    return (
+                        <li key={campaign.id}>
+                            <Link
+                                href={candidate.campaigns.exam(campaign.id)}
+                                className="flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-muted/50"
+                            >
+                                <div className="min-w-0 space-y-0.5">
+                                    <p className="truncate text-sm font-medium">
+                                        {campaign.title}
+                                    </p>
+                                    <p className="truncate text-sm text-muted-foreground">
+                                        {campaign.team.name} ·{' '}
+                                        {campaign.role_title}
+                                    </p>
+                                </div>
+                                <Badge variant={progress.variant}>
+                                    {progress.label}
+                                </Badge>
+                            </Link>
+                        </li>
+                    );
+                })}
+            </ul>
         </div>
     );
 }

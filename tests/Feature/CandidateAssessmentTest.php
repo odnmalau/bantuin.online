@@ -123,6 +123,64 @@ test('candidate exam entry redirects when only one assigned campaign is accessib
         ->assertRedirect(route('candidate.campaigns.exam', $campaign));
 });
 
+test('candidate exam entry shows empty state when no campaigns are accessible', function () {
+    $candidate = User::factory()->create();
+
+    $this->actingAs($candidate)
+        ->get(route('candidate.exam'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('candidate/exam')
+            ->where('state', 'no_campaign')
+            ->where('campaign', null)
+            ->missing('campaigns'),
+        );
+});
+
+test('candidate exam entry shows a campaign picker when multiple campaigns are accessible', function () {
+    $candidate = User::factory()->create();
+    $firstCampaign = Campaign::factory()->active()->create([
+        'title' => 'Backend Engineer Campaign',
+        'role_title' => 'Backend Engineer',
+        'activated_at' => now()->subDay(),
+    ]);
+    $secondCampaign = Campaign::factory()->active()->create([
+        'title' => 'Frontend Engineer Campaign',
+        'role_title' => 'Frontend Engineer',
+        'activated_at' => now(),
+    ]);
+
+    foreach ([$firstCampaign, $secondCampaign] as $campaign) {
+        assignCandidateToCampaignExam($candidate, $campaign);
+        $section = CampaignSection::factory()->for($campaign)->create();
+        CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create();
+    }
+
+    Assessment::factory()
+        ->for($candidate)
+        ->for($firstCampaign)
+        ->create();
+    startCandidateExamSession($candidate, $secondCampaign);
+
+    $this->actingAs($candidate)
+        ->get(route('candidate.exam'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('candidate/exam')
+            ->where('state', 'campaign_picker')
+            ->where('campaign', null)
+            ->has('campaigns', 2)
+            ->where('campaigns.0.id', $secondCampaign->id)
+            ->where('campaigns.0.title', 'Frontend Engineer Campaign')
+            ->where('campaigns.0.role_title', 'Frontend Engineer')
+            ->where('campaigns.0.team.name', $secondCampaign->team->name)
+            ->where('campaigns.0.progress', 'in_progress')
+            ->where('campaigns.1.id', $firstCampaign->id)
+            ->where('campaigns.1.title', 'Backend Engineer Campaign')
+            ->where('campaigns.1.progress', 'submitted'),
+        );
+});
+
 test('unassigned candidate cannot open a campaign exam', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();

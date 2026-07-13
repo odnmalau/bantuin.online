@@ -24,6 +24,51 @@ test('candidate exam page returns no campaign state', function () {
         ->and(array_key_exists('assessment', $page))->toBeFalse();
 });
 
+test('candidate exam page returns campaign picker state with progress badges', function () {
+    $candidate = User::factory()->create();
+    $notStarted = Campaign::factory()->active()->create([
+        'title' => 'Not Started Campaign',
+        'role_title' => 'Analyst',
+    ]);
+    $inProgress = Campaign::factory()->active()->create([
+        'title' => 'In Progress Campaign',
+        'role_title' => 'Engineer',
+    ]);
+    $submitted = Campaign::factory()->active()->create([
+        'title' => 'Submitted Campaign',
+        'role_title' => 'Designer',
+    ]);
+
+    foreach ([$notStarted, $inProgress, $submitted] as $campaign) {
+        $section = CampaignSection::factory()->for($campaign)->create();
+        CampaignQuestion::factory()
+            ->for($campaign)
+            ->for($section, 'section')
+            ->create(['status' => QuestionStatus::Approved]);
+    }
+
+    app(ExamSessionService::class)->startSession($candidate, $inProgress);
+    Assessment::factory()->for($candidate)->for($submitted)->create();
+
+    $page = app(CandidateExamPage::class)->picker(
+        $candidate,
+        collect([$notStarted->fresh('team'), $inProgress->fresh('team'), $submitted->fresh('team')]),
+    );
+
+    expect($page['state'])->toBe('campaign_picker')
+        ->and($page['campaign'])->toBeNull()
+        ->and($page['campaigns'])->toHaveCount(3)
+        ->and($page['campaigns'][0])->toMatchArray([
+            'id' => $notStarted->id,
+            'title' => 'Not Started Campaign',
+            'role_title' => 'Analyst',
+            'team' => ['name' => $notStarted->team->name],
+            'progress' => 'not_started',
+        ])
+        ->and($page['campaigns'][1]['progress'])->toBe('in_progress')
+        ->and($page['campaigns'][2]['progress'])->toBe('submitted');
+});
+
 test('candidate exam page returns ready to start state', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create([

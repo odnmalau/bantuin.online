@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\ExamSessionStatus;
 use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\ExamSession;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -15,6 +17,56 @@ class CandidateExamPage
         private ExamSessionService $examSessions,
         private AssessmentSubmissionBuilder $submissionBuilder,
     ) {}
+
+    /**
+     * @param  Collection<int, Campaign>  $campaigns
+     * @return array<string, mixed>
+     */
+    public function picker(User $user, Collection $campaigns): array
+    {
+        $campaignIds = $campaigns->pluck('id')->all();
+        $submittedCampaignIds = Assessment::query()
+            ->whereBelongsTo($user)
+            ->whereIn('campaign_id', $campaignIds)
+            ->pluck('campaign_id')
+            ->unique()
+            ->all();
+        $inProgressCampaignIds = ExamSession::query()
+            ->whereBelongsTo($user)
+            ->whereIn('campaign_id', $campaignIds)
+            ->where('status', ExamSessionStatus::InProgress)
+            ->pluck('campaign_id')
+            ->all();
+
+        $campaigns->each(fn (Campaign $campaign) => $campaign->loadMissing('team:id,name'));
+
+        return [
+            'state' => 'campaign_picker',
+            'campaign' => null,
+            'campaigns' => $campaigns
+                ->map(function (Campaign $campaign) use ($submittedCampaignIds, $inProgressCampaignIds): array {
+                    $progress = 'not_started';
+
+                    if (in_array($campaign->id, $submittedCampaignIds, true)) {
+                        $progress = 'submitted';
+                    } elseif (in_array($campaign->id, $inProgressCampaignIds, true)) {
+                        $progress = 'in_progress';
+                    }
+
+                    return [
+                        'id' => $campaign->id,
+                        'title' => $campaign->title,
+                        'role_title' => $campaign->role_title,
+                        'team' => [
+                            'name' => $campaign->team->name,
+                        ],
+                        'progress' => $progress,
+                    ];
+                })
+                ->values()
+                ->all(),
+        ];
+    }
 
     /**
      * @return array<string, mixed>
