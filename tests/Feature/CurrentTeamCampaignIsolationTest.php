@@ -49,7 +49,7 @@ test('each authorized Team membership can manage campaigns', function (string $r
 
     $this->actingAs($user)
         ->patch(route('admin.campaigns.ranking.update', $campaign), [
-            'ranking_weights' => ['resume_score' => 40, 'essay_score' => 40, 'mcq_score' => 20],
+            'ranking_weights' => ['resume_score' => 40, 'assessment_score' => 60],
         ])
         ->assertSessionHasNoErrors();
 
@@ -117,6 +117,7 @@ test('campaign and nested authoring endpoints reject cross team identifiers', fu
     $question = CampaignQuestion::factory()->for($otherCampaign)->for($section, 'section')->create();
 
     $parameters = match ($routeName) {
+        'admin.campaigns.sections.update',
         'admin.campaigns.sections.destroy' => [$otherCampaign, $section],
         'admin.campaigns.questions.approve' => [$otherCampaign, $question],
         default => [$otherCampaign],
@@ -132,8 +133,10 @@ test('campaign and nested authoring endpoints reject cross team identifiers', fu
     ['admin.campaigns.publish', 'POST'],
     ['admin.campaigns.archive', 'POST'],
     ['admin.campaigns.ranking.update', 'PATCH'],
+    ['admin.campaigns.sections.update', 'PATCH'],
     ['admin.campaigns.sections.destroy', 'DELETE'],
     ['admin.campaigns.questions.approve', 'POST'],
+    ['admin.campaigns.questions.discard-all', 'DELETE'],
 ]);
 
 test('deactivated current teams remain readable but reject campaign mutations', function () {

@@ -35,6 +35,8 @@ export type AuthFeatures = {
 
 export type SharedData = {
     name: string;
+    locale: string;
+    timeZone: string;
     docsUrl: string | null;
     auth: Auth;
     authFeatures: AuthFeatures;

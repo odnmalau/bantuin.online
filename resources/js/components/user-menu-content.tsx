@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { BookOpen, Github, LogOut, Settings } from 'lucide-react';
+import { BookOpen, Github, Headphones, LogOut, Settings } from 'lucide-react';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -10,6 +10,7 @@ import { UserInfo } from '@/components/user-info';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
+import { index as supportTeams } from '@/routes/support/teams';
 import type { SharedData, User } from '@/types';
 
 const repositoryUrl = 'https://github.com/odnmalau/bantuin.online';
@@ -20,7 +21,7 @@ type Props = {
 
 export function UserMenuContent({ user }: Props) {
     const cleanup = useMobileNavigation();
-    const { docsUrl } = usePage<SharedData>().props;
+    const { auth, docsUrl } = usePage<SharedData>().props;
 
     const handleLogout = () => {
         cleanup();
@@ -47,6 +48,19 @@ export function UserMenuContent({ user }: Props) {
                         Settings
                     </Link>
                 </DropdownMenuItem>
+                {auth.platformOperator ? (
+                    <DropdownMenuItem asChild>
+                        <Link
+                            className="block w-full cursor-pointer"
+                            href={supportTeams()}
+                            prefetch
+                            onClick={cleanup}
+                        >
+                            <Headphones />
+                            Platform Support
+                        </Link>
+                    </DropdownMenuItem>
+                ) : null}
                 {docsUrl ? (
                     <DropdownMenuItem asChild>
                         <a

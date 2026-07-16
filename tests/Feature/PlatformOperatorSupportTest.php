@@ -30,7 +30,10 @@ test('only platform operators enter the separate support area', function () {
     $operator = User::factory()->platformOperator()->create();
     $this->actingAs($operator)->get(route('support.teams.index'))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('support/teams/index')->has('teams.data', 1));
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('support/teams/index')
+            ->where('auth.platformOperator', true)
+            ->has('teams.data', 1));
 
     expect($operator->activeTeamMemberships()->count())->toBe(0);
 });

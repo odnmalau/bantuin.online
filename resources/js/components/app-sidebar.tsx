@@ -20,7 +20,7 @@ export function AppSidebar() {
     const page = usePage<{ auth: Auth }>();
     const { auth } = page.props;
     const isSupportMode = page.url.startsWith('/support');
-    const mainNavItems = resolveMainNavItems(auth, 'sidebar', isSupportMode);
+    const mainNavItems = resolveMainNavItems(auth, 'sidebar');
 
     return (
         <Sidebar collapsible="offcanvas" variant="sidebar">
@@ -43,9 +43,11 @@ export function AppSidebar() {
                 )}
             </SidebarHeader>
 
-            <SidebarContent>
-                <NavMain items={mainNavItems} />
-            </SidebarContent>
+            {mainNavItems.length > 0 && (
+                <SidebarContent>
+                    <NavMain items={mainNavItems} />
+                </SidebarContent>
+            )}
 
             <SidebarFooter>
                 <NavUser />

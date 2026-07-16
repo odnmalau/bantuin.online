@@ -1,4 +1,4 @@
-import { Deferred, Form, Head, Link, usePage } from '@inertiajs/react';
+import { Deferred, Head, Link, usePage } from '@inertiajs/react';
 import { RankingOverviewSection } from '@/components/admin/ranking-overview-section';
 import type {
     NeedsAttention,
@@ -14,13 +14,9 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
 import { dashboard } from '@/routes';
 import { exam } from '@/routes/candidate';
-import { store as storeTeam, update as updateTeam } from '@/routes/teams';
 import type { SharedData } from '@/types';
 
 type Overview = {
@@ -80,8 +76,6 @@ export default function Dashboard({ overview, personalLanding }: Props) {
             <Head title="Dashboard" />
 
             <div className="flex flex-col gap-6 p-4">
-                <TeamSummaryCard />
-
                 {auth.capabilities.viewCampaigns ? (
                     <Deferred
                         data="overview"
@@ -127,87 +121,3 @@ Dashboard.layout = {
         },
     ],
 };
-
-function TeamSummaryCard() {
-    const { auth } = usePage<SharedData>().props;
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>
-                    {auth.currentTeam?.name ?? 'Create your first Team'}
-                </CardTitle>
-                <CardDescription>
-                    {auth.currentTeam
-                        ? `${auth.currentTeam.role} / ${auth.readOnly ? 'Read-only history' : 'Active Team'}`
-                        : 'Teams keep Campaigns and hiring work isolated.'}
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-6 lg:grid-cols-2">
-                <Form {...storeTeam.form()} className="grid gap-3">
-                    {({ errors, processing }) => (
-                        <>
-                            <div className="grid gap-2">
-                                <Label htmlFor="new-team-name">New Team</Label>
-                                <Input
-                                    id="new-team-name"
-                                    name="name"
-                                    placeholder="Product Hiring"
-                                    required
-                                />
-                                {errors.name ? (
-                                    <p className="text-sm text-destructive">
-                                        {errors.name}
-                                    </p>
-                                ) : null}
-                            </div>
-                            <Button
-                                type="submit"
-                                className="justify-self-start"
-                                disabled={processing}
-                            >
-                                {processing ? <Spinner /> : null}
-                                Create Team
-                            </Button>
-                        </>
-                    )}
-                </Form>
-
-                {auth.currentTeam && auth.capabilities.renameTeam ? (
-                    <Form
-                        {...updateTeam.form(auth.currentTeam.id)}
-                        className="grid gap-3"
-                    >
-                        {({ errors, processing }) => (
-                            <>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="team-name">Team name</Label>
-                                    <Input
-                                        id="team-name"
-                                        name="name"
-                                        defaultValue={auth.currentTeam?.name}
-                                        required
-                                    />
-                                    {errors.name ? (
-                                        <p className="text-sm text-destructive">
-                                            {errors.name}
-                                        </p>
-                                    ) : null}
-                                </div>
-                                <Button
-                                    type="submit"
-                                    variant="outline"
-                                    className="justify-self-start"
-                                    disabled={processing}
-                                >
-                                    {processing ? <Spinner /> : null}
-                                    Rename Team
-                                </Button>
-                            </>
-                        )}
-                    </Form>
-                ) : null}
-            </CardContent>
-        </Card>
-    );
-}

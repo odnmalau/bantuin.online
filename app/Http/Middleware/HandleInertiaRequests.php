@@ -8,6 +8,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\TeamStatus;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -33,6 +34,8 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => config('app.name'),
+            'locale' => $this->preferredLocale($request),
+            'timeZone' => config('app.timezone'),
             'docsUrl' => filled(config('app.docs_url'))
                 ? (string) config('app.docs_url')
                 : null,
@@ -146,6 +149,13 @@ class HandleInertiaRequests extends Middleware
     private function isReadOnly(Request $request): bool
     {
         return $request->user()?->currentTeam()->where('status', TeamStatus::Deactivated)->exists() ?? false;
+    }
+
+    private function preferredLocale(Request $request): string
+    {
+        $locale = $request->getPreferredLanguage() ?? app()->getLocale();
+
+        return Str::replace('_', '-', $locale);
     }
 
     private function sidebarOpen(Request $request): bool

@@ -8,7 +8,7 @@ colors:
   tertiary: "#006efe"
   neutral: "#1a1a1a"
   background-100: "#000000"
-  background-200: "#000000"
+  background-200: "#0a0a0a"
   gray-100: "#1a1a1a"
   gray-200: "#1f1f1f"
   gray-300: "#292929"
@@ -427,7 +427,7 @@ Each non-background scale runs 10 steps (`100`–`1000`), and the step encodes i
 - `900` secondary text and icons
 - `1000` primary text and icons
 
-`background-100` is the primary page and card surface; `background-200` is a secondary surface for subtle separation. The `gray-alpha-*` tokens are translucent, so they layer over any background; use them for borders, dividers, overlays, and hover states. Solid `gray-*` holds its contrast on any surface, so use it for text and opaque fills. Accent scales carry meaning: `blue` for success, links, and focus; `red` for errors; `amber` for warnings; plus `green`, `teal`, `purple`, and `pink`. Use the hex tokens everywhere; each accent scale also ships a `*-p3` wide-gamut value in `oklch()` for Display P3 screens. The Light theme redefines the same names at `/design.md`.
+`background-100` is the primary page and card surface; `background-200` is a secondary surface for subtle separation. The `gray-alpha-*` tokens are translucent, so they layer over any background; use them for borders, dividers, overlays, and hover states. Solid `gray-*` holds its contrast on any surface, so use it for text and opaque fills. Accent scales carry meaning: `blue` for links and focus; `green` for success; `red` for errors; `amber` for warnings; plus `teal`, `purple`, and `pink`. Use the hex tokens everywhere; each accent scale also ships a `*-p3` wide-gamut value in `oklch()` for Display P3 screens. The Light theme redefines the same names at `/design.md`.
 
 ## Typography
 

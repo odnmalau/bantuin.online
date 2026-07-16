@@ -38,6 +38,7 @@ test('owners and administrators view team activity and capability aware administ
             ->has('members', $role === 'owner' ? 2 : 3)
             ->has('invitations', 1)
             ->has('activities', 1)
+            ->where('can.rename', true)
             ->where('can.viewActivity', true)
             ->where('can.transferOwnership', $role === 'owner')
             ->where('members.'.($role === 'owner' ? 1 : 2).'.user_id', $collaborator->id));
@@ -56,6 +57,7 @@ test('collaborators can view team membership but cannot view team activity or ad
             ->component('settings/team')
             ->has('members', 2)
             ->missing('activities')
+            ->where('can.rename', false)
             ->where('can.inviteAdministrator', false)
             ->where('can.inviteCollaborator', false)
             ->where('can.viewActivity', false));

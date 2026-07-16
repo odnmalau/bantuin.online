@@ -4,6 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { deactivate, index, reactivate } from '@/routes/support/teams';
 import membershipRepairs from '@/routes/support/teams/membership-repairs';
 import ownershipTransfers from '@/routes/support/teams/ownership-transfers';
@@ -108,17 +116,21 @@ export default function SupportTeam({
                                 required
                                 placeholder="Recipient email"
                             />
-                            <select
-                                name="role"
-                                className="h-9 rounded-md border bg-background px-3 text-sm"
-                            >
-                                <option value="collaborator">
-                                    Collaborator
-                                </option>
-                                <option value="administrator">
-                                    Administrator
-                                </option>
-                            </select>
+                            <Select name="role" defaultValue="collaborator">
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        <SelectItem value="collaborator">
+                                            Collaborator
+                                        </SelectItem>
+                                        <SelectItem value="administrator">
+                                            Administrator
+                                        </SelectItem>
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
                             <Input
                                 name="reason"
                                 required
@@ -137,23 +149,24 @@ export default function SupportTeam({
                             {...ownershipTransfers.store.form(team.id)}
                             className="grid gap-3 sm:grid-cols-3"
                         >
-                            <select
-                                name="membership_id"
-                                required
-                                className="h-9 rounded-md border bg-background px-3 text-sm"
-                            >
-                                <option value="">
-                                    Eligible active Team Member
-                                </option>
-                                {activeRecipients.map((membership) => (
-                                    <option
-                                        key={membership.id}
-                                        value={membership.id}
-                                    >
-                                        {membership.name} ({membership.role})
-                                    </option>
-                                ))}
-                            </select>
+                            <Select name="membership_id" required>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Eligible active Team Member" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {activeRecipients.map((membership) => (
+                                            <SelectItem
+                                                key={membership.id}
+                                                value={String(membership.id)}
+                                            >
+                                                {membership.name} (
+                                                {membership.role})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
                             <Input
                                 name="reason"
                                 required

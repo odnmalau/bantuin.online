@@ -59,6 +59,7 @@ class TeamController extends Controller
                 : [],
             'pendingTransfer' => $this->pendingTransfer($team),
             'can' => [
+                'rename' => $user->can('update', $team),
                 'inviteAdministrator' => $user->can('invite', [$team, TeamMembershipRole::Administrator]),
                 'inviteCollaborator' => $user->can('invite', [$team, TeamMembershipRole::Collaborator]),
                 'transferOwnership' => $user->can('transferOwnership', $team),

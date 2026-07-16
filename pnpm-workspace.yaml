@@ -2,6 +2,7 @@ packages:
   - '.'
 
 allowBuilds:
+  sharp: false
   unrs-resolver: true
 
 minimumReleaseAgeExclude:

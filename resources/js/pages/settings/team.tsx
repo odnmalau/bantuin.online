@@ -9,8 +9,22 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import {
     destroy as revokeTransfer,
@@ -31,6 +45,7 @@ import {
     deactivate as deactivateTeam,
     destroy as deleteTeam,
     reactivate as reactivateTeam,
+    update as renameTeam,
 } from '@/routes/teams';
 
 type Member = {
@@ -76,6 +91,7 @@ type Props = {
     activityPagination?: { previous: string | null; next: string | null };
     deletionBlocker: string | null;
     can: {
+        rename: boolean;
         inviteAdministrator: boolean;
         inviteCollaborator: boolean;
         transferOwnership: boolean;
@@ -126,6 +142,58 @@ export default function TeamSettings({
                         Owner reactivates this Team.
                     </AlertDescription>
                 </Alert>
+            ) : null}
+
+            {can.rename ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Team Details</CardTitle>
+                        <CardDescription>
+                            Update the name shown across this Team workspace.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Form
+                            {...renameTeam.form(team.id)}
+                            options={{ preserveScroll: true }}
+                            className="flex max-w-md flex-col gap-4"
+                        >
+                            {({ errors, processing }) => (
+                                <>
+                                    <FieldGroup>
+                                        <Field
+                                            data-invalid={Boolean(errors.name)}
+                                        >
+                                            <FieldLabel htmlFor="team-name">
+                                                Team name
+                                            </FieldLabel>
+                                            <Input
+                                                id="team-name"
+                                                name="name"
+                                                defaultValue={team.name}
+                                                aria-invalid={Boolean(
+                                                    errors.name,
+                                                )}
+                                                required
+                                            />
+                                            <FieldError>
+                                                {errors.name}
+                                            </FieldError>
+                                        </Field>
+                                    </FieldGroup>
+                                    <Button
+                                        type="submit"
+                                        className="self-start"
+                                        disabled={processing}
+                                    >
+                                        {processing ? <Spinner /> : null}
+                                        Rename Team
+                                    </Button>
+                                </>
+                            )}
+                        </Form>
+                    </CardContent>
+                </Card>
             ) : null}
 
             {can.deactivate ||
@@ -242,19 +310,27 @@ export default function TeamSettings({
                                     >
                                         {({ processing }) => (
                                             <>
-                                                <select
+                                                <Select
                                                     name="role"
                                                     defaultValue={member.role}
-                                                    className="h-9 rounded-md border bg-background px-3 text-sm"
-                                                    aria-label={`Role for ${member.name}`}
                                                 >
-                                                    <option value="administrator">
-                                                        Administrator
-                                                    </option>
-                                                    <option value="collaborator">
-                                                        Collaborator
-                                                    </option>
-                                                </select>
+                                                    <SelectTrigger
+                                                        size="sm"
+                                                        aria-label={`Role for ${member.name}`}
+                                                    >
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectGroup>
+                                                            <SelectItem value="administrator">
+                                                                Administrator
+                                                            </SelectItem>
+                                                            <SelectItem value="collaborator">
+                                                                Collaborator
+                                                            </SelectItem>
+                                                        </SelectGroup>
+                                                    </SelectContent>
+                                                </Select>
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
@@ -324,22 +400,32 @@ export default function TeamSettings({
                                         <Label htmlFor="invitation-role">
                                             Offered role
                                         </Label>
-                                        <select
-                                            id="invitation-role"
+                                        <Select
                                             name="role"
-                                            className="h-9 rounded-md border bg-background px-3 text-sm"
+                                            defaultValue={
+                                                can.inviteAdministrator
+                                                    ? 'administrator'
+                                                    : 'collaborator'
+                                            }
                                         >
-                                            {can.inviteAdministrator ? (
-                                                <option value="administrator">
-                                                    Administrator
-                                                </option>
-                                            ) : null}
-                                            {can.inviteCollaborator ? (
-                                                <option value="collaborator">
-                                                    Collaborator
-                                                </option>
-                                            ) : null}
-                                        </select>
+                                            <SelectTrigger id="invitation-role">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectGroup>
+                                                    {can.inviteAdministrator ? (
+                                                        <SelectItem value="administrator">
+                                                            Administrator
+                                                        </SelectItem>
+                                                    ) : null}
+                                                    {can.inviteCollaborator ? (
+                                                        <SelectItem value="collaborator">
+                                                            Collaborator
+                                                        </SelectItem>
+                                                    ) : null}
+                                                </SelectGroup>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                     <Button disabled={processing}>
                                         {processing ? <Spinner /> : null} Send
@@ -444,24 +530,28 @@ export default function TeamSettings({
                                     <Label htmlFor="transfer-membership">
                                         New Owner
                                     </Label>
-                                    <select
-                                        id="transfer-membership"
-                                        name="membership_id"
-                                        className="h-9 rounded-md border bg-background px-3 text-sm"
-                                        required
-                                    >
-                                        <option value="">
-                                            Select a Team Member
-                                        </option>
-                                        {transferCandidates.map((member) => (
-                                            <option
-                                                key={member.id}
-                                                value={member.id}
-                                            >
-                                                {member.name} ({member.email})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <Select name="membership_id" required>
+                                        <SelectTrigger id="transfer-membership">
+                                            <SelectValue placeholder="Select a Team Member" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
+                                                {transferCandidates.map(
+                                                    (member) => (
+                                                        <SelectItem
+                                                            key={member.id}
+                                                            value={String(
+                                                                member.id,
+                                                            )}
+                                                        >
+                                                            {member.name} (
+                                                            {member.email})
+                                                        </SelectItem>
+                                                    ),
+                                                )}
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <Button type="submit">Propose Transfer</Button>
                             </Form>
