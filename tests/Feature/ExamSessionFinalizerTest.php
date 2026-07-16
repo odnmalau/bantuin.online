@@ -18,7 +18,7 @@ use Illuminate\Validation\ValidationException;
 
 test('exam session finalizer creates the assessment and queues processing', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -74,7 +74,7 @@ test('exam session finalizer creates the assessment and queues processing', func
             'assessment_queued',
         ]);
 
-    Storage::disk('local')->assertExists($assessment->resume_path);
+    Storage::disk('r2-private')->assertExists($assessment->resume_path);
     Bus::assertChained([
         fn (ScreenResumeWithAi $job): bool => $job->afterCommit === true,
         EvaluateAssessmentWithAi::class,
@@ -91,7 +91,7 @@ test('exam session finalizer creates the assessment and queues processing', func
 
 test('exam session finalizer can force submit incomplete answers', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -157,7 +157,7 @@ test('exam session finalizer can force submit incomplete answers', function () {
 
 test('exam session finalizer auto-submits expired incomplete sessions without a resume', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();

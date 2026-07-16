@@ -25,8 +25,8 @@ beforeEach(function () {
 });
 
 test('resume text extractor reads literal text from stored pdf', function () {
-    Storage::fake('local');
-    Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Laravel PostgreSQL queues experience'));
+    Storage::fake('r2-private');
+    Storage::disk('r2-private')->put('resumes/resume.pdf', resumePdfContent('Laravel PostgreSQL queues experience'));
 
     $result = app(ResumeTextExtractor::class)->extract('resumes/resume.pdf');
 
@@ -35,8 +35,8 @@ test('resume text extractor reads literal text from stored pdf', function () {
 });
 
 test('resume screening job stores extracted text and qwen result', function () {
-    Storage::fake('local');
-    Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Laravel PostgreSQL queues experience'));
+    Storage::fake('r2-private');
+    Storage::disk('r2-private')->put('resumes/resume.pdf', resumePdfContent('Laravel PostgreSQL queues experience'));
 
     ResumeScreeningAgent::fake([
         resumeScreeningOutput(),
@@ -85,8 +85,8 @@ test('resume screening job stores extracted text and qwen result', function () {
 });
 
 test('resume screening job does not mutate an assessment after team deactivation', function () {
-    Storage::fake('local');
-    Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Laravel experience'));
+    Storage::fake('r2-private');
+    Storage::disk('r2-private')->put('resumes/resume.pdf', resumePdfContent('Laravel experience'));
     $campaign = Campaign::factory()->create();
     $assessment = Assessment::factory()->for($campaign)->create([
         'resume_path' => 'resumes/resume.pdf',
@@ -106,8 +106,8 @@ test('resume screening job does not mutate an assessment after team deactivation
 });
 
 test('resume screening job marks low confidence for manual review', function () {
-    Storage::fake('local');
-    Storage::disk('local')->put('resumes/resume.pdf', resumePdfContent('Sparse resume text only'));
+    Storage::fake('r2-private');
+    Storage::disk('r2-private')->put('resumes/resume.pdf', resumePdfContent('Sparse resume text only'));
 
     ResumeScreeningAgent::fake([
         array_merge(resumeScreeningOutput(), [
@@ -197,7 +197,7 @@ test('qwen resume screener uses json object mode through qwen provider', functio
 
 test('candidate resume upload must be a pdf', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -316,8 +316,8 @@ test('resume screener prompt payload nests resume under untrusted_candidate_data
 test('truncated resume extraction forces manual review and omits discarded text', function () {
     config()->set('assessment.resume.max_extracted_characters', 20);
 
-    Storage::fake('local');
-    Storage::disk('local')->put(
+    Storage::fake('r2-private');
+    Storage::disk('r2-private')->put(
         'resumes/resume.pdf',
         resumePdfContent('KEEP_PREFIX_TEXT DISCARDED_TAIL_SHOULD_NOT_PERSIST'),
     );

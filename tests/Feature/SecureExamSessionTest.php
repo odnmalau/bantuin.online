@@ -11,6 +11,7 @@ use App\Models\CampaignSection;
 use App\Models\ExamSession;
 use App\Models\User;
 use App\QuestionStatus;
+use App\QuestionType;
 use App\Services\ExamSessionService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
@@ -101,14 +102,13 @@ test('candidate cannot advance a section without answering every question', func
         ->assertSessionHasErrors("answers.{$question->id}");
 });
 
-test('candidate cannot save an exam answer that exceeds the configured max length', function () {
-    config()->set('assessment.secure_exam.max_answer_characters', 100);
-
+test('candidate cannot save an answer that exceeds its question type limit', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
     $question = CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
+        'type' => QuestionType::ShortText,
         'status' => QuestionStatus::Approved,
     ]);
 
@@ -118,7 +118,7 @@ test('candidate cannot save an exam answer that exceeds the configured max lengt
         ->from(route('candidate.campaigns.exam', $campaign))
         ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session]), [
             'answers' => [
-                $question->id => str_repeat('a', 101),
+                $question->id => str_repeat('a', QuestionType::ShortText->maxCharacters() + 1),
             ],
         ])
         ->assertSessionHasErrors("answers.{$question->id}");
@@ -126,7 +126,7 @@ test('candidate cannot save an exam answer that exceeds the configured max lengt
 
 test('incomplete section timer expiry auto-finalizes the exam session', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -162,7 +162,7 @@ test('incomplete section timer expiry auto-finalizes the exam session', function
 
 test('exam page loads after incomplete section timer expiry', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -390,7 +390,7 @@ test('sequential draft saves merge answers under the locked session row', functi
 
 test('reaching max integrity warnings auto-submits once', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
     config()->set('assessment.secure_exam.max_integrity_warnings', 2);
     config()->set('assessment.secure_exam.auto_submit_on_max_warnings', true);
 
@@ -442,7 +442,7 @@ test('reaching max integrity warnings auto-submits once', function () {
 
 test('candidate can finalize a secure exam session into an assessment', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();

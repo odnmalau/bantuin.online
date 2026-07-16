@@ -207,7 +207,7 @@ class ExamSessionFinalizer
             return;
         }
 
-        $resumePath = $resume->store('resumes', 'local');
+        $resumePath = $resume->store('resumes', 'r2-private');
 
         if (! is_string($resumePath)) {
             throw ValidationException::withMessages([
