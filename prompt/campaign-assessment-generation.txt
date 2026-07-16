@@ -12,19 +12,15 @@ Return exactly one JSON object with this root shape:
       "title": "Section title",
       "description": "Short optional section description",
       "duration_minutes": 30,
-      "scoring_mode": "weighted",
       "weight": 100,
       "sort_order": 10,
       "questions": [
         {
-          "type": "multiple_choice",
-          "prompt": "Question text",
-          "options": ["Option A", "Option B", "Option C", "Option D"],
-          "correct_answer": ["Option B"],
-          "expected_rubric": null,
+          "type": "long_text",
+          "prompt": "Role-specific scenario or work sample",
+          "expected_rubric": "Observable qualities expected in a strong answer",
           "points": 10,
           "difficulty": "medium",
-          "skill_tags": ["Skill"],
           "sort_order": 10
         }
       ]
@@ -36,38 +32,32 @@ Strict output rules:
 - Root must contain only "sections"; do not wrap the response in
   "assessment_draft", "assessment", "draft", metadata, title, role_title,
   seniority, language, or threshold_score.
-- Every section must include title, description, duration_minutes,
-  scoring_mode, weight, sort_order, and questions.
-- scoring_mode must be one of: weighted, points, percentage.
-- Every question must include type, prompt, options, correct_answer,
-  expected_rubric, points, difficulty, skill_tags, and sort_order.
+- Every section must include title, description, duration_minutes, weight,
+  sort_order, and questions.
+- Every question must include type, prompt, expected_rubric, points,
+  difficulty, and sort_order.
 - type must be one of the allowed question type values from the input.
 - difficulty must be one of: easy, medium, hard.
-- options must be null or an array of strings only. Do not output option
-  objects with id/text fields.
-- correct_answer must be null or an array of strings only. Do not output
-  correct_answer_id, answer_id, explanation, pairs, case_sensitive, or any
-  other fields.
-- For multiple_choice, options must contain at least two string choices and
-  correct_answer must contain exactly one string that exactly matches one
-  option.
-- For yes_no, options must be ["Yes", "No"] and correct_answer must contain
-  exactly "Yes" or "No".
-- For fill_blank, the prompt must contain one "______" placeholder per expected
-  answer. If the prompt contains one placeholder, correct_answer must contain
-  exactly one string. Do not include alternate answers in correct_answer.
-- For matching_pairs, write the prompt as a clear matching task and use
-  correct_answer as an array of strings that describe each correct pair, for
-  example ["Term A -> Definition A", "Term B -> Definition B"].
-- For short_text and long_text, set options and correct_answer to null, and
-  provide expected_rubric.
+- Use 5 points for supporting questions, 10 for standard questions, and 20
+  for questions with major hiring consequences.
+- Every question must be open-ended and provide an expected_rubric.
+- Prefer situational judgment, case analysis, work samples, behavioral
+  evidence, prioritization, and communication simulations.
 - Do not include additional properties anywhere in the JSON.
 
 Keep the assessment review-friendly:
 - Use clear section titles.
-- Avoid duplicate prompts already present in the campaign.
+- Treat every entry under "existing_content_to_avoid" as an exclusion list of
+  section and question content that is already present in the campaign.
+- Before returning the draft, compare every proposed section and question
+  against the complete exclusion list.
+- Generate only net-new sections and questions with meaningfully different
+  topics, scenarios, competencies, and evidence sought.
+- Do not reuse or closely paraphrase an existing section title, section
+  description, question prompt, scenario, or expected rubric.
+- When "existing_content_to_avoid" is empty, generate the assessment normally.
 - Match the requested language, difficulty, and question mix.
 - Prefer concise rubrics that describe observable qualities in strong answers.
-- Use deterministic grading only when the expected answer is unambiguous.
+- Do not generate trivia or prompts with a fixed correct answer.
 
 Output only structured JSON that matches the exact schema above.

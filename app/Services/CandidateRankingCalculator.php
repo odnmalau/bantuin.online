@@ -12,19 +12,16 @@ class CandidateRankingCalculator
      *
      * @return array{score: int|null, payload: array<string, mixed>}
      */
-    public function calculate(Assessment $assessment, ?int $mcqScore, ?int $essayScore, array $sectionScores = []): array
+    public function calculate(Assessment $assessment, ?int $assessmentScore): array
     {
-        $assessment->loadMissing('campaign');
-
-        $weightConfiguration = $this->resolveWeightConfiguration($assessment);
+        $weightConfiguration = $this->resolveWeightConfiguration();
         $components = [
             'resume_score' => $this->normalizeNullableScore($assessment->resume_score),
-            'essay_score' => $this->normalizeNullableScore($essayScore),
-            'mcq_score' => $this->normalizeNullableScore($mcqScore),
+            'assessment_score' => $this->normalizeNullableScore($assessmentScore),
         ];
         $weights = $weightConfiguration['weights'];
-        $availableComponents = $this->availableComponents($components);
-        $missingComponents = $this->missingComponents($components, $availableComponents);
+        $availableComponents = $this->availableComponents($components, $weights);
+        $missingComponents = $this->missingComponents($components, $availableComponents, $weights);
 
         if ($availableComponents === []) {
             return [
@@ -48,9 +45,6 @@ class CandidateRankingCalculator
         }
 
         $rankingScore = $this->normalizeScore((int) round($score));
-        $weightingMode = $missingComponents === []
-            ? 'configured_weights'
-            : 'normalized_available_components';
 
         return [
             'score' => $rankingScore,
@@ -59,16 +53,15 @@ class CandidateRankingCalculator
                 'configured_weights' => $weights,
                 'normalized_weights' => $normalizedWeights,
                 'missing_components' => $missingComponents,
-                'weighting_mode' => $weightingMode,
+                'weighting_mode' => 'assessment_only',
                 'weight_source' => $weightConfiguration['source'],
                 'formula' => $this->formula($weights),
-                'section_scores' => $sectionScores,
             ],
         ];
     }
 
     /**
-     * @return array{resume_score: int, essay_score: int, mcq_score: int}
+     * @return array{resume_score: int, assessment_score: int}
      */
     public function configuredWeights(): array
     {
@@ -82,42 +75,43 @@ class CandidateRankingCalculator
 
     /**
      * @return array{
-     *     weights: array{resume_score: int, essay_score: int, mcq_score: int},
+     *     weights: array{resume_score: int, assessment_score: int},
      *     source: string
      * }
      */
-    private function resolveWeightConfiguration(Assessment $assessment): array
+    private function resolveWeightConfiguration(): array
     {
-        if ($assessment->campaign === null) {
-            return [
-                'weights' => Campaign::defaultRankingWeights(),
-                'source' => 'config_default',
-            ];
-        }
-
         return [
-            'weights' => $assessment->campaign->resolvedRankingWeights(),
-            'source' => $assessment->campaign->hasConfiguredRankingWeights() ? 'campaign' : 'config_default',
+            'weights' => Campaign::defaultRankingWeights(),
+            'source' => 'config_default',
         ];
     }
 
     /**
      * @param  array<string, int|null>  $components
+     * @param  array<string, int>  $weights
      * @return array<string, int|null>
      */
-    private function availableComponents(array $components): array
+    private function availableComponents(array $components, array $weights): array
     {
-        return array_filter($components, fn (?int $score): bool => $score !== null);
+        return collect($components)
+            ->filter(fn (?int $score, string $component): bool => $score !== null && ($weights[$component] ?? 0) > 0)
+            ->all();
     }
 
     /**
      * @param  array<string, int|null>  $components
      * @param  array<string, int|null>  $availableComponents
+     * @param  array<string, int>  $weights
      * @return array<int, string>
      */
-    private function missingComponents(array $components, array $availableComponents): array
+    private function missingComponents(array $components, array $availableComponents, array $weights): array
     {
-        return array_values(array_diff(array_keys($components), array_keys($availableComponents)));
+        return collect($components)
+            ->filter(fn (?int $score, string $component): bool => $score === null && ($weights[$component] ?? 0) > 0)
+            ->keys()
+            ->values()
+            ->all();
     }
 
     /**
@@ -165,6 +159,7 @@ class CandidateRankingCalculator
     private function formula(array $weights): string
     {
         return collect($weights)
+            ->filter(fn (int $weight): bool => $weight > 0)
             ->map(fn (int $weight, string $component): string => $component.' * '.number_format($weight / 100, 2))
             ->implode(' + ');
     }

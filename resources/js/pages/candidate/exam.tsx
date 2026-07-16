@@ -7,6 +7,7 @@ import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
 import { useExamNavigationGuard } from '@/hooks/use-exam-navigation-guard';
 import { useExamProctoring } from '@/hooks/use-exam-proctoring';
 import {
@@ -22,11 +23,7 @@ type Question = {
     content: string;
     type: string;
     type_label: string;
-    options: string[];
-    matching_pairs: {
-        prompts: string[];
-        choices: string[];
-    } | null;
+    max_characters: number;
     points: number;
     section_title: string | null;
     sort_order: number;
@@ -800,203 +797,30 @@ function AnswerField({
 }) {
     const inputId = `answer-${question.id}`;
 
-    if (
-        question.type === 'matching_pairs' &&
-        question.matching_pairs !== null &&
-        question.matching_pairs.prompts.length > 0
-    ) {
-        return (
-            <MatchingPairsAnswerField
-                question={question}
-                value={value}
-                onAnswerChanged={onAnswerChanged}
-                error={error}
-            />
-        );
-    }
-
-    if (question.type === 'multiple_choice' || question.type === 'yes_no') {
-        const options =
-            question.type === 'yes_no' && question.options.length === 0
-                ? ['Yes', 'No']
-                : question.options;
-
-        return (
-            <fieldset className="grid gap-3">
-                <legend className="text-sm font-medium">Answer</legend>
-                <div className="grid gap-2">
-                    {options.map((option) => (
-                        <label
-                            key={option}
-                            className="flex items-center gap-3 rounded-md border border-border px-3 py-2 text-sm"
-                        >
-                            <input
-                                type="radio"
-                                name={`answer-${question.id}`}
-                                value={option}
-                                checked={value === option}
-                                required
-                                onChange={(event) =>
-                                    onAnswerChanged(
-                                        question.id,
-                                        event.currentTarget.value,
-                                    )
-                                }
-                            />
-                            <span>{option}</span>
-                        </label>
-                    ))}
-                </div>
-                <InputError message={error} />
-            </fieldset>
-        );
-    }
-
-    if (question.type === 'fill_blank') {
-        return (
-            <div className="grid gap-2">
-                <label htmlFor={inputId} className="text-sm font-medium">
-                    Answer
-                </label>
-                <input
-                    id={inputId}
-                    value={value}
-                    required
-                    onChange={(event) =>
-                        onAnswerChanged(question.id, event.currentTarget.value)
-                    }
-                    className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                    placeholder="Write the missing term."
-                />
-                <InputError message={error} />
-            </div>
-        );
-    }
-
     return (
         <div className="grid gap-2">
             <label htmlFor={inputId} className="text-sm font-medium">
                 Answer
             </label>
-            <textarea
+            <Textarea
                 id={inputId}
                 rows={question.type === 'short_text' ? 4 : 8}
                 value={value}
                 required
+                maxLength={question.max_characters}
                 onChange={(event) =>
                     onAnswerChanged(question.id, event.currentTarget.value)
                 }
-                className="flex min-h-40 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="min-h-40"
                 placeholder="Write your answer here."
             />
+            <p className="text-right text-xs text-muted-foreground">
+                {value.length.toLocaleString()} /{' '}
+                {question.max_characters.toLocaleString()} characters
+            </p>
             <InputError message={error} />
         </div>
     );
-}
-
-function MatchingPairsAnswerField({
-    question,
-    value,
-    onAnswerChanged,
-    error,
-}: {
-    question: Question;
-    value: string;
-    onAnswerChanged: (questionId: number, value: string) => void;
-    error?: string;
-}) {
-    const prompts = useMemo(
-        () => question.matching_pairs?.prompts ?? [],
-        [question.matching_pairs],
-    );
-    const choices = question.matching_pairs?.choices ?? [];
-    const selections = useMemo(
-        () => parseMatchingSelections(value, prompts),
-        [prompts, value],
-    );
-
-    function serializeSelection(
-        nextSelections: Record<string, string>,
-    ): string {
-        return prompts
-            .map((prompt) => {
-                const choice = nextSelections[prompt];
-
-                return choice ? `${prompt} = ${choice}` : '';
-            })
-            .filter((pair) => pair !== '')
-            .join('\n');
-    }
-
-    function updateSelection(prompt: string, choice: string) {
-        const nextSelections = {
-            ...selections,
-            [prompt]: choice,
-        };
-
-        onAnswerChanged(question.id, serializeSelection(nextSelections));
-    }
-
-    return (
-        <fieldset className="grid gap-4">
-            <legend className="text-sm font-medium">Answer</legend>
-            <div className="grid gap-3">
-                {prompts.map((prompt) => (
-                    <div
-                        key={prompt}
-                        className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-center"
-                    >
-                        <p className="text-sm font-medium">{prompt}</p>
-                        <select
-                            required
-                            value={selections[prompt] ?? ''}
-                            onChange={(event) =>
-                                updateSelection(
-                                    prompt,
-                                    event.currentTarget.value,
-                                )
-                            }
-                            className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                        >
-                            <option value="">Choose a match</option>
-                            {choices.map((choice) => (
-                                <option
-                                    key={`${prompt}-${choice}`}
-                                    value={choice}
-                                >
-                                    {choice}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                ))}
-            </div>
-            <InputError message={error} />
-        </fieldset>
-    );
-}
-
-function parseMatchingSelections(
-    value: string,
-    prompts: string[],
-): Record<string, string> {
-    const selections: Record<string, string> = {};
-
-    for (const line of value.split('\n')) {
-        const match = line.match(/^(.+?)\s*=\s*(.+)$/u);
-
-        if (match) {
-            selections[match[1].trim()] = match[2].trim();
-        }
-    }
-
-    for (const prompt of prompts) {
-        if (!(prompt in selections)) {
-            selections[prompt] = '';
-        }
-    }
-
-    return selections;
 }
 
 CandidateExam.layout = {

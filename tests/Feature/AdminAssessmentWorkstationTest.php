@@ -33,13 +33,17 @@ test('admin can view assessment detail', function () {
                     'answer' => 'Indexes speed reads and add write costs.',
                 ],
             ],
-            'ai_score' => 82,
+            'assessment_score' => 82,
             'ranking_score' => 91,
             'ai_justification' => 'Strong enough for interview.',
             'ai_email_subject' => 'Interview invitation',
             'ai_email_body' => 'Please continue to interview.',
             'status' => AssessmentStatus::PendingApproval,
-            'ranking_payload' => [
+            'evaluation_payload' => [
+                'score' => 82,
+                'confidence' => 90,
+                'justification' => 'Strong enough for interview.',
+                'question_evaluations' => [],
                 'section_scores' => [
                     [
                         'section_id' => 10,
@@ -67,7 +71,7 @@ test('admin can view assessment detail', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/assessments/show')
             ->where('assessment.id', $assessment->id)
-            ->where('assessment.ai_score', 82)
+            ->where('assessment.assessment_score', 82)
             ->where('assessment.rank', 1)
             ->where('assessment.campaign.title', 'Backend Hiring')
             ->where('assessment.campaign.role_title', 'Backend Engineer')
@@ -89,7 +93,7 @@ test('admin can approve reviewable assessment', function (AssessmentStatus $stat
         ->for($campaign)
         ->create([
             'status' => $status,
-            'ai_score' => $status === AssessmentStatus::PendingApproval ? 82 : 60,
+            'assessment_score' => $status === AssessmentStatus::PendingApproval ? 82 : 60,
             'ai_email_subject' => 'AI subject',
             'ai_email_body' => 'AI body',
         ]);

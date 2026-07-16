@@ -75,7 +75,7 @@ class AssessmentController extends Controller
                     ->all(),
                 'resume_original_name' => $assessment->resume_original_name,
                 'resume_score' => $assessment->resume_score,
-                'ai_score' => $assessment->ai_score,
+                'assessment_score' => $assessment->assessment_score,
                 'ai_justification' => $assessment->ai_justification,
                 'status' => $assessment->status->value,
                 'created_at' => $assessment->created_at,

@@ -23,7 +23,6 @@ abstract class AbstractGenerateQuestionsRequest extends FormRequest
     {
         $this->merge([
             'question_count' => $this->integer('question_count', 6),
-            'language' => $this->input('language', $this->defaultLanguage()),
             'difficulty' => $this->input('difficulty', $this->defaultDifficulty()),
             'question_mix' => $this->filled('question_mix') ? $this->input('question_mix') : null,
         ]);
@@ -38,13 +37,10 @@ abstract class AbstractGenerateQuestionsRequest extends FormRequest
     {
         return [
             'question_count' => ['required', 'integer', 'min:1', 'max:20'],
-            'language' => ['required', 'string', 'max:40'],
             'difficulty' => ['required', 'string', Rule::in(['easy', 'medium', 'hard', 'mixed'])],
             'question_mix' => ['nullable', 'string', 'max:2000'],
         ];
     }
-
-    abstract protected function defaultLanguage(): string;
 
     abstract protected function defaultDifficulty(): string;
 }

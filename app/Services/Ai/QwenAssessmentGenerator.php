@@ -12,6 +12,7 @@ use App\Services\Ai\Concerns\ConfiguresQwenAssessmentAgent;
 use App\Services\Ai\Concerns\LimitsGeneratedQuestionCount;
 use App\Services\Ai\Concerns\NormalizesGeneratedQuestions;
 use App\Services\CampaignLifecycleService;
+use App\Services\CampaignSectionDistribution;
 use App\TeamStatus;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -23,17 +24,26 @@ class QwenAssessmentGenerator
     use LimitsGeneratedQuestionCount;
     use NormalizesGeneratedQuestions;
 
-    public function __construct(private CampaignLifecycleService $lifecycle) {}
+    public function __construct(
+        private CampaignLifecycleService $lifecycle,
+        private CampaignSectionDistribution $distribution,
+    ) {}
 
     /**
      * Generate draft sections and questions for a campaign.
      *
-     * @param  array{question_count?: int, language?: string, difficulty?: string, question_mix?: string|null}  $options
+     * @param  array{question_count?: int, difficulty?: string, question_mix?: string|null}  $options
      */
     public function generate(Campaign $campaign, array $options): int
     {
         $expectedTeamId = $campaign->team_id;
         $this->ensureCampaignTeamIsWritable($campaign, $expectedTeamId);
+        $this->ensureNoActiveDrafts($campaign);
+
+        $generationOptions = [
+            ...Arr::only($options, ['question_count', 'difficulty', 'question_mix']),
+            'language' => $campaign->language ?? 'English',
+        ];
 
         $campaign->loadMissing([
             'sections.questions',
@@ -41,7 +51,7 @@ class QwenAssessmentGenerator
 
         $this->assertQwenApiKeyConfigured();
 
-        $prompt = $this->prompt($campaign, $options);
+        $prompt = $this->prompt($campaign, $generationOptions);
 
         $response = $this->promptStructuredAgent(
             new AssessmentGeneratorAgent,
@@ -52,15 +62,16 @@ class QwenAssessmentGenerator
         $sections = $this->normalizeSections($response->toArray());
         $sections = $this->limitSectionsToQuestionCount(
             $sections,
-            max(1, (int) ($options['question_count'] ?? 6)),
+            max(1, (int) ($generationOptions['question_count'] ?? 6)),
         );
 
-        return DB::transaction(function () use ($campaign, $expectedTeamId, $sections, $options): int {
+        return DB::transaction(function () use ($campaign, $expectedTeamId, $sections, $generationOptions): int {
             $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
             $this->lifecycle->assertDefinitionEditable($lockedCampaign);
             $this->ensureCampaignTeamIsWritable($lockedCampaign, $expectedTeamId, true);
+            $this->ensureNoActiveDrafts($lockedCampaign);
 
-            return $this->persistDrafts($lockedCampaign, $sections, $options);
+            return $this->persistDrafts($lockedCampaign, $sections, $generationOptions);
         });
     }
 
@@ -86,18 +97,20 @@ class QwenAssessmentGenerator
             ],
             'generation_options' => [
                 'question_count' => (int) ($options['question_count'] ?? 6),
-                'language' => (string) ($options['language'] ?? $campaign->language ?? 'English'),
+                'language' => $campaign->language ?? 'English',
                 'difficulty' => (string) ($options['difficulty'] ?? 'mixed'),
                 'question_mix' => $options['question_mix'] ?? null,
             ],
             'allowed_question_types' => QuestionType::selectOptions(),
-            'existing_assessment_shape' => $campaign->sections
+            'existing_content_to_avoid' => $campaign->sections
                 ->map(fn (CampaignSection $section): array => [
-                    'title' => $section->title,
+                    'section_title' => $section->title,
+                    'section_description' => $section->description,
                     'questions' => $section->questions
                         ->map(fn ($question): array => [
                             'type' => $question->type->value,
                             'prompt' => $question->prompt,
+                            'expected_rubric' => $question->expected_rubric,
                         ])
                         ->values()
                         ->all(),
@@ -145,8 +158,7 @@ class QwenAssessmentGenerator
             'title' => $title,
             'description' => $this->nullableGeneratedString($section, 'description'),
             'duration_minutes' => $this->nullableGeneratedInteger($section, 'duration_minutes', 1, 600),
-            'scoring_mode' => $this->generatedEnumString($section, 'scoring_mode', ['weighted', 'points', 'percentage'], 'weighted'),
-            'weight' => $this->generatedInteger($section, 'weight', 100, 1, 1000),
+            'weight' => $this->generatedInteger($section, 'weight', 100, 1, 100),
             'sort_order' => $this->generatedInteger($section, 'sort_order', ($index + 1) * 10, 0, 100000),
             'questions' => collect($questions)
                 ->values()
@@ -183,6 +195,8 @@ class QwenAssessmentGenerator
                 $createdQuestions++;
             }
         }
+
+        $this->distribution->normalize($campaign);
 
         $audit = $campaign->ai_generation_audit ?? [];
         $audit[] = $this->generationAuditEntry($options, $createdQuestions, count($sections));
@@ -236,6 +250,13 @@ class QwenAssessmentGenerator
 
         if ($campaign->team_id !== $expectedTeamId || $teamQuery->first() === null) {
             throw new AssessmentGenerationException('The Campaign Team is no longer writable.');
+        }
+    }
+
+    private function ensureNoActiveDrafts(Campaign $campaign): void
+    {
+        if ($campaign->questions()->where('status', QuestionStatus::Draft->value)->exists()) {
+            throw new AssessmentGenerationException('Review or discard existing draft questions before generating another assessment.');
         }
     }
 }

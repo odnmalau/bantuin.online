@@ -17,7 +17,6 @@ class AssessmentEvaluationPipeline
         private QwenAssessmentEvaluator $evaluator,
         private QwenAssessmentCritic $critic,
         private AssessmentThreshold $threshold,
-        private DeterministicAssessmentGrader $deterministicGrader,
         private CandidateRankingCalculator $rankingCalculator,
         private AssessmentExternalWorkCoordinator $coordinator,
     ) {}
@@ -58,34 +57,41 @@ class AssessmentEvaluationPipeline
 
         $events = [
             AssessmentEvaluationOutcome::event(
-                type: 'qwen_essay_evaluation_completed',
-                title: __('Qwen essay evaluation completed'),
+                type: 'qwen_assessment_evaluation_completed',
+                title: __('Qwen assessment evaluation completed'),
                 description: __('Qwen returned a validated structured assessment evaluation.'),
                 payload: [
                     'score' => $result->score,
+                    'confidence' => $result->confidence,
                     'email_draft_present' => filled($result->emailSubject) && filled($result->emailBody),
                 ],
             ),
         ];
 
-        $deterministicBreakdown = $this->deterministicGrader->breakdown($assessment);
-        $mcqScore = $deterministicBreakdown['score'];
-        $ranking = $this->rankingCalculator->calculate($assessment, $mcqScore, $result->score, $deterministicBreakdown['section_scores']);
+        $ranking = $this->rankingCalculator->calculate($assessment, $result->score);
         $reviewScore = $ranking['score'] ?? $result->score;
-        $needsManualReview = (bool) $assessment->needs_manual_review;
+        $result = $this->withResolvedEmailDraft($assessment, $result, $reviewScore, $passingScore);
+        $events[0]['payload']['email_draft_present'] = filled($result->emailSubject) && filled($result->emailBody);
+        $minimumConfidence = max(0, min(100, (int) config('assessment.evaluation.minimum_confidence', 70)));
+        $reviewMargin = max(0, (int) config('assessment.evaluation.manual_review_margin', 3));
+        $reviewReasons = [];
+
+        if ($assessment->needs_manual_review) {
+            $reviewReasons[] = 'resume_screening_flag';
+        }
+
+        if ($result->hasConfidenceBelow($minimumConfidence)) {
+            $reviewReasons[] = 'low_confidence';
+        }
+
+        if (abs($reviewScore - $passingScore) <= $reviewMargin) {
+            $reviewReasons[] = 'borderline_score';
+        }
+
+        $needsManualReview = $reviewReasons !== [];
         $criticPayload = null;
         $criticBlocksAutopilotApproval = false;
         $criticResult = null;
-
-        $events[] = AssessmentEvaluationOutcome::event(
-            type: 'deterministic_grading_completed',
-            title: __('Deterministic grading completed'),
-            description: __('Objective answer snapshots were graded without AI where available.'),
-            payload: [
-                'mcq_score' => $mcqScore,
-                'section_count' => count($deterministicBreakdown['section_scores']),
-            ],
-        );
 
         $events[] = AssessmentEvaluationOutcome::event(
             type: 'ranking_calculated',
@@ -102,7 +108,6 @@ class AssessmentEvaluationPipeline
             $criticResult = $this->critic->review(
                 assessment: $assessment,
                 evaluation: $result,
-                mcqScore: $mcqScore,
                 ranking: $ranking,
                 reviewScore: $reviewScore,
                 passingScore: $passingScore,
@@ -110,7 +115,11 @@ class AssessmentEvaluationPipeline
 
             $criticPayload = $criticResult->payload();
             $criticBlocksAutopilotApproval = $criticResult->blocksAutopilotApproval();
-            $needsManualReview = $needsManualReview || $criticResult->manualReviewRequired;
+            $needsManualReview = $needsManualReview || $criticBlocksAutopilotApproval;
+
+            if ($criticBlocksAutopilotApproval) {
+                $reviewReasons[] = 'critic_flag';
+            }
 
             $events[] = AssessmentEvaluationOutcome::event(
                 type: 'critic_completed',
@@ -133,6 +142,7 @@ class AssessmentEvaluationPipeline
 
             $needsManualReview = true;
             $criticBlocksAutopilotApproval = true;
+            $reviewReasons[] = 'critic_failed';
             $criticPayload = $this->failedCriticPayload($exception);
 
             $events[] = AssessmentEvaluationOutcome::event(
@@ -150,14 +160,28 @@ class AssessmentEvaluationPipeline
         $status = $this->resolveStatusAfterEvaluation(
             $reviewScore,
             $passingScore,
-            $criticBlocksAutopilotApproval,
+            $needsManualReview || $criticBlocksAutopilotApproval,
         );
+
+        if ($status === AssessmentStatus::Approved) {
+            $events[] = AssessmentEvaluationOutcome::event(
+                type: 'autopilot_approved',
+                title: __('Assessment approved automatically'),
+                description: __('The assessment passed the score, confidence, and critic quality gates.'),
+                payload: [
+                    'review_score' => $reviewScore,
+                    'confidence' => $result->confidence,
+                ],
+            );
+        }
 
         if (filled($emailSubject) && filled($emailBody)) {
             $events[] = AssessmentEvaluationOutcome::event(
                 type: 'draft_email_generated',
                 title: __('Draft interview email prepared'),
-                description: __('A draft interview email is ready for Admin review.'),
+                description: $status === AssessmentStatus::Approved
+                    ? __('A safe interview email was prepared for automatic delivery.')
+                    : __('A draft interview email is available for exception review.'),
                 payload: [
                     'subject' => $emailSubject,
                 ],
@@ -174,15 +198,18 @@ class AssessmentEvaluationPipeline
                 'passing_score' => $passingScore,
                 'passing_score_source' => $this->threshold->passingScoreSource($assessment),
                 'needs_manual_review' => $needsManualReview,
+                'manual_review_reasons' => array_values(array_unique($reviewReasons)),
             ],
         );
 
         return new AssessmentEvaluationOutcome(
             failed: false,
             attributes: [
-                'ai_score' => $result->score,
-                'essay_score' => $result->score,
-                'mcq_score' => $mcqScore,
+                'assessment_score' => $result->score,
+                'evaluation_payload' => [
+                    ...$result->payload(),
+                    'manual_review_reasons' => array_values(array_unique($reviewReasons)),
+                ],
                 'ranking_score' => $ranking['score'],
                 'ranking_payload' => $ranking['payload'],
                 'critic_payload' => $criticPayload,
@@ -190,6 +217,10 @@ class AssessmentEvaluationPipeline
                 'ai_justification' => $result->justification,
                 'ai_email_subject' => $emailSubject,
                 'ai_email_body' => $emailBody,
+                'approved_email_subject' => $status === AssessmentStatus::Approved ? $emailSubject : null,
+                'approved_email_body' => $status === AssessmentStatus::Approved ? $emailBody : null,
+                'approved_at' => $status === AssessmentStatus::Approved ? now() : null,
+                'approved_by' => null,
                 'evaluated_at' => now(),
                 'status' => $status,
             ],
@@ -213,13 +244,39 @@ class AssessmentEvaluationPipeline
         return [$evaluation->emailSubject, $evaluation->emailBody];
     }
 
+    private function withResolvedEmailDraft(
+        Assessment $assessment,
+        AssessmentEvaluationResult $evaluation,
+        int $reviewScore,
+        int $passingScore,
+    ): AssessmentEvaluationResult {
+        if ($reviewScore < $passingScore) {
+            return $evaluation->withEmailDraft(null, null);
+        }
+
+        if (filled($evaluation->emailSubject) && filled($evaluation->emailBody)) {
+            return $evaluation;
+        }
+
+        $roleTitle = trim((string) ($assessment->campaign?->role_title ?? 'the role'));
+
+        return $evaluation->withEmailDraft(
+            subject: __('Interview Invitation - :role', ['role' => $roleTitle]),
+            body: __('Thank you for completing the assessment. We would like to invite you to continue to the interview stage. Our team will contact you with the next steps.'),
+        );
+    }
+
     private function resolveStatusAfterEvaluation(
         int $reviewScore,
         int $passingScore,
-        bool $criticBlocksAutopilotApproval,
+        bool $needsManualReview,
     ): AssessmentStatus {
-        if ($reviewScore >= $passingScore && ! $criticBlocksAutopilotApproval) {
-            return AssessmentStatus::PendingApproval;
+        if ($needsManualReview) {
+            return AssessmentStatus::NeedsManualReview;
+        }
+
+        if ($reviewScore >= $passingScore) {
+            return AssessmentStatus::Approved;
         }
 
         return AssessmentStatus::Evaluated;

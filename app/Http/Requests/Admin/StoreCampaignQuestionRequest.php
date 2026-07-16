@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\CampaignSection;
-use App\QuestionGradingMode;
 use App\QuestionType;
 use App\Services\AuthoredQuestion;
 use App\Services\AuthoredQuestionValidationException;
@@ -31,7 +30,6 @@ class StoreCampaignQuestionRequest extends FormRequest
     {
         $this->merge([
             'ai_generated' => $this->boolean('ai_generated'),
-            'is_required' => $this->boolean('is_required'),
         ]);
     }
 
@@ -45,17 +43,11 @@ class StoreCampaignQuestionRequest extends FormRequest
         return [
             'campaign_section_id' => ['required', 'integer', 'exists:campaign_sections,id'],
             'type' => ['required', Rule::enum(QuestionType::class)],
-            'grading_mode' => ['nullable', Rule::enum(QuestionGradingMode::class)],
             'prompt' => ['required', 'string'],
-            'options_text' => ['nullable'],
-            'correct_answer_text' => ['nullable'],
-            'expected_rubric' => ['nullable', 'string'],
-            'points' => ['required', 'integer', 'min:1', 'max:1000'],
+            'expected_rubric' => ['required', 'string'],
+            'points' => ['required', 'integer', 'min:1', 'max:100'],
             'difficulty' => ['required', 'string', 'in:easy,medium,hard'],
-            'skill_tags_text' => ['nullable'],
             'ai_generated' => ['required', 'boolean'],
-            'is_required' => ['required', 'boolean'],
-            'sort_order' => ['required', 'integer', 'min:0'],
         ];
     }
 
@@ -89,8 +81,7 @@ class StoreCampaignQuestionRequest extends FormRequest
             ...$this->authoredQuestion()->toAttributes(),
             'campaign_section_id' => $this->integer('campaign_section_id'),
             'ai_generated' => $this->boolean('ai_generated'),
-            'is_required' => $this->boolean('is_required'),
-            'sort_order' => $this->integer('sort_order'),
+            'is_required' => true,
         ];
     }
 
@@ -119,14 +110,10 @@ class StoreCampaignQuestionRequest extends FormRequest
     {
         return $this->only([
             'type',
-            'grading_mode',
             'prompt',
-            'options_text',
-            'correct_answer_text',
             'expected_rubric',
             'points',
             'difficulty',
-            'skill_tags_text',
         ]);
     }
 }

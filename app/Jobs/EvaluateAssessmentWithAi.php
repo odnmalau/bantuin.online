@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\AssessmentStatus;
 use App\Models\Assessment;
 use App\Services\AssessmentEvaluationPipeline;
 use App\Services\AssessmentExternalWorkCoordinator;
@@ -39,7 +40,11 @@ class EvaluateAssessmentWithAi implements ShouldQueue
         }
 
         $outcome = $pipeline->compute($claimed->assessment);
-        $coordinator->finalizeEvaluation($claimed->assessment, $claimed->attemptId, $outcome);
+        $finalized = $coordinator->finalizeEvaluation($claimed->assessment, $claimed->attemptId, $outcome);
+
+        if ($finalized?->status === AssessmentStatus::Approved) {
+            SendInterviewInvitationEmail::dispatch($finalized)->afterCommit();
+        }
     }
 
     /**

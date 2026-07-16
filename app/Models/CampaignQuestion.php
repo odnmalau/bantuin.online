@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use Database\Factories\CampaignQuestionFactory;
@@ -15,14 +14,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'campaign_id',
     'campaign_section_id',
     'type',
-    'grading_mode',
     'prompt',
-    'options',
-    'correct_answer',
     'expected_rubric',
     'points',
     'difficulty',
-    'skill_tags',
     'ai_generated',
     'status',
     'is_required',
@@ -62,11 +57,7 @@ class CampaignQuestion extends Model
     {
         return [
             'type' => QuestionType::class,
-            'grading_mode' => QuestionGradingMode::class,
-            'options' => 'array',
-            'correct_answer' => 'array',
             'points' => 'integer',
-            'skill_tags' => 'array',
             'ai_generated' => 'boolean',
             'status' => QuestionStatus::class,
             'is_required' => 'boolean',

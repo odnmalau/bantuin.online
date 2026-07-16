@@ -23,7 +23,7 @@ type Assessment = {
     answers_payload: AnswerSnapshot[];
     resume_original_name: string | null;
     resume_score: number | null;
-    ai_score: number | null;
+    assessment_score: number | null;
     ai_justification: string | null;
     status: string;
     created_at: string;
@@ -95,7 +95,7 @@ export default function CandidateAssessmentShow({ assessment }: Props) {
                     <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
                         <p className="text-sm text-muted-foreground">Score</p>
                         <p className="mt-1 text-2xl font-semibold">
-                            {assessment.ai_score ?? '-'}
+                            {assessment.assessment_score ?? '-'}
                         </p>
                     </div>
                     <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">

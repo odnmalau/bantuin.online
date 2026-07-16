@@ -23,7 +23,6 @@ class CampaignSectionFactory extends Factory
             'title' => fake()->randomElement(['Knowledge Check', 'Technical Reasoning', 'System Design']),
             'description' => fake()->paragraph(),
             'duration_minutes' => fake()->numberBetween(20, 60),
-            'scoring_mode' => 'weighted',
             'weight' => 100,
             'sort_order' => fake()->numberBetween(0, 100),
         ];

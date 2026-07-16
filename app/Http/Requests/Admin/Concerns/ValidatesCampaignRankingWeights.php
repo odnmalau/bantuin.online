@@ -15,8 +15,7 @@ trait ValidatesCampaignRankingWeights
         return [
             'ranking_weights' => ['required', 'array'],
             'ranking_weights.resume_score' => ['required', 'integer', 'min:0', 'max:100'],
-            'ranking_weights.essay_score' => ['required', 'integer', 'min:0', 'max:100'],
-            'ranking_weights.mcq_score' => ['required', 'integer', 'min:0', 'max:100'],
+            'ranking_weights.assessment_score' => ['required', 'integer', 'min:0', 'max:100'],
         ];
     }
 

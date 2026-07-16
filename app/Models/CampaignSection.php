@@ -14,7 +14,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'title',
     'description',
     'duration_minutes',
-    'scoring_mode',
     'weight',
     'sort_order',
 ])]

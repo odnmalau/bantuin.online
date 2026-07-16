@@ -2,7 +2,6 @@
 
 namespace App\Services\Ai\Concerns;
 
-use App\QuestionGradingMode;
 use App\QuestionType;
 use App\Services\Ai\AssessmentGenerationException;
 use Illuminate\Support\Arr;
@@ -24,37 +23,18 @@ trait NormalizesGeneratedQuestions
             throw AssessmentGenerationException::invalidOutput('question type is not supported.');
         }
 
-        $options = $this->generatedStringList(Arr::get($question, 'options'));
-        $correctAnswer = $this->generatedStringList(Arr::get($question, 'correct_answer'));
         $expectedRubric = $this->nullableGeneratedString($question, 'expected_rubric');
 
-        $options = match ($type) {
-            QuestionType::YesNo => $options ?? ['Yes', 'No'],
-            default => $options,
-        };
-
-        if ($type->usesDeterministicGrading() && $correctAnswer === null) {
-            throw AssessmentGenerationException::invalidOutput('auto-graded questions require correct_answer.');
-        }
-
-        if ($type === QuestionType::MultipleChoice && count($options ?? []) < 2) {
-            throw AssessmentGenerationException::invalidOutput('multiple choice questions require at least two options.');
-        }
-
-        if (! $type->usesDeterministicGrading() && blank($expectedRubric)) {
-            throw AssessmentGenerationException::invalidOutput('AI-graded text questions require expected_rubric.');
+        if (blank($expectedRubric)) {
+            throw AssessmentGenerationException::invalidOutput('open-ended questions require expected_rubric.');
         }
 
         return [
             'type' => $type,
-            'grading_mode' => QuestionGradingMode::forQuestionType($type),
             'prompt' => $this->requiredGeneratedString($question, 'prompt'),
-            'options' => $options,
-            'correct_answer' => $correctAnswer,
             'expected_rubric' => $expectedRubric,
-            'points' => $this->generatedInteger($question, 'points', 10, 1, 1000),
+            'points' => $this->generatedInteger($question, 'points', 10, 1, 100),
             'difficulty' => $this->generatedEnumString($question, 'difficulty', ['easy', 'medium', 'hard'], 'medium'),
-            'skill_tags' => $this->generatedStringList(Arr::get($question, 'skill_tags')),
             'sort_order' => $this->generatedInteger($question, 'sort_order', ($index + 1) * 10, 0, 100000),
         ];
     }
@@ -138,26 +118,5 @@ trait NormalizesGeneratedQuestions
         }
 
         return $value;
-    }
-
-    /**
-     * @return array<int, string>|null
-     */
-    protected function generatedStringList(mixed $value): ?array
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        if (! is_array($value)) {
-            throw AssessmentGenerationException::invalidOutput('list fields must be arrays.');
-        }
-
-        $items = array_values(array_filter(
-            array_map(fn (mixed $item): string => trim((string) $item), $value),
-            fn (string $item): bool => $item !== '',
-        ));
-
-        return $items === [] ? null : $items;
     }
 }

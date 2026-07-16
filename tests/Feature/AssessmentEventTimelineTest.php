@@ -90,16 +90,7 @@ test('assessment event recorder redacts sensitive payload keys', function () {
 });
 
 test('evaluation job records agent activity timeline events', function () {
-    AssessmentEvaluatorAgent::fake([
-        [
-            'score' => 82,
-            'justification' => 'The answer meets the rubric and identifies important tradeoffs.',
-            'email' => [
-                'subject' => 'Interview Invitation - Candidate',
-                'body' => 'Thank you for completing the assessment. We would like to invite you to continue to the interview stage.',
-            ],
-        ],
-    ]);
+    AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(82)]);
 
     $assessment = Assessment::factory()
         ->for(User::factory())
@@ -111,6 +102,7 @@ test('evaluation job records agent activity timeline events', function () {
                     'question' => 'Explain indexes.',
                     'rubric' => 'Mentions reads, writes, and storage tradeoffs.',
                     'answer' => str_repeat('Indexes speed reads while adding write and storage tradeoffs. ', 3),
+                    'points' => 10,
                 ],
             ],
         ]);
@@ -120,12 +112,12 @@ test('evaluation job records agent activity timeline events', function () {
     expect($assessment->refresh()->events()->pluck('type')->all())
         ->toContain(
             'evaluation_started',
-            'qwen_essay_evaluation_completed',
-            'deterministic_grading_completed',
+            'qwen_assessment_evaluation_completed',
             'ranking_calculated',
             'critic_completed',
             'draft_email_generated',
             'evaluation_completed',
+            'autopilot_approved',
         );
 });
 
@@ -178,7 +170,7 @@ test('assessment event timeline stays internal and is not exposed on review page
         ->create([
             'status' => AssessmentStatus::PendingApproval,
             'ranking_payload' => [
-                'formula' => 'resume_score * 0.35 + essay_score * 0.50 + mcq_score * 0.15',
+                'formula' => 'resume_score * 0.35 + assessment_score * 0.65',
             ],
         ]);
 
@@ -218,7 +210,7 @@ test('assessment event timeline stays internal and is not exposed on review page
 
 test('candidate submission and resume screening record timeline events', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
     config()->set('ai.providers.qwen.key', 'test-qwen-key');
 
     $candidate = User::factory()->create();

@@ -102,6 +102,34 @@ function resumePdfUpload(string $text = 'Laravel PostgreSQL queue worker experie
     return UploadedFile::fake()->createWithContent('resume.pdf', resumePdfContent($text));
 }
 
+/**
+ * @param  list<int>  $questionIds
+ * @return array<string, mixed>
+ */
+function assessmentEvaluationResponse(
+    int $score,
+    array $questionIds = [1],
+    int $confidence = 90,
+    bool $includeEmail = true,
+    string $justification = 'The submitted answers were evaluated against their rubrics.',
+): array {
+    return [
+        'question_evaluations' => collect($questionIds)
+            ->map(fn (int $questionId): array => [
+                'question_id' => $questionId,
+                'score' => $score,
+                'confidence' => $confidence,
+                'justification' => $justification,
+            ])
+            ->all(),
+        'justification' => $justification,
+        'email' => [
+            'subject' => $includeEmail ? 'Interview Invitation' : null,
+            'body' => $includeEmail ? 'Thank you for completing the assessment. We would like to invite you to continue to the interview stage.' : null,
+        ],
+    ];
+}
+
 function assignCandidateToCampaignExam(User $candidate, Campaign $campaign, ?User $invitedBy = null): CampaignInvitation
 {
     $admin = $invitedBy ?? $campaign->creator;

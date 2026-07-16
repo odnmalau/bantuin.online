@@ -57,6 +57,8 @@ Rules:
 - If outcome is not "repaired", repaired_email.subject and repaired_email.body
   must be null.
 - Validate scores are consistent with the justification and ranking components.
+- Validate every question evaluation is grounded in its rubric and that low-confidence results are routed to manual review.
+- Validate backend-calculated section and assessment scores against the question scores, points, and section weights.
 - Validate email draft exists only when the assessment meets the configured threshold.
 - The email must be generic and must not include a schedule, date, interviewer, meeting link, salary, or hiring commitment.
 - Validate resume screening ignores protected attributes such as age, gender, race, religion, nationality, marital status, disability, family status, photo, or detailed address.

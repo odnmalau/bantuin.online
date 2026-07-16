@@ -33,8 +33,7 @@ test('admin can view candidate ranking leaderboard ordered by ranking score with
         ->create([
             'ranking_score' => 72,
             'resume_score' => 70,
-            'essay_score' => 74,
-            'mcq_score' => 70,
+            'assessment_score' => 74,
             'status' => AssessmentStatus::Evaluated,
             'evaluated_at' => now()->subDays(1),
         ]);
@@ -44,8 +43,7 @@ test('admin can view candidate ranking leaderboard ordered by ranking score with
         ->create([
             'ranking_score' => 91,
             'resume_score' => 88,
-            'essay_score' => 92,
-            'mcq_score' => 96,
+            'assessment_score' => 92,
             'status' => AssessmentStatus::PendingApproval,
             'evaluated_at' => now()->subHours(2),
         ]);

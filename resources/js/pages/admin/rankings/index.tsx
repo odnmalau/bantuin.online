@@ -1,6 +1,6 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Inbox, Medal } from 'lucide-react';
-import type { FormEvent, KeyboardEvent } from 'react';
+import type { FormEvent } from 'react';
 import AssessmentStatusBadge from '@/components/assessment-status-badge';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
@@ -50,8 +50,7 @@ type RankingRow = {
     role_title: string | null;
     ranking_score: number | null;
     resume_score: number | null;
-    essay_score: number | null;
-    mcq_score: number | null;
+    assessment_score: number | null;
     status: string;
     needs_manual_review: boolean;
     evaluated_at: string | null;
@@ -125,9 +124,8 @@ function ScoreBreakdown({ ranking }: { ranking: RankingRow }) {
                 {scoreValue(ranking.ranking_score)}
             </p>
             <p className="text-xs text-muted-foreground">
-                R {scoreValue(ranking.resume_score)} · E{' '}
-                {scoreValue(ranking.essay_score)} · M{' '}
-                {scoreValue(ranking.mcq_score)}
+                R {scoreValue(ranking.resume_score)} · A{' '}
+                {scoreValue(ranking.assessment_score)}
             </p>
         </div>
     );
@@ -181,20 +179,6 @@ export default function AdminRankingsIndex({
             preserveScroll: true,
             preserveState: true,
         });
-    }
-
-    function openReview(assessmentId: number) {
-        router.visit(admin.assessments.show.url(assessmentId));
-    }
-
-    function handleRowKeyDown(
-        event: KeyboardEvent<HTMLElement>,
-        assessmentId: number,
-    ) {
-        if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            openReview(assessmentId);
-        }
     }
 
     return (
@@ -327,44 +311,40 @@ export default function AdminRankingsIndex({
                             {rankings.data.map((ranking) => (
                                 <Item
                                     key={ranking.assessment_id}
+                                    asChild
                                     variant="outline"
                                     size="sm"
-                                    className="cursor-pointer"
-                                    tabIndex={0}
-                                    role="link"
-                                    aria-label={`Review ${ranking.candidate_name ?? 'candidate'}`}
-                                    onClick={() =>
-                                        openReview(ranking.assessment_id)
-                                    }
-                                    onKeyDown={(event) =>
-                                        handleRowKeyDown(
-                                            event,
-                                            ranking.assessment_id,
-                                        )
-                                    }
                                 >
-                                    <ItemActions className="shrink-0">
-                                        <RankBadge rank={ranking.rank} />
-                                    </ItemActions>
-                                    <ItemContent>
-                                        <ItemTitle>
-                                            {ranking.candidate_name ??
-                                                'Unknown candidate'}
-                                        </ItemTitle>
-                                        <ItemDescription>
-                                            {ranking.candidate_email ?? '-'}
-                                        </ItemDescription>
-                                        <ItemDescription>
-                                            Evaluated{' '}
-                                            {formatEvaluatedAt(
-                                                ranking.evaluated_at,
-                                            )}
-                                        </ItemDescription>
-                                    </ItemContent>
-                                    <ItemActions className="ml-auto flex-col items-end gap-1.5">
-                                        <ScoreBreakdown ranking={ranking} />
-                                        <StatusCell ranking={ranking} />
-                                    </ItemActions>
+                                    <Link
+                                        href={admin.assessments.show(
+                                            ranking.assessment_id,
+                                        )}
+                                        prefetch
+                                        aria-label={`Review ${ranking.candidate_name ?? 'candidate'}`}
+                                    >
+                                        <ItemActions className="shrink-0">
+                                            <RankBadge rank={ranking.rank} />
+                                        </ItemActions>
+                                        <ItemContent>
+                                            <ItemTitle>
+                                                {ranking.candidate_name ??
+                                                    'Unknown candidate'}
+                                            </ItemTitle>
+                                            <ItemDescription>
+                                                {ranking.candidate_email ?? '-'}
+                                            </ItemDescription>
+                                            <ItemDescription>
+                                                Evaluated{' '}
+                                                {formatEvaluatedAt(
+                                                    ranking.evaluated_at,
+                                                )}
+                                            </ItemDescription>
+                                        </ItemContent>
+                                        <ItemActions className="ml-auto flex-col items-end gap-1.5">
+                                            <ScoreBreakdown ranking={ranking} />
+                                            <StatusCell ranking={ranking} />
+                                        </ItemActions>
+                                    </Link>
                                 </Item>
                             ))}
                         </ItemGroup>
@@ -393,21 +373,6 @@ export default function AdminRankingsIndex({
                                         {rankings.data.map((ranking) => (
                                             <TableRow
                                                 key={ranking.assessment_id}
-                                                className="cursor-pointer"
-                                                tabIndex={0}
-                                                role="link"
-                                                aria-label={`Review ${ranking.candidate_name ?? 'candidate'}`}
-                                                onClick={() =>
-                                                    openReview(
-                                                        ranking.assessment_id,
-                                                    )
-                                                }
-                                                onKeyDown={(event) =>
-                                                    handleRowKeyDown(
-                                                        event,
-                                                        ranking.assessment_id,
-                                                    )
-                                                }
                                             >
                                                 <TableCell className="pl-4">
                                                     <RankBadge
@@ -424,10 +389,16 @@ export default function AdminRankingsIndex({
                                                             </AvatarFallback>
                                                         </Avatar>
                                                         <div className="min-w-0">
-                                                            <p className="truncate font-medium">
+                                                            <Link
+                                                                href={admin.assessments.show(
+                                                                    ranking.assessment_id,
+                                                                )}
+                                                                prefetch
+                                                                className="truncate font-medium underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+                                                            >
                                                                 {ranking.candidate_name ??
                                                                     'Unknown candidate'}
-                                                            </p>
+                                                            </Link>
                                                             <p className="truncate text-muted-foreground">
                                                                 {ranking.candidate_email ??
                                                                     '-'}

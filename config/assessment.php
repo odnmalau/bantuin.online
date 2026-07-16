@@ -12,11 +12,13 @@ return [
     ],
 
     'generator' => [
-        'prompt_version' => (string) env('ASSESSMENT_GENERATOR_PROMPT_VERSION', '1'),
+        'prompt_version' => (string) env('ASSESSMENT_GENERATOR_PROMPT_VERSION', '2'),
     ],
 
     'evaluation' => [
         'repair_attempts' => (int) env('ASSESSMENT_EVALUATION_REPAIR_ATTEMPTS', 1),
+        'minimum_confidence' => (int) env('ASSESSMENT_EVALUATION_MINIMUM_CONFIDENCE', 70),
+        'manual_review_margin' => (int) env('ASSESSMENT_EVALUATION_REVIEW_MARGIN', 3),
     ],
 
     'resume' => [
@@ -27,9 +29,8 @@ return [
 
     'ranking' => [
         'weights' => [
-            'resume_score' => (int) env('ASSESSMENT_RANKING_RESUME_WEIGHT', 35),
-            'essay_score' => (int) env('ASSESSMENT_RANKING_ESSAY_WEIGHT', 50),
-            'mcq_score' => (int) env('ASSESSMENT_RANKING_MCQ_WEIGHT', 15),
+            'resume_score' => 0,
+            'assessment_score' => 100,
         ],
     ],
 

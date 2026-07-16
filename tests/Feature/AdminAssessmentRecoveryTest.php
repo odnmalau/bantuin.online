@@ -22,7 +22,7 @@ test('admin can retry failed evaluation without creating a duplicate assessment'
         ->for($campaign)
         ->create([
             'status' => AssessmentStatus::EvaluationFailed,
-            'ai_score' => 42,
+            'assessment_score' => 42,
             'ai_justification' => 'Stale failed output.',
             'ranking_score' => 42,
             'ranking_payload' => ['stale' => true],
@@ -42,7 +42,7 @@ test('admin can retry failed evaluation without creating a duplicate assessment'
 
     expect($assessment)
         ->status->toBe(AssessmentStatus::Submitted)
-        ->ai_score->toBeNull()
+        ->assessment_score->toBeNull()
         ->ai_justification->toBeNull()
         ->ranking_score->toBeNull()
         ->ranking_payload->toBeNull()
@@ -265,7 +265,7 @@ test('admin can override ranking score with reason', function () {
             'status' => AssessmentStatus::Evaluated,
             'ranking_score' => 62,
             'ranking_payload' => [
-                'formula' => 'resume_score * 0.35 + essay_score * 0.50 + mcq_score * 0.15',
+                'formula' => 'resume_score * 0.35 + assessment_score * 0.65',
             ],
         ]);
 

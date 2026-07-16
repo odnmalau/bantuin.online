@@ -36,17 +36,6 @@ beforeEach(function () {
 });
 
 test('assessment autopilot product flow works end to end', function () {
-    AssessmentEvaluatorAgent::fake([
-        [
-            'score' => 82,
-            'justification' => 'The answer meets the rubric and identifies the important tradeoffs.',
-            'email' => [
-                'subject' => 'Interview Invitation - Candidate One',
-                'body' => 'Thank you for completing the assessment. We would like to invite you to continue to the interview stage.',
-            ],
-        ],
-    ]);
-
     $admin = User::factory()->teamOwner()->create();
     $candidate = User::factory()->create([
         'name' => 'Candidate One',
@@ -66,8 +55,12 @@ test('assessment autopilot product flow works end to end', function () {
             'sort_order' => 1,
         ]);
 
+    AssessmentEvaluatorAgent::fake([
+        assessmentEvaluationResponse(82, [$question->id]),
+    ]);
+
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     submitCandidateAssessmentViaExamSession($candidate, $campaign, [
         $question->id => str_repeat('Indexes speed reads while adding write and storage tradeoffs. ', 3),
@@ -83,22 +76,12 @@ test('assessment autopilot product flow works end to end', function () {
     app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
 
     expect($assessment->refresh())
-        ->status->toBe(AssessmentStatus::PendingApproval)
-        ->ai_score->toBe(82)
-        ->ai_email_subject->not->toBeNull()
-        ->ai_email_body->not->toBeNull();
-
-    $this->actingAs($admin)
-        ->post(route('admin.assessments.approve', $assessment), [
-            'email_subject' => 'Final interview invitation',
-            'email_body' => 'Final email body approved by Admin.',
-        ])
-        ->assertRedirect(route('admin.assessments.show', $assessment));
-
-    expect($assessment->refresh())
         ->status->toBe(AssessmentStatus::Approved)
-        ->approved_email_subject->toBe('Final interview invitation')
-        ->approved_email_body->toBe('Final email body approved by Admin.');
+        ->assessment_score->toBe(82)
+        ->ai_email_subject->not->toBeNull()
+        ->ai_email_body->not->toBeNull()
+        ->approved_email_subject->toBe('Interview Invitation')
+        ->approved_email_body->not->toBeNull();
 
     Bus::assertDispatched(SendInterviewInvitationEmail::class);
 

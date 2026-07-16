@@ -9,7 +9,6 @@ use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
 use App\Models\User;
-use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use Illuminate\Support\Facades\Bus;
@@ -75,7 +74,7 @@ test('candidate can view active campaign questions when assigned', function () {
         );
 });
 
-test('candidate exam exposes sanitized matching pairs prompts and choices', function () {
+test('candidate exam exposes an open ended question without its rubric', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
@@ -84,14 +83,9 @@ test('candidate exam exposes sanitized matching pairs prompts and choices', func
         ->for($campaign)
         ->for($section, 'section')
         ->create([
-            'type' => QuestionType::MatchingPairs,
-            'grading_mode' => QuestionGradingMode::Deterministic,
-            'prompt' => 'Match each concept to its purpose.',
-            'correct_answer' => [
-                'Queue = async jobs',
-                'Index = read speed',
-            ],
-            'expected_rubric' => null,
+            'type' => QuestionType::LongText,
+            'prompt' => 'Explain when you would use a queue and a database index.',
+            'expected_rubric' => 'Explains asynchronous work and read performance tradeoffs.',
             'status' => QuestionStatus::Approved,
         ]);
 
@@ -104,10 +98,9 @@ test('candidate exam exposes sanitized matching pairs prompts and choices', func
             ->component('candidate/exam')
             ->where('state', 'active_section')
             ->where('questions.0.id', $question->id)
-            ->where('questions.0.type', QuestionType::MatchingPairs->value)
-            ->where('questions.0.matching_pairs.prompts', ['Queue', 'Index'])
-            ->where('questions.0.matching_pairs.choices', fn ($choices): bool => collect($choices)->sort()->values()->all() === ['async jobs', 'read speed'])
-            ->missing('questions.0.correct_answer'),
+            ->where('questions.0.type', QuestionType::LongText->value)
+            ->where('questions.0.max_characters', QuestionType::LongText->maxCharacters())
+            ->missing('questions.0.expected_rubric'),
         );
 });
 
@@ -239,7 +232,7 @@ test('candidate sees submitted state only for the assigned campaign', function (
 
 test('candidate can submit an assessment for an active campaign', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -249,14 +242,12 @@ test('candidate can submit an assessment for an active campaign', function () {
         'weight' => 100,
     ]);
     $firstQuestion = CampaignQuestion::factory()
-        ->multipleChoice()
         ->for($campaign)
         ->for($section, 'section')
         ->create([
-            'prompt' => 'Which datastore supports relational constraints?',
-            'expected_rubric' => null,
-            'options' => ['PostgreSQL', 'Redis'],
-            'correct_answer' => ['PostgreSQL'],
+            'type' => QuestionType::ShortText,
+            'prompt' => 'Explain why you would choose PostgreSQL for relational constraints.',
+            'expected_rubric' => 'Mentions relational integrity and database constraints.',
             'points' => 10,
             'status' => QuestionStatus::Approved,
             'sort_order' => 1,
@@ -284,7 +275,7 @@ test('candidate can submit an assessment for an active campaign', function () {
     $this->actingAs($candidate)
         ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session]), [
             'answers' => [
-                $firstQuestion->id => 'PostgreSQL',
+                $firstQuestion->id => 'PostgreSQL provides relational integrity and database constraints.',
                 $secondQuestion->id => 'Dependency injection passes collaborators from the outside.',
             ],
         ])
@@ -316,12 +307,10 @@ test('candidate can submit an assessment for an active campaign', function () {
             'campaign_section_id' => $section->id,
             'section_title' => 'Knowledge Check',
             'section_weight' => 100,
-            'question' => 'Which datastore supports relational constraints?',
-            'type' => QuestionType::MultipleChoice->value,
-            'grading_mode' => QuestionGradingMode::Deterministic->value,
-            'correct_answer' => ['PostgreSQL'],
+            'question' => 'Explain why you would choose PostgreSQL for relational constraints.',
+            'type' => QuestionType::ShortText->value,
             'points' => 10,
-            'answer' => 'PostgreSQL',
+            'answer' => 'PostgreSQL provides relational integrity and database constraints.',
         ])
         ->and($assessment->answers_payload[1])
         ->toMatchArray([
@@ -329,11 +318,10 @@ test('candidate can submit an assessment for an active campaign', function () {
             'question' => 'Explain dependency injection.',
             'rubric' => 'Mentions inversion of control and testability.',
             'type' => QuestionType::LongText->value,
-            'grading_mode' => QuestionGradingMode::Ai->value,
             'answer' => 'Dependency injection passes collaborators from the outside.',
         ]);
 
-    Storage::disk('local')->assertExists($assessment->resume_path);
+    Storage::disk('r2-private')->assertExists($assessment->resume_path);
     Bus::assertDispatched(ScreenResumeWithAi::class, fn (ScreenResumeWithAi $job): bool => $job->assessment->is($assessment));
     Bus::assertChained([
         ScreenResumeWithAi::class,
@@ -343,7 +331,7 @@ test('candidate can submit an assessment for an active campaign', function () {
 
 test('candidate must answer every approved campaign question', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -381,7 +369,7 @@ test('candidate must answer every approved campaign question', function () {
 
 test('candidate cannot submit more than one assessment for the same campaign', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
@@ -407,7 +395,7 @@ test('candidate cannot submit more than one assessment for the same campaign', f
 
 test('candidate can submit a different active campaign when assigned to both', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $previousCampaign = Campaign::factory()->active()->create([
@@ -451,7 +439,7 @@ test('candidate can submit a different active campaign when assigned to both', f
 
 test('candidate cannot submit an inactive campaign', function () {
     Bus::fake();
-    Storage::fake('local');
+    Storage::fake('r2-private');
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->create([
@@ -482,11 +470,9 @@ test('candidate can view their own assessment', function () {
         'answers_payload' => [
             [
                 'question_id' => 7,
-                'question' => 'Which datastore supports relational constraints?',
+                'question' => 'Explain why PostgreSQL supports relational constraints.',
                 'rubric' => 'Should not be exposed to candidates.',
-                'options' => ['PostgreSQL', 'Redis'],
-                'correct_answer' => ['PostgreSQL'],
-                'answer' => 'PostgreSQL',
+                'answer' => 'PostgreSQL provides relational integrity.',
             ],
         ],
     ]);
@@ -502,11 +488,9 @@ test('candidate can view their own assessment', function () {
             ->where('assessment.campaign.team.name', $campaign->team->name)
             ->where('assessment.status', AssessmentStatus::Submitted->value)
             ->where('assessment.answers_payload.0.question_id', 7)
-            ->where('assessment.answers_payload.0.question', 'Which datastore supports relational constraints?')
-            ->where('assessment.answers_payload.0.answer', 'PostgreSQL')
-            ->missing('assessment.answers_payload.0.rubric')
-            ->missing('assessment.answers_payload.0.options')
-            ->missing('assessment.answers_payload.0.correct_answer'),
+            ->where('assessment.answers_payload.0.question', 'Explain why PostgreSQL supports relational constraints.')
+            ->where('assessment.answers_payload.0.answer', 'PostgreSQL provides relational integrity.')
+            ->missing('assessment.answers_payload.0.rubric'),
         );
 });
 

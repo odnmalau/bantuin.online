@@ -158,16 +158,7 @@ test('live processing claims cannot be stolen but stale evaluation claims can be
 test('evaluation compute runs outside transactions and stale attempts are ignored', function () {
     config()->set('ai.providers.qwen.key', 'test-qwen-key');
 
-    AssessmentEvaluatorAgent::fake([
-        [
-            'score' => 82,
-            'justification' => 'Strong answer.',
-            'email' => [
-                'subject' => 'Interview Invitation',
-                'body' => 'Thank you for completing the assessment.',
-            ],
-        ],
-    ]);
+    AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(82)]);
     AssessmentCriticAgent::fake([
         [
             'outcome' => 'passed',
@@ -191,6 +182,7 @@ test('evaluation compute runs outside transactions and stale attempts are ignore
                     'question' => 'Explain indexes.',
                     'rubric' => 'Mentions tradeoffs.',
                     'answer' => 'Indexes help reads.',
+                    'points' => 10,
                 ],
             ],
         ]);
@@ -210,7 +202,7 @@ test('evaluation compute runs outside transactions and stale attempts are ignore
 
     $applied = $coordinator->finalizeEvaluation($assessment->fresh(), $claimed->attemptId, $outcome);
     expect($applied)->not->toBeNull()
-        ->and($applied->status)->toBe(AssessmentStatus::PendingApproval)
+        ->and($applied->status)->toBe(AssessmentStatus::Approved)
         ->and($applied->evaluation_attempt_id)->toBeNull();
 });
 

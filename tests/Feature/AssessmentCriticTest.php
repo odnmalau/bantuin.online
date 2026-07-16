@@ -60,7 +60,10 @@ test('qwen critic requires configured api key', function () {
 
     $evaluation = new AssessmentEvaluationResult(
         score: 60,
+        confidence: 90,
         justification: 'The answer needs more detail.',
+        questionEvaluations: [],
+        sectionScores: [],
         emailSubject: null,
         emailBody: null,
     );
@@ -68,7 +71,6 @@ test('qwen critic requires configured api key', function () {
     expect(fn () => app(QwenAssessmentCritic::class)->review(
         assessment: $assessment,
         evaluation: $evaluation,
-        mcqScore: null,
         ranking: ['score' => null, 'payload' => []],
         reviewScore: 60,
         passingScore: 75,
@@ -108,7 +110,10 @@ test('qwen critic uses structured output through qwen provider', function () {
         ]);
     $evaluation = new AssessmentEvaluationResult(
         score: 88,
+        confidence: 90,
         justification: 'Strong answer.',
+        questionEvaluations: [],
+        sectionScores: [],
         emailSubject: 'Interview Invitation',
         emailBody: 'Please continue to the interview stage.',
     );
@@ -116,14 +121,12 @@ test('qwen critic uses structured output through qwen provider', function () {
     $result = app(QwenAssessmentCritic::class)->review(
         assessment: $assessment,
         evaluation: $evaluation,
-        mcqScore: null,
         ranking: [
             'score' => 85,
             'payload' => [
                 'components' => [
                     'resume_score' => 80,
-                    'essay_score' => 88,
-                    'mcq_score' => null,
+                    'assessment_score' => 88,
                 ],
             ],
         ],
@@ -159,7 +162,10 @@ test('critic prompt payload omits candidate name and email', function () {
         ]);
     $evaluation = new AssessmentEvaluationResult(
         score: 88,
+        confidence: 90,
         justification: 'Strong answer.',
+        questionEvaluations: [],
+        sectionScores: [],
         emailSubject: 'Interview Invitation',
         emailBody: 'Please continue to the interview stage.',
     );
@@ -167,7 +173,6 @@ test('critic prompt payload omits candidate name and email', function () {
     $payload = app(QwenAssessmentCritic::class)->promptPayload(
         assessment: $assessment,
         evaluation: $evaluation,
-        mcqScore: null,
         ranking: ['score' => 85, 'payload' => []],
         reviewScore: 85,
         passingScore: 75,
@@ -177,12 +182,12 @@ test('critic prompt payload omits candidate name and email', function () {
     expect($payload)
         ->toHaveKey('assessment_id')
         ->toHaveKey('untrusted_model_output')
-        ->not->toHaveKey('essay_evaluation')
+        ->not->toHaveKey('assessment_evaluation')
         ->not->toHaveKey('resume_screening')
         ->not->toHaveKey('email_draft')
         ->not->toHaveKey('candidate')
         ->and($payload['assessment_id'])->toBe($assessment->id)
-        ->and($payload['untrusted_model_output']['essay_evaluation']['justification'])->toBe('Strong answer.')
+        ->and($payload['untrusted_model_output']['assessment_evaluation']['justification'])->toBe('Strong answer.')
         ->and($encoded)->not->toContain('SENTINEL_CRITIC_NAME_4e8d22')
         ->and($encoded)->not->toContain('sentinel-critic-4e8d22@example.test');
 });
@@ -197,16 +202,12 @@ test('critic instructions isolate model-derived candidate-influenced prose', fun
 });
 
 test('evaluation job stores critic payload and repaired email', function () {
-    AssessmentEvaluatorAgent::fake([
-        [
-            'score' => 88,
-            'justification' => 'The answer is strong.',
-            'email' => [
-                'subject' => 'Interview tomorrow at 9 AM',
-                'body' => 'Meet us tomorrow at 9 AM.',
-            ],
-        ],
-    ]);
+    $evaluationResponse = assessmentEvaluationResponse(88);
+    $evaluationResponse['email'] = [
+        'subject' => 'Interview tomorrow at 9 AM',
+        'body' => 'Meet us tomorrow at 9 AM.',
+    ];
+    AssessmentEvaluatorAgent::fake([$evaluationResponse]);
     AssessmentCriticAgent::fake([
         [
             'outcome' => 'repaired',
@@ -229,7 +230,7 @@ test('evaluation job stores critic payload and repaired email', function () {
     $assessment->refresh();
 
     expect($assessment)
-        ->status->toBe(AssessmentStatus::PendingApproval)
+        ->status->toBe(AssessmentStatus::EmailSent)
         ->needs_manual_review->toBeFalse()
         ->ai_email_subject->toBe('Interview Invitation')
         ->ai_email_body->toContain('continue to the interview stage')
@@ -238,16 +239,7 @@ test('evaluation job stores critic payload and repaired email', function () {
 });
 
 test('evaluation job routes risky critic outcome to manual review', function () {
-    AssessmentEvaluatorAgent::fake([
-        [
-            'score' => 88,
-            'justification' => 'The answer is strong.',
-            'email' => [
-                'subject' => 'Interview Invitation',
-                'body' => 'Thank you for completing the assessment. We would like to invite you to continue to the interview stage.',
-            ],
-        ],
-    ]);
+    AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(88)]);
     AssessmentCriticAgent::fake([
         [
             'outcome' => 'needs_manual_review',
@@ -268,29 +260,19 @@ test('evaluation job routes risky critic outcome to manual review', function () 
     app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
 
     expect($assessment->refresh())
-        ->status->toBe(AssessmentStatus::Evaluated)
+        ->status->toBe(AssessmentStatus::NeedsManualReview)
         ->needs_manual_review->toBeTrue()
         ->and($assessment->critic_payload['outcome'])->toBe('needs_manual_review');
 });
 
 test('evaluation job stores critic failure and keeps assessment reviewable', function () {
-    AssessmentEvaluatorAgent::fake([
-        [
-            'score' => 88,
-            'justification' => 'The answer is strong.',
-            'email' => [
-                'subject' => 'Interview Invitation',
-                'body' => 'Thank you for completing the assessment. We would like to invite you to continue to the interview stage.',
-            ],
-        ],
-    ]);
+    AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(88)]);
 
     app()->instance(QwenAssessmentCritic::class, new class extends QwenAssessmentCritic
     {
         public function review(
             Assessment $assessment,
             AssessmentEvaluationResult $evaluation,
-            ?int $mcqScore,
             array $ranking,
             int $reviewScore,
             int $passingScore,
@@ -306,7 +288,7 @@ test('evaluation job stores critic failure and keeps assessment reviewable', fun
     app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
 
     expect($assessment->refresh())
-        ->status->toBe(AssessmentStatus::Evaluated)
+        ->status->toBe(AssessmentStatus::NeedsManualReview)
         ->needs_manual_review->toBeTrue()
         ->and($assessment->critic_payload['outcome'])->toBe('failed')
         ->and($assessment->critic_payload['findings'][0])->toBe('Fake critic failure.');

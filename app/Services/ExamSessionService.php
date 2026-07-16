@@ -121,7 +121,17 @@ class ExamSessionService
                 $key = (string) $question->id;
 
                 if (array_key_exists($key, $answers)) {
-                    $drafts[$key] = $answers[$key];
+                    $answer = $answers[$key];
+
+                    if (is_string($answer) && mb_strlen($answer) > $question->type->maxCharacters()) {
+                        throw ValidationException::withMessages([
+                            "answers.{$question->id}" => __('This answer may not be greater than :max characters.', [
+                                'max' => $question->type->maxCharacters(),
+                            ]),
+                        ]);
+                    }
+
+                    $drafts[$key] = $answer;
                 }
             }
 

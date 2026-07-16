@@ -149,7 +149,7 @@ test('evaluation job from any status except submitted is a no-op', function (Ass
         ->for(User::factory())
         ->create([
             'status' => $status,
-            'ai_score' => 70,
+            'assessment_score' => 70,
             'ai_justification' => 'Existing evaluation.',
             'evaluated_at' => now(),
         ]);
@@ -160,7 +160,7 @@ test('evaluation job from any status except submitted is a no-op', function (Ass
 
     expect($assessment->refresh())
         ->status->toBe($status)
-        ->ai_score->toBe(70)
+        ->assessment_score->toBe(70)
         ->ai_justification->toBe('Existing evaluation.')
         ->and($assessment->events()->count())->toBe($eventsBefore);
 })->with([
@@ -183,7 +183,7 @@ test('retry evaluation from evaluation failed resets and queues once', function 
         ->for($campaign)
         ->create([
             'status' => AssessmentStatus::EvaluationFailed,
-            'ai_score' => 42,
+            'assessment_score' => 42,
             'ai_justification' => 'Stale failed output.',
             'evaluated_at' => now(),
         ]);
@@ -194,7 +194,7 @@ test('retry evaluation from evaluation failed resets and queues once', function 
 
     expect($assessment->refresh())
         ->status->toBe(AssessmentStatus::Submitted)
-        ->ai_score->toBeNull()
+        ->assessment_score->toBeNull()
         ->ai_justification->toBeNull()
         ->evaluated_at->toBeNull()
         ->and($assessment->events()->where('type', 'admin_retried_evaluation')->count())->toBe(1);

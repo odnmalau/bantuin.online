@@ -103,21 +103,36 @@ type SectionScore = {
     score: number | null;
 };
 
+type QuestionEvaluation = {
+    question_id: number;
+    score: number;
+    confidence: number;
+    points: number;
+    earned_points: number;
+    justification: string;
+};
+
+type EvaluationPayload = {
+    score: number;
+    confidence: number;
+    justification: string;
+    question_evaluations: QuestionEvaluation[];
+    section_scores: SectionScore[];
+    manual_review_reasons?: string[];
+};
+
 type RankingPayload = {
     components?: {
         resume_score?: number | null;
-        essay_score?: number | null;
-        mcq_score?: number | null;
+        assessment_score?: number | null;
     };
     configured_weights?: {
         resume_score?: number;
-        essay_score?: number;
-        mcq_score?: number;
+        assessment_score?: number;
     };
     normalized_weights?: {
         resume_score?: number;
-        essay_score?: number;
-        mcq_score?: number;
+        assessment_score?: number;
     };
     missing_components?: string[];
     weighting_mode?: string;
@@ -164,9 +179,8 @@ type Assessment = {
         confidence?: number;
     } | null;
     needs_manual_review: boolean;
-    ai_score: number | null;
-    mcq_score: number | null;
-    essay_score: number | null;
+    assessment_score: number | null;
+    evaluation_payload: EvaluationPayload | null;
     ranking_score: number | null;
     ranking_payload: RankingPayload | null;
     section_scores: SectionScore[];
@@ -229,7 +243,7 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
         assessment.candidate.name ??
         assessment.candidate.email ??
         'Unknown candidate';
-    const essayScore = assessment.essay_score ?? assessment.ai_score;
+    const assessmentScore = assessment.assessment_score;
 
     return (
         <>
@@ -252,8 +266,11 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
                         label="Resume"
                         score={assessment.resume_score}
                     />
-                    <ScoreMetric label="Essay" score={essayScore} />
-                    <ScoreMetric label="MCQ" score={assessment.mcq_score} />
+                    <ScoreMetric label="Assessment" score={assessmentScore} />
+                    <ScoreMetric
+                        label="AI confidence"
+                        score={assessment.evaluation_payload?.confidence}
+                    />
                 </div>
 
                 {assessment.needs_manual_review ? (
@@ -263,6 +280,17 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
                         <AlertDescription>
                             This submission was flagged for human review before
                             final approval or rejection.
+                            {assessment.evaluation_payload
+                                ?.manual_review_reasons?.length ? (
+                                <span className="mt-1 block">
+                                    Reasons:{' '}
+                                    {assessment.evaluation_payload.manual_review_reasons
+                                        .map((reason) =>
+                                            reason.replaceAll('_', ' '),
+                                        )
+                                        .join(', ')}
+                                </span>
+                            ) : null}
                         </AlertDescription>
                     </Alert>
                 ) : null}
@@ -635,35 +663,74 @@ function AnswersTab({ assessment }: { assessment: Assessment }) {
     return (
         <ScrollArea className="h-[70vh] rounded-lg">
             <div className="flex flex-col gap-4 pr-4">
-                {assessment.answers_payload.map((answer, index) => (
-                    <Card key={answer.question_id}>
-                        <CardHeader>
-                            <CardDescription>
-                                Question {index + 1}
-                            </CardDescription>
-                            <CardTitle>{answer.question}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-4">
-                            <Field>
-                                <FieldLabel>Rubric</FieldLabel>
-                                <FieldContent>
-                                    <p className="text-sm whitespace-pre-wrap">
-                                        {answer.rubric}
-                                    </p>
-                                </FieldContent>
-                            </Field>
-                            <Separator />
-                            <Field>
-                                <FieldLabel>Answer</FieldLabel>
-                                <FieldContent>
-                                    <p className="text-sm whitespace-pre-wrap">
-                                        {answer.answer}
-                                    </p>
-                                </FieldContent>
-                            </Field>
-                        </CardContent>
-                    </Card>
-                ))}
+                {assessment.answers_payload.map((answer, index) => {
+                    const evaluation =
+                        assessment.evaluation_payload?.question_evaluations.find(
+                            (item) => item.question_id === answer.question_id,
+                        );
+
+                    return (
+                        <Card key={answer.question_id}>
+                            <CardHeader>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <CardDescription>
+                                        Question {index + 1}
+                                    </CardDescription>
+                                    {evaluation ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            <Badge variant="secondary">
+                                                Score {evaluation.score}
+                                            </Badge>
+                                            <Badge variant="outline">
+                                                Confidence{' '}
+                                                {evaluation.confidence}%
+                                            </Badge>
+                                            <Badge variant="outline">
+                                                {evaluation.earned_points}/
+                                                {evaluation.points} pts
+                                            </Badge>
+                                        </div>
+                                    ) : null}
+                                </div>
+                                <CardTitle>{answer.question}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-4">
+                                <Field>
+                                    <FieldLabel>Rubric</FieldLabel>
+                                    <FieldContent>
+                                        <p className="text-sm whitespace-pre-wrap">
+                                            {answer.rubric}
+                                        </p>
+                                    </FieldContent>
+                                </Field>
+                                <Separator />
+                                <Field>
+                                    <FieldLabel>Answer</FieldLabel>
+                                    <FieldContent>
+                                        <p className="text-sm whitespace-pre-wrap">
+                                            {answer.answer}
+                                        </p>
+                                    </FieldContent>
+                                </Field>
+                                {evaluation ? (
+                                    <>
+                                        <Separator />
+                                        <Field>
+                                            <FieldLabel>
+                                                AI evaluation
+                                            </FieldLabel>
+                                            <FieldContent>
+                                                <p className="text-sm whitespace-pre-wrap">
+                                                    {evaluation.justification}
+                                                </p>
+                                            </FieldContent>
+                                        </Field>
+                                    </>
+                                ) : null}
+                            </CardContent>
+                        </Card>
+                    );
+                })}
             </div>
         </ScrollArea>
     );

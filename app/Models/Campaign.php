@@ -106,7 +106,7 @@ class Campaign extends Model
     }
 
     /**
-     * @return array{resume_score: int, essay_score: int, mcq_score: int}
+     * @return array{resume_score: int, assessment_score: int}
      */
     public static function defaultRankingWeights(): array
     {
@@ -114,14 +114,10 @@ class Campaign extends Model
     }
 
     /**
-     * @return array{resume_score: int, essay_score: int, mcq_score: int}
+     * @return array{resume_score: int, assessment_score: int}
      */
     public function resolvedRankingWeights(): array
     {
-        if ($this->hasConfiguredRankingWeights()) {
-            return self::normalizeRankingWeights($this->ranking_weights ?? []);
-        }
-
         return self::defaultRankingWeights();
     }
 
@@ -140,20 +136,18 @@ class Campaign extends Model
     public static function rankingWeightsTotal(array $weights): int
     {
         return max(0, (int) ($weights['resume_score'] ?? 0))
-            + max(0, (int) ($weights['essay_score'] ?? 0))
-            + max(0, (int) ($weights['mcq_score'] ?? 0));
+            + max(0, (int) ($weights['assessment_score'] ?? 0));
     }
 
     /**
      * @param  array<string, mixed>  $weights
-     * @return array{resume_score: int, essay_score: int, mcq_score: int}
+     * @return array{resume_score: int, assessment_score: int}
      */
     public static function normalizeRankingWeights(array $weights): array
     {
         return [
-            'resume_score' => max(0, (int) ($weights['resume_score'] ?? 35)),
-            'essay_score' => max(0, (int) ($weights['essay_score'] ?? 50)),
-            'mcq_score' => max(0, (int) ($weights['mcq_score'] ?? 15)),
+            'resume_score' => max(0, (int) ($weights['resume_score'] ?? 0)),
+            'assessment_score' => max(0, (int) ($weights['assessment_score'] ?? 100)),
         ];
     }
 

@@ -16,7 +16,6 @@ class QwenAssessmentCritic
     public function review(
         Assessment $assessment,
         AssessmentEvaluationResult $evaluation,
-        ?int $mcqScore,
         array $ranking,
         int $reviewScore,
         int $passingScore,
@@ -27,7 +26,7 @@ class QwenAssessmentCritic
 
         $response = $this->promptStructuredAgent(
             new AssessmentCriticAgent,
-            $this->prompt($assessment, $evaluation, $mcqScore, $ranking, $reviewScore, $passingScore),
+            $this->prompt($assessment, $evaluation, $ranking, $reviewScore, $passingScore),
             AssessmentCriticException::class,
         );
 
@@ -41,7 +40,6 @@ class QwenAssessmentCritic
     public function promptPayload(
         Assessment $assessment,
         AssessmentEvaluationResult $evaluation,
-        ?int $mcqScore,
         array $ranking,
         int $reviewScore,
         int $passingScore,
@@ -58,15 +56,18 @@ class QwenAssessmentCritic
             ],
             'score_components' => [
                 'resume_score' => $assessment->resume_score,
-                'essay_score' => $evaluation->score,
-                'mcq_score' => $mcqScore,
+                'assessment_score' => $evaluation->score,
+                'assessment_confidence' => $evaluation->confidence,
                 'ranking_score' => $ranking['score'] ?? null,
                 'ranking_payload' => $ranking['payload'] ?? null,
             ],
             'untrusted_model_output' => [
-                'essay_evaluation' => [
+                'assessment_evaluation' => [
                     'score' => $evaluation->score,
+                    'confidence' => $evaluation->confidence,
                     'justification' => $evaluation->justification,
+                    'question_evaluations' => $evaluation->questionEvaluations,
+                    'section_scores' => $evaluation->sectionScores,
                 ],
                 'resume_screening' => [
                     'score' => $assessment->resume_score,
@@ -110,13 +111,12 @@ class QwenAssessmentCritic
     private function prompt(
         Assessment $assessment,
         AssessmentEvaluationResult $evaluation,
-        ?int $mcqScore,
         array $ranking,
         int $reviewScore,
         int $passingScore,
     ): string {
         return $this->encodePrompt(
-            $this->promptPayload($assessment, $evaluation, $mcqScore, $ranking, $reviewScore, $passingScore),
+            $this->promptPayload($assessment, $evaluation, $ranking, $reviewScore, $passingScore),
         );
     }
 }
