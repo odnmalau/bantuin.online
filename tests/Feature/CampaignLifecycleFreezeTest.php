@@ -9,7 +9,6 @@ use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
 use App\Models\ExamSession;
 use App\Models\User;
-use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use App\Services\CampaignInvitationService;
@@ -116,8 +115,7 @@ test('frozen campaign definition mutations are rejected', function (string $rout
         'status' => CampaignStatus::Active,
         'ranking_weights' => [
             'resume_score' => 35,
-            'essay_score' => 50,
-            'mcq_score' => 15,
+            'assessment_score' => 65,
         ],
     ]);
     $section = CampaignSection::factory()->for($campaign)->create([
@@ -157,7 +155,9 @@ test('frozen campaign definition mutations are rejected', function (string $rout
         'admin.campaigns.generate-assessment',
         'admin.campaigns.sections.store',
         'admin.campaigns.questions.store',
-        'admin.campaigns.questions.approve-all' => route($routeName, $campaign),
+        'admin.campaigns.questions.approve-all',
+        'admin.campaigns.questions.discard-all' => route($routeName, $campaign),
+        'admin.campaigns.sections.update',
         'admin.campaigns.sections.destroy' => route($routeName, [$campaign, $section]),
         default => route($routeName, [$campaign, $question]),
     };
@@ -219,8 +219,7 @@ test('frozen campaign definition mutations are rejected', function (string $rout
         fn () => [
             'ranking_weights' => [
                 'resume_score' => 10,
-                'essay_score' => 10,
-                'mcq_score' => 80,
+                'assessment_score' => 90,
             ],
         ],
     ],
@@ -229,7 +228,6 @@ test('frozen campaign definition mutations are rejected', function (string $rout
         'post',
         fn () => [
             'question_count' => 3,
-            'language' => 'English',
             'difficulty' => 'medium',
         ],
     ],
@@ -240,7 +238,17 @@ test('frozen campaign definition mutations are rejected', function (string $rout
             'title' => 'Injected Section',
             'description' => 'Should not persist.',
             'duration_minutes' => 20,
-            'scoring_mode' => 'weighted',
+            'weight' => 100,
+            'sort_order' => 99,
+        ],
+    ],
+    'section update' => [
+        'admin.campaigns.sections.update',
+        'patch',
+        fn () => [
+            'title' => 'Mutated Section',
+            'description' => 'Should not persist.',
+            'duration_minutes' => 20,
             'weight' => 100,
             'sort_order' => 99,
         ],
@@ -295,14 +303,9 @@ test('frozen campaign definition mutations are rejected', function (string $rout
         'post',
         fn () => [],
     ],
-    'regenerate mcq options' => [
-        'admin.campaigns.questions.regenerate-mcq-options',
-        'post',
-        fn () => [],
-    ],
-    'convert to mcq' => [
-        'admin.campaigns.questions.convert-to-mcq',
-        'post',
+    'question discard all' => [
+        'admin.campaigns.questions.discard-all',
+        'delete',
         fn () => [],
     ],
 ]);
@@ -323,14 +326,16 @@ test('definition guard middleware is applied only to definition mutation routes'
         'admin.campaigns.publish',
         'admin.campaigns.questions.approve',
         'admin.campaigns.questions.approve-all',
-        'admin.campaigns.questions.convert-to-mcq',
         'admin.campaigns.questions.destroy',
-        'admin.campaigns.questions.regenerate-mcq-options',
+        'admin.campaigns.questions.discard-all',
+        'admin.campaigns.questions.reorder',
         'admin.campaigns.questions.store',
         'admin.campaigns.questions.update',
         'admin.campaigns.ranking.update',
         'admin.campaigns.sections.destroy',
+        'admin.campaigns.sections.reorder',
         'admin.campaigns.sections.store',
+        'admin.campaigns.sections.update',
         'admin.campaigns.update',
     ]);
 });
@@ -421,8 +426,7 @@ test('admin can clone a used campaign into an independent same-team draft', func
         'threshold_score' => 80,
         'ranking_weights' => [
             'resume_score' => 40,
-            'essay_score' => 40,
-            'mcq_score' => 20,
+            'assessment_score' => 60,
         ],
         'status' => CampaignStatus::Active,
         'ai_generation_audit' => [
@@ -434,7 +438,6 @@ test('admin can clone a used campaign into an independent same-team draft', func
         'title' => 'Core',
         'description' => 'Core skills',
         'duration_minutes' => 30,
-        'scoring_mode' => 'weighted',
         'weight' => 100,
         'sort_order' => 10,
     ]);
@@ -442,15 +445,11 @@ test('admin can clone a used campaign into an independent same-team draft', func
         ->for($campaign)
         ->for($section, 'section')
         ->create([
-            'type' => QuestionType::MultipleChoice,
-            'grading_mode' => QuestionGradingMode::Deterministic,
-            'prompt' => 'Which driver?',
-            'options' => ['sync', 'database'],
-            'correct_answer' => ['database'],
-            'expected_rubric' => null,
+            'type' => QuestionType::LongText,
+            'prompt' => 'Explain how you would choose a queue driver.',
+            'expected_rubric' => 'Compares reliability, throughput, and operational tradeoffs.',
             'points' => 10,
             'difficulty' => 'easy',
-            'skill_tags' => ['Queues'],
             'ai_generated' => true,
             'status' => QuestionStatus::Approved,
             'is_required' => true,
@@ -484,8 +483,7 @@ test('admin can clone a used campaign into an independent same-team draft', func
         ->threshold_score->toBe(80)
         ->ranking_weights->toMatchArray([
             'resume_score' => 40,
-            'essay_score' => 40,
-            'mcq_score' => 20,
+            'assessment_score' => 60,
         ])
         ->status->toBe(CampaignStatus::Draft)
         ->ai_generation_audit->toBeNull()
@@ -513,14 +511,11 @@ test('admin can clone a used campaign into an independent same-team draft', func
         ->and($clonedQuestion)
         ->id->not->toBe($question->id)
         ->campaign_section_id->toBe($clonedSection->id)
-        ->type->toBe(QuestionType::MultipleChoice)
-        ->grading_mode->toBe(QuestionGradingMode::Deterministic)
-        ->prompt->toBe('Which driver?')
-        ->options->toBe(['sync', 'database'])
-        ->correct_answer->toBe(['database'])
+        ->type->toBe(QuestionType::LongText)
+        ->prompt->toBe('Explain how you would choose a queue driver.')
+        ->expected_rubric->toContain('operational tradeoffs')
         ->points->toBe(10)
         ->difficulty->toBe('easy')
-        ->skill_tags->toBe(['Queues'])
         ->ai_generated->toBeTrue()
         ->status->toBe(QuestionStatus::Approved)
         ->is_required->toBeTrue()

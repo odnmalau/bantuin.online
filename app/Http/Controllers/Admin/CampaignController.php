@@ -12,7 +12,6 @@ use App\Models\CampaignInvitation;
 use App\Models\CampaignSection;
 use App\Models\Team;
 use App\Models\User;
-use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use App\Services\CampaignInvitationService;
@@ -54,9 +53,10 @@ class CampaignController extends Controller
                     'title',
                     'role_title',
                     'seniority',
+                    'job_description',
+                    'required_skills',
                     'language',
                     'threshold_score',
-                    'status',
                     'created_at',
                 ])
                 ->with('creator:id,name,email')
@@ -76,10 +76,10 @@ class CampaignController extends Controller
                     'title' => $campaign->title,
                     'role_title' => $campaign->role_title,
                     'seniority' => $campaign->seniority,
+                    'job_description' => $campaign->job_description,
+                    'required_skills' => $campaign->required_skills ?? [],
                     'language' => $campaign->language,
                     'threshold_score' => $campaign->threshold_score,
-                    'status' => $campaign->status->value,
-                    'status_label' => $campaign->status->label(),
                     'sections_count' => $campaign->sections_count,
                     'questions_count' => $campaign->questions_count,
                     'assessments_count' => $campaign->assessments_count,
@@ -184,8 +184,6 @@ class CampaignController extends Controller
                     'required_skills' => $campaign->required_skills ?? [],
                     'language' => $campaign->language,
                     'threshold_score' => $campaign->threshold_score,
-                    'ranking_weights' => $campaign->resolvedRankingWeights(),
-                    'ranking_weights_configured' => $campaign->hasConfiguredRankingWeights(),
                     'status' => $campaign->status->value,
                     'status_label' => $campaign->status->label(),
                     'ai_generation_audit' => $campaign->ai_generation_audit ?? [],
@@ -203,7 +201,6 @@ class CampaignController extends Controller
                         'title' => $section->title,
                         'description' => $section->description,
                         'duration_minutes' => $section->duration_minutes,
-                        'scoring_mode' => $section->scoring_mode,
                         'weight' => $section->weight,
                         'sort_order' => $section->sort_order,
                         'questions' => $section->questions
@@ -223,7 +220,6 @@ class CampaignController extends Controller
                     ->all();
             }),
             'questionTypes' => QuestionType::selectOptions(),
-            'gradingModeOptions' => QuestionGradingMode::selectOptions(),
         ]);
     }
 
@@ -355,7 +351,6 @@ class CampaignController extends Controller
             'title' => 'Knowledge Check',
             'description' => 'Initial section for generated or manually-added screening questions.',
             'duration_minutes' => 30,
-            'scoring_mode' => 'weighted',
             'weight' => 100,
             'sort_order' => 10,
         ]);
@@ -371,15 +366,10 @@ class CampaignController extends Controller
             'campaign_section_id' => $question->campaign_section_id,
             'type' => $question->type->value,
             'type_label' => $question->type->label(),
-            'grading_mode' => $question->grading_mode->value,
-            'grading_mode_label' => $question->grading_mode->label(),
             'prompt' => $question->prompt,
-            'options' => $question->options ?? [],
-            'correct_answer' => $question->correct_answer ?? [],
             'expected_rubric' => $question->expected_rubric,
             'points' => $question->points,
             'difficulty' => $question->difficulty,
-            'skill_tags' => $question->skill_tags ?? [],
             'ai_generated' => $question->ai_generated,
             'status' => $question->status->value,
             'status_label' => $question->status->label(),

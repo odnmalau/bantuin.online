@@ -10,7 +10,6 @@ use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
 use App\Models\ExamSession;
 use App\Models\User;
-use App\QuestionGradingMode;
 use App\QuestionStatus;
 use App\QuestionType;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -39,7 +38,8 @@ test('admin can view campaigns', function () {
                 ->where('campaigns.data.0.id', $campaign->id)
                 ->where('campaigns.data.0.title', 'Backend Engineer Screening')
                 ->where('campaigns.data.0.questions_count', 1)
-                ->missing('campaigns.data.0.job_description')
+                ->where('campaigns.data.0.job_description', $campaign->job_description)
+                ->where('campaigns.data.0.required_skills', $campaign->required_skills)
                 ->where('campaigns.per_page', 15)
                 ->where('campaigns.total', 1),
             ),
@@ -325,6 +325,30 @@ test('admin can approve all generated draft campaign questions', function () {
         ->and($campaign->questions()->where('status', QuestionStatus::Approved->value)->count())->toBe(2);
 });
 
+test('admin can discard all draft campaign questions without deleting approved questions', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create([
+        'status' => CampaignStatus::QuestionReview,
+    ]);
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $draft = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create(['status' => QuestionStatus::Draft]);
+    $approved = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create(['status' => QuestionStatus::Approved]);
+
+    $this->actingAs($admin)
+        ->delete(route('admin.campaigns.questions.discard-all', $campaign))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    $this->assertModelMissing($draft);
+    $this->assertModelExists($approved);
+});
+
 test('campaign cannot be published while generated questions are still drafts', function () {
     $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create([
@@ -385,9 +409,7 @@ test('admin can add a campaign section', function () {
             'title' => 'System Design',
             'description' => 'Design tradeoff questions.',
             'duration_minutes' => 45,
-            'scoring_mode' => 'weighted',
-            'weight' => 120,
-            'sort_order' => 20,
+            'weight' => 20,
         ])
         ->assertSessionHasNoErrors()
         ->assertRedirect(route('admin.campaigns.show', $campaign));
@@ -397,27 +419,50 @@ test('admin can add a campaign section', function () {
     expect($section)
         ->description->toBe('Design tradeoff questions.')
         ->duration_minutes->toBe(45)
-        ->weight->toBe(120)
-        ->sort_order->toBe(20);
+        ->weight->toBe(100)
+        ->sort_order->toBe(10);
 });
 
-test('campaign sections are ordered by sort order', function () {
+test('admin can update a campaign section', function () {
     $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
-
-    CampaignSection::factory()->for($campaign)->create([
-        'title' => 'Later Section',
-        'sort_order' => 30,
+    $section = CampaignSection::factory()->for($campaign)->create([
+        'title' => 'Knowledge Check',
     ]);
 
     $this->actingAs($admin)
-        ->post(route('admin.campaigns.sections.store', $campaign), [
-            'title' => 'Earlier Section',
-            'description' => 'Runs first in the exam.',
-            'duration_minutes' => 20,
-            'scoring_mode' => 'weighted',
-            'weight' => 100,
-            'sort_order' => 10,
+        ->patch(route('admin.campaigns.sections.update', [$campaign, $section]), [
+            'title' => 'Technical Reasoning',
+            'description' => 'Evaluate practical engineering decisions.',
+            'duration_minutes' => 35,
+            'weight' => 50,
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    expect($section->refresh())
+        ->title->toBe('Technical Reasoning')
+        ->description->toBe('Evaluate practical engineering decisions.')
+        ->duration_minutes->toBe(35)
+        ->weight->toBe(100);
+});
+
+test('admin can reorder campaign sections', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+
+    $laterSection = CampaignSection::factory()->for($campaign)->create([
+        'title' => 'Later Section',
+        'sort_order' => 30,
+    ]);
+    $earlierSection = CampaignSection::factory()->for($campaign)->create([
+        'title' => 'Earlier Section',
+        'sort_order' => 10,
+    ]);
+
+    $this->actingAs($admin)
+        ->patch(route('admin.campaigns.sections.reorder', $campaign), [
+            'section_ids' => [$laterSection->id, $earlierSection->id],
         ])
         ->assertSessionHasNoErrors();
 
@@ -427,7 +472,73 @@ test('campaign sections are ordered by sort order', function () {
         ->pluck('title')
         ->all();
 
-    expect($orderedTitles)->toBe(['Earlier Section', 'Later Section']);
+    expect($orderedTitles)->toBe(['Later Section', 'Earlier Section']);
+});
+
+test('section score contributions stay normalized to one hundred percent', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+    $firstSection = CampaignSection::factory()->for($campaign)->create([
+        'title' => 'Technical Fundamentals',
+        'weight' => 100,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.campaigns.sections.store', $campaign), [
+            'title' => 'System Design',
+            'description' => null,
+            'duration_minutes' => 30,
+            'weight' => 30,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $secondSection = $campaign->sections()->where('title', 'System Design')->sole();
+
+    expect($firstSection->refresh()->weight)->toBe(70)
+        ->and($secondSection->weight)->toBe(30)
+        ->and($campaign->sections()->sum('weight'))->toBe(100);
+
+    $this->actingAs($admin)
+        ->patch(route('admin.campaigns.sections.update', [$campaign, $secondSection]), [
+            'title' => $secondSection->title,
+            'description' => $secondSection->description,
+            'duration_minutes' => $secondSection->duration_minutes,
+            'weight' => 40,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($firstSection->refresh()->weight)->toBe(60)
+        ->and($secondSection->refresh()->weight)->toBe(40)
+        ->and($campaign->sections()->sum('weight'))->toBe(100);
+
+    $this->actingAs($admin)
+        ->delete(route('admin.campaigns.sections.destroy', [$campaign, $secondSection]))
+        ->assertSessionHasNoErrors();
+
+    expect($firstSection->refresh()->weight)->toBe(100);
+});
+
+test('admin can reorder questions within a section', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+    $section = CampaignSection::factory()->for($campaign)->create();
+    $firstQuestion = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create(['sort_order' => 10]);
+    $secondQuestion = CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create(['sort_order' => 20]);
+
+    $this->actingAs($admin)
+        ->patch(route('admin.campaigns.questions.reorder', [$campaign, $section]), [
+            'question_ids' => [$secondQuestion->id, $firstQuestion->id],
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($section->questions()->orderBy('sort_order')->pluck('id')->all())
+        ->toBe([$secondQuestion->id, $firstQuestion->id]);
 });
 
 test('admin can add an ai graded text question to a campaign', function () {
@@ -443,10 +554,7 @@ test('admin can add an ai graded text question to a campaign', function () {
             'expected_rubric' => 'Mentions logs, metrics, queries, N+1, and verification.',
             'points' => 20,
             'difficulty' => 'medium',
-            'skill_tags_text' => "Debugging\nLaravel",
             'ai_generated' => false,
-            'is_required' => true,
-            'sort_order' => 10,
         ])
         ->assertSessionHasNoErrors()
         ->assertRedirect(route('admin.campaigns.show', $campaign));
@@ -456,12 +564,13 @@ test('admin can add an ai graded text question to a campaign', function () {
     expect($question)
         ->campaign_section_id->toBe($section->id)
         ->type->toBe(QuestionType::LongText)
-        ->grading_mode->toBe(QuestionGradingMode::Ai)
         ->expected_rubric->toContain('logs')
-        ->skill_tags->toBe(['Debugging', 'Laravel']);
+        ->points->toBe(20)
+        ->is_required->toBeTrue()
+        ->sort_order->toBe(10);
 });
 
-test('admin can add an auto graded multiple choice question to a campaign', function () {
+test('campaign rejects removed objective question types', function () {
     $admin = User::factory()->teamOwner()->create();
     $campaign = Campaign::factory()->for($admin, 'creator')->create();
     $section = CampaignSection::factory()->for($campaign)->create();
@@ -469,25 +578,18 @@ test('admin can add an auto graded multiple choice question to a campaign', func
     $this->actingAs($admin)
         ->post(route('admin.campaigns.questions.store', $campaign), [
             'campaign_section_id' => $section->id,
-            'type' => QuestionType::MultipleChoice->value,
-            'prompt' => 'Which queue driver is configured for HirePilot?',
-            'options_text' => "sync\ndatabase\nredis\nsqs",
-            'correct_answer_text' => 'database',
+            'type' => 'multiple_choice',
+            'prompt' => 'Pick a queue driver.',
+            'expected_rubric' => 'Not applicable.',
             'points' => 10,
             'difficulty' => 'easy',
             'ai_generated' => false,
             'is_required' => true,
             'sort_order' => 10,
         ])
-        ->assertSessionHasNoErrors();
+        ->assertSessionHasErrors('type');
 
-    $question = $campaign->questions()->sole();
-
-    expect($question)
-        ->type->toBe(QuestionType::MultipleChoice)
-        ->grading_mode->toBe(QuestionGradingMode::Deterministic)
-        ->options->toBe(['sync', 'database', 'redis', 'sqs'])
-        ->correct_answer->toBe(['database']);
+    expect($campaign->questions()->exists())->toBeFalse();
 });
 
 test('campaign question section must belong to the campaign', function () {
@@ -539,6 +641,7 @@ test('candidate cannot access campaign management', function (string $route, str
     ['admin.campaigns.draft', 'POST'],
     ['admin.campaigns.ranking.update', 'PATCH'],
     ['admin.campaigns.questions.approve-all', 'POST'],
+    ['admin.campaigns.questions.discard-all', 'DELETE'],
     ['admin.campaigns.destroy', 'DELETE'],
 ]);
 
@@ -591,16 +694,14 @@ test('campaign rejects ranking weights that do not total 100', function () {
         ->patch(route('admin.campaigns.ranking.update', $campaign), [
             'ranking_weights' => [
                 'resume_score' => 50,
-                'essay_score' => 40,
-                'mcq_score' => 5,
+                'assessment_score' => 40,
             ],
         ])
         ->assertSessionHasErrors('ranking_weights');
 
     expect($campaign->refresh()->ranking_weights)->not->toMatchArray([
         'resume_score' => 50,
-        'essay_score' => 40,
-        'mcq_score' => 5,
+        'assessment_score' => 40,
     ]);
 });
 
@@ -635,8 +736,7 @@ test('admin can update campaign ranking weights from the detail page', function 
         ->patch(route('admin.campaigns.ranking.update', $campaign), [
             'ranking_weights' => [
                 'resume_score' => 40,
-                'essay_score' => 40,
-                'mcq_score' => 20,
+                'assessment_score' => 60,
             ],
         ])
         ->assertSessionHasNoErrors()
@@ -645,8 +745,7 @@ test('admin can update campaign ranking weights from the detail page', function 
     expect($campaign->refresh())
         ->ranking_weights->toMatchArray([
             'resume_score' => 40,
-            'essay_score' => 40,
-            'mcq_score' => 20,
+            'assessment_score' => 60,
         ])
         ->and($campaign->hasConfiguredRankingWeights())->toBeTrue();
 });

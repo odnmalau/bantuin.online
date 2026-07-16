@@ -35,7 +35,7 @@ test('admin campaign show defers campaign and invitations payloads', function ()
             ->missing('campaign')
             ->missing('invitations')
             ->has('questionTypes')
-            ->has('gradingModeOptions')
+            ->missing('gradingModeOptions')
             ->loadDeferredProps(fn (Assert $reload) => $reload
                 ->where('campaign.id', $campaign->id)
                 ->where('campaign.title', 'Backend Engineer Screening')

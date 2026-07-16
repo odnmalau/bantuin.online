@@ -4,12 +4,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\HandlesAssessmentGenerationFailures;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\ReorderCampaignQuestionsRequest;
 use App\Http\Requests\Admin\StoreCampaignQuestionRequest;
 use App\Http\Requests\Admin\UpdateCampaignQuestionRequest;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
-use App\Services\Ai\QwenMcqOptionsRegenerator;
-use App\Services\Ai\QwenTextQuestionToMcqConverter;
+use App\Models\CampaignSection;
+use App\Services\CampaignDefinitionOrder;
 use App\Services\CampaignLifecycleService;
 use App\Services\DraftQuestionMutation;
 use Illuminate\Http\RedirectResponse;
@@ -26,11 +27,17 @@ class CampaignQuestionController extends Controller
         StoreCampaignQuestionRequest $request,
         Campaign $campaign,
         CampaignLifecycleService $lifecycle,
+        CampaignDefinitionOrder $order,
     ): RedirectResponse {
         $campaign = $lifecycle->withEditableDefinition(
             $campaign,
-            function (Campaign $lockedCampaign) use ($request): Campaign {
-                $lockedCampaign->questions()->create($request->questionAttributes());
+            function (Campaign $lockedCampaign) use ($request, $order): Campaign {
+                $attributes = $request->questionAttributes();
+                $attributes['sort_order'] = $order->nextQuestionSortOrder(
+                    $lockedCampaign,
+                    $attributes['campaign_section_id'],
+                );
+                $lockedCampaign->questions()->create($attributes);
 
                 return $lockedCampaign;
             },
@@ -49,67 +56,31 @@ class CampaignQuestionController extends Controller
         Campaign $campaign,
         CampaignQuestion $question,
         CampaignLifecycleService $lifecycle,
+        CampaignDefinitionOrder $order,
     ): RedirectResponse {
         $campaign = $lifecycle->withEditableDefinition(
             $campaign,
-            function (Campaign $lockedCampaign) use ($request, $question): Campaign {
+            function (Campaign $lockedCampaign) use ($request, $question, $order): Campaign {
                 $lockedQuestion = CampaignQuestion::query()->whereKey($question->id)->lockForUpdate()->firstOrFail();
                 $this->ensureQuestionBelongsToCampaign($lockedCampaign, $lockedQuestion);
-                $lockedQuestion->update($request->questionAttributes());
+                $originalSection = $lockedQuestion->section;
+                $attributes = $request->questionAttributes();
+
+                if ($lockedQuestion->campaign_section_id !== $attributes['campaign_section_id']) {
+                    $attributes['sort_order'] = $order->nextQuestionSortOrder(
+                        $lockedCampaign,
+                        $attributes['campaign_section_id'],
+                    );
+                }
+
+                $lockedQuestion->update($attributes);
+                $order->normalizeQuestions($originalSection);
 
                 return $lockedCampaign;
             },
         );
 
         $this->flashSuccessToast(__('Question updated.'));
-
-        return to_route('admin.campaigns.show', $campaign);
-    }
-
-    /**
-     * Regenerate multiple choice options for a draft campaign question.
-     */
-    public function regenerateMcqOptions(
-        Campaign $campaign,
-        CampaignQuestion $question,
-        QwenMcqOptionsRegenerator $regenerator,
-        DraftQuestionMutation $mutation,
-    ): RedirectResponse {
-        $this->ensureQuestionBelongsToCampaign($campaign, $question);
-
-        $this->runAssessmentGeneration(
-            'regeneration',
-            fn () => $mutation->regenerateMcqOptions(
-                $question,
-                fn () => $regenerator->regenerateForCampaignQuestion($question, $campaign),
-            ),
-        );
-
-        $this->flashSuccessToast(__('Multiple choice options regenerated.'));
-
-        return to_route('admin.campaigns.show', $campaign);
-    }
-
-    /**
-     * Convert a draft text question into a multiple choice question.
-     */
-    public function convertToMcq(
-        Campaign $campaign,
-        CampaignQuestion $question,
-        QwenTextQuestionToMcqConverter $converter,
-        DraftQuestionMutation $mutation,
-    ): RedirectResponse {
-        $this->ensureQuestionBelongsToCampaign($campaign, $question);
-
-        $this->runAssessmentGeneration(
-            'conversion',
-            fn () => $mutation->convertToMcq(
-                $question,
-                fn () => $converter->convertCampaignQuestion($question, $campaign),
-            ),
-        );
-
-        $this->flashSuccessToast(__('Question converted to multiple choice.'));
 
         return to_route('admin.campaigns.show', $campaign);
     }
@@ -145,25 +116,63 @@ class CampaignQuestionController extends Controller
     }
 
     /**
+     * Permanently delete all draft questions in the campaign.
+     */
+    public function discardAll(Campaign $campaign, DraftQuestionMutation $mutation): RedirectResponse
+    {
+        $discardedQuestions = $mutation->discardAllCampaignDrafts($campaign);
+
+        $this->flashSuccessToast(trans_choice(
+            'Discarded :count draft question.|Discarded :count draft questions.',
+            $discardedQuestions,
+            ['count' => $discardedQuestions],
+        ));
+
+        return to_route('admin.campaigns.show', $campaign);
+    }
+
+    /**
      * Delete a campaign question snapshot.
      */
     public function destroy(
         Campaign $campaign,
         CampaignQuestion $question,
         CampaignLifecycleService $lifecycle,
+        CampaignDefinitionOrder $order,
     ): RedirectResponse {
         $campaign = $lifecycle->withEditableDefinition(
             $campaign,
-            function (Campaign $lockedCampaign) use ($question): Campaign {
+            function (Campaign $lockedCampaign) use ($question, $order): Campaign {
                 $lockedQuestion = CampaignQuestion::query()->whereKey($question->id)->lockForUpdate()->firstOrFail();
                 $this->ensureQuestionBelongsToCampaign($lockedCampaign, $lockedQuestion);
+                $section = $lockedQuestion->section;
                 $lockedQuestion->delete();
+                $order->normalizeQuestions($section);
 
                 return $lockedCampaign;
             },
         );
 
         $this->flashSuccessToast(__('Question removed from campaign.'));
+
+        return to_route('admin.campaigns.show', $campaign);
+    }
+
+    public function reorder(
+        ReorderCampaignQuestionsRequest $request,
+        Campaign $campaign,
+        CampaignSection $section,
+        CampaignLifecycleService $lifecycle,
+        CampaignDefinitionOrder $order,
+    ): RedirectResponse {
+        $campaign = $lifecycle->withEditableDefinition(
+            $campaign,
+            function (Campaign $lockedCampaign) use ($request, $section, $order): Campaign {
+                $order->questions($lockedCampaign, $section, $request->validated('question_ids'));
+
+                return $lockedCampaign;
+            },
+        );
 
         return to_route('admin.campaigns.show', $campaign);
     }

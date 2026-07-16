@@ -84,12 +84,14 @@ Route::middleware(['auth', 'current-team'])
             Route::patch('campaigns/{campaign}/ranking', [CampaignRankingController::class, 'update'])->name('campaigns.ranking.update');
             Route::post('campaigns/{campaign}/generate-assessment', [CampaignAssessmentGenerationController::class, 'store'])->name('campaigns.generate-assessment');
             Route::post('campaigns/{campaign}/sections', [CampaignSectionController::class, 'store'])->name('campaigns.sections.store');
+            Route::patch('campaigns/{campaign}/sections/reorder', [CampaignSectionController::class, 'reorder'])->name('campaigns.sections.reorder');
+            Route::patch('campaigns/{campaign}/sections/{section}', [CampaignSectionController::class, 'update'])->name('campaigns.sections.update');
             Route::delete('campaigns/{campaign}/sections/{section}', [CampaignSectionController::class, 'destroy'])->name('campaigns.sections.destroy');
             Route::post('campaigns/{campaign}/questions', [CampaignQuestionController::class, 'store'])->name('campaigns.questions.store');
+            Route::patch('campaigns/{campaign}/sections/{section}/questions/reorder', [CampaignQuestionController::class, 'reorder'])->name('campaigns.questions.reorder');
             Route::post('campaigns/{campaign}/questions/approve-all', [CampaignQuestionController::class, 'approveAll'])->name('campaigns.questions.approve-all');
+            Route::delete('campaigns/{campaign}/questions/discard-all', [CampaignQuestionController::class, 'discardAll'])->name('campaigns.questions.discard-all');
             Route::post('campaigns/{campaign}/questions/{question}/approve', [CampaignQuestionController::class, 'approve'])->name('campaigns.questions.approve');
-            Route::post('campaigns/{campaign}/questions/{question}/regenerate-mcq-options', [CampaignQuestionController::class, 'regenerateMcqOptions'])->name('campaigns.questions.regenerate-mcq-options');
-            Route::post('campaigns/{campaign}/questions/{question}/convert-to-mcq', [CampaignQuestionController::class, 'convertToMcq'])->name('campaigns.questions.convert-to-mcq');
             Route::patch('campaigns/{campaign}/questions/{question}', [CampaignQuestionController::class, 'update'])->name('campaigns.questions.update');
             Route::delete('campaigns/{campaign}/questions/{question}', [CampaignQuestionController::class, 'destroy'])->name('campaigns.questions.destroy');
         });

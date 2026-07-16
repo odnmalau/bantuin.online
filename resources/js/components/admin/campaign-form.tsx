@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
+import { UnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { cn } from '@/lib/utils';
 import admin from '@/routes/admin';
 import type { RouteFormDefinition } from '@/wayfinder';
@@ -41,8 +43,18 @@ type Props = {
     footerClassName?: string;
 };
 
-const textareaClass =
-    'flex min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+function focusFirstError(errors: Record<string, string | undefined>) {
+    window.requestAnimationFrame(() => {
+        const firstError = Object.keys(errors)[0];
+        const control = firstError
+            ? document.querySelector<HTMLElement>(
+                  `[name="${CSS.escape(firstError)}"]`,
+              )
+            : null;
+
+        control?.focus();
+    });
+}
 
 export default function CampaignForm({
     action,
@@ -59,35 +71,39 @@ export default function CampaignForm({
         <Form<CampaignFormData>
             {...action}
             onSuccess={onSuccess}
+            onError={focusFirstError}
             options={{
                 preserveScroll: true,
             }}
             className={cn('flex flex-col gap-6', className)}
         >
-            {({ errors, processing }) => (
+            {({ errors, isDirty, processing }) => (
                 <>
+                    <UnsavedChangesGuard active={isDirty && !processing} />
                     <div className={cn('flex flex-col gap-6', bodyClassName)}>
                         <div className="grid gap-6 sm:grid-cols-2">
                             <div className="grid gap-2">
-                                <Label htmlFor="title">Campaign title</Label>
+                                <Label htmlFor="title">Campaign Title</Label>
                                 <Input
                                     id="title"
                                     name="title"
+                                    autoComplete="off"
                                     defaultValue={campaign?.title}
                                     required
-                                    placeholder="Backend Engineer Screening"
+                                    placeholder="Example: Backend Engineer Screening…"
                                 />
                                 <InputError message={errors.title} />
                             </div>
 
                             <div className="grid gap-2">
-                                <Label htmlFor="role_title">Role title</Label>
+                                <Label htmlFor="role_title">Role Title</Label>
                                 <Input
                                     id="role_title"
                                     name="role_title"
+                                    autoComplete="off"
                                     defaultValue={campaign?.role_title}
                                     required
-                                    placeholder="Backend Engineer"
+                                    placeholder="Example: Backend Engineer…"
                                 />
                                 <InputError message={errors.role_title} />
                             </div>
@@ -99,8 +115,9 @@ export default function CampaignForm({
                                 <Input
                                     id="seniority"
                                     name="seniority"
+                                    autoComplete="off"
                                     defaultValue={campaign?.seniority ?? ''}
-                                    placeholder="Mid-level"
+                                    placeholder="Example: Mid-level…"
                                 />
                                 <InputError message={errors.seniority} />
                             </div>
@@ -113,6 +130,8 @@ export default function CampaignForm({
                                     id="threshold_score"
                                     name="threshold_score"
                                     type="number"
+                                    inputMode="numeric"
+                                    autoComplete="off"
                                     min={0}
                                     max={100}
                                     defaultValue={
@@ -126,46 +145,49 @@ export default function CampaignForm({
 
                         <div className="grid gap-2 sm:max-w-xs">
                             <Label htmlFor="language">
-                                Assessment language
+                                Assessment Language
                             </Label>
                             <Input
                                 id="language"
                                 name="language"
+                                autoComplete="off"
                                 defaultValue={campaign?.language ?? 'English'}
                                 required
-                                placeholder="English"
+                                placeholder="Example: English…"
                             />
                             <InputError message={errors.language} />
                         </div>
 
                         <div className="grid gap-2">
                             <Label htmlFor="required_skills">
-                                Required skills
+                                Required Skills
                             </Label>
-                            <textarea
+                            <Textarea
                                 id="required_skills"
                                 name="required_skills"
+                                autoComplete="off"
                                 defaultValue={
                                     campaign?.required_skills?.join('\n') ?? ''
                                 }
                                 rows={4}
-                                className={textareaClass}
-                                placeholder="Laravel&#10;PostgreSQL&#10;Queue workers"
+                                className="min-h-32"
+                                placeholder="Example: Laravel&#10;PostgreSQL&#10;Queue workers…"
                             />
                             <InputError message={errors.required_skills} />
                         </div>
 
                         <div className="grid gap-2">
                             <Label htmlFor="job_description">
-                                Job description
+                                Job Description
                             </Label>
-                            <textarea
+                            <Textarea
                                 id="job_description"
                                 name="job_description"
+                                autoComplete="off"
                                 defaultValue={campaign?.job_description ?? ''}
                                 rows={8}
-                                className={textareaClass}
-                                placeholder="Paste the role context or hiring brief."
+                                className="min-h-32"
+                                placeholder="Example: Paste the role context or hiring brief…"
                             />
                             <InputError message={errors.job_description} />
                         </div>

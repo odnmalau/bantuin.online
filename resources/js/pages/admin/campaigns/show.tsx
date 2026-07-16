@@ -3,6 +3,7 @@ import {
     Check,
     ChevronRight,
     Copy,
+    GripVertical,
     Mail,
     MoreHorizontal,
     Plus,
@@ -10,16 +11,32 @@ import {
     Share2,
     Sparkles,
 } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import type { CSSProperties } from 'react';
 import CampaignAssessmentGenerationController from '@/actions/App/Http/Controllers/Admin/CampaignAssessmentGenerationController';
 import CampaignCloneController from '@/actions/App/Http/Controllers/Admin/CampaignCloneController';
 import CampaignController from '@/actions/App/Http/Controllers/Admin/CampaignController';
 import CampaignQuestionController from '@/actions/App/Http/Controllers/Admin/CampaignQuestionController';
-import CampaignRankingController from '@/actions/App/Http/Controllers/Admin/CampaignRankingController';
 import CampaignSectionController from '@/actions/App/Http/Controllers/Admin/CampaignSectionController';
 import CampaignStatusController from '@/actions/App/Http/Controllers/Admin/CampaignStatusController';
 import CampaignForm from '@/components/admin/campaign-form';
 import InputError from '@/components/input-error';
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from '@/components/ui/accordion';
+import {
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,9 +45,7 @@ import {
     CardContent,
     CardFooter,
     CardHeader,
-    CardTitle,
 } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Collapsible,
     CollapsibleContent,
@@ -38,10 +53,8 @@ import {
 } from '@/components/ui/collapsible';
 import {
     Dialog,
-    DialogClose,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
@@ -55,13 +68,30 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
+} from '@/components/ui/empty';
+import {
     Field,
     FieldError,
     FieldGroup,
     FieldLabel,
+    FieldLegend,
+    FieldSet,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import {
+    Item,
+    ItemActions,
+    ItemContent,
+    ItemDescription,
+    ItemGroup,
+    ItemMedia,
+    ItemSeparator,
+    ItemTitle,
+} from '@/components/ui/item';
 import {
     Select,
     SelectContent,
@@ -80,7 +110,9 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
+import { ShimmerButton } from '@/components/ui/shimmer-button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Slider } from '@/components/ui/slider';
 import { Spinner } from '@/components/ui/spinner';
 import {
     Table,
@@ -90,6 +122,9 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { UnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import admin from '@/routes/admin';
 import type { SharedData } from '@/types';
 
@@ -98,19 +133,13 @@ type CampaignQuestion = {
     campaign_section_id: number;
     type: string;
     type_label: string;
-    grading_mode: string;
-    grading_mode_label: string;
     prompt: string;
-    options: string[];
-    correct_answer: string[];
     expected_rubric: string | null;
     points: number;
     difficulty: string;
-    skill_tags: string[];
     ai_generated: boolean;
     status: string;
     status_label: string;
-    is_required: boolean;
     sort_order: number;
 };
 
@@ -119,7 +148,6 @@ type CampaignSection = {
     title: string;
     description: string | null;
     duration_minutes: number | null;
-    scoring_mode: string;
     weight: number;
     sort_order: number;
     questions: CampaignQuestion[];
@@ -150,12 +178,6 @@ type Campaign = {
     required_skills: string[];
     language: string;
     threshold_score: number;
-    ranking_weights: {
-        resume_score: number;
-        essay_score: number;
-        mcq_score: number;
-    };
-    ranking_weights_configured: boolean;
     status: string;
     status_label: string;
     ai_generation_audit: GenerationAuditEntry[];
@@ -172,12 +194,6 @@ type Campaign = {
 };
 
 type QuestionTypeOption = {
-    value: string;
-    label: string;
-    deterministic: boolean;
-};
-
-type GradingModeOption = {
     value: string;
     label: string;
 };
@@ -199,64 +215,231 @@ type Props = {
     campaign?: Campaign;
     invitations?: CampaignInvitationRow[];
     questionTypes: QuestionTypeOption[];
-    gradingModeOptions: GradingModeOption[];
 };
 
 type SectionFormData = {
     title: string;
     description: string;
     duration_minutes: number;
-    scoring_mode: string;
     weight: number;
-    sort_order: number;
 };
 
 type QuestionFormData = {
     campaign_section_id: number;
     type: string;
-    grading_mode: string;
     prompt: string;
-    options_text: string;
-    correct_answer_text: string;
     expected_rubric: string;
     points: number;
     difficulty: string;
-    skill_tags_text: string;
     ai_generated: boolean;
-    is_required: boolean;
-    sort_order: number;
 };
 
-type GenerateAssessmentFormData = {
-    question_count: number;
-    language: string;
-    difficulty: string;
-    question_mix: string;
-    generation: string;
-};
+function moveId(ids: number[], sourceId: number, targetId: number): number[] {
+    const targetIndex = ids.indexOf(targetId);
+    const reordered = ids.filter((id) => id !== sourceId);
 
-type RankingWeightsFormData = {
-    ranking_weights: {
-        resume_score: number;
-        essay_score: number;
-        mcq_score: number;
-    };
-};
+    reordered.splice(targetIndex, 0, sourceId);
 
-const textareaClass =
-    'flex min-h-28 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+    return reordered;
+}
+
+function submitSectionOrder(campaignId: number, sectionIds: number[]) {
+    router.patch(
+        CampaignSectionController.reorder.url(campaignId),
+        { section_ids: sectionIds },
+        { preserveScroll: true },
+    );
+}
+
+function submitQuestionOrder(
+    campaignId: number,
+    sectionId: number,
+    questionIds: number[],
+) {
+    router.patch(
+        CampaignQuestionController.reorder.url([campaignId, sectionId]),
+        { question_ids: questionIds },
+        { preserveScroll: true },
+    );
+}
+
+function PointsField({
+    initialValue = 10,
+    error,
+    id,
+}: {
+    initialValue?: number;
+    error?: string;
+    id: string;
+}) {
+    const presets = [5, 10, 20];
+    const [selection, setSelection] = useState(
+        presets.includes(initialValue) ? initialValue.toString() : 'custom',
+    );
+    const [customPoints, setCustomPoints] = useState<number | ''>(
+        presets.includes(initialValue) ? '' : initialValue,
+    );
+    const points =
+        selection === 'custom' ? Number(customPoints) : Number(selection);
+
+    return (
+        <FieldSet data-invalid={Boolean(error)}>
+            <FieldLegend variant="label">Maximum points</FieldLegend>
+            <input type="hidden" name="points" value={points} />
+            <div className="grid grid-cols-4 gap-2">
+                <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    value={selection === 'custom' ? '' : selection}
+                    onValueChange={(value) => {
+                        if (value) {
+                            setSelection(value);
+                            setCustomPoints('');
+                        }
+                    }}
+                    className="col-span-3 grid grid-cols-3"
+                    aria-invalid={Boolean(error)}
+                >
+                    <ToggleGroupItem value="5">5</ToggleGroupItem>
+                    <ToggleGroupItem value="10">10</ToggleGroupItem>
+                    <ToggleGroupItem value="20">20</ToggleGroupItem>
+                </ToggleGroup>
+                <Input
+                    id={id}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    value={customPoints}
+                    placeholder="Custom"
+                    aria-label="Custom maximum points"
+                    onFocus={() => setSelection('custom')}
+                    onChange={(event) => {
+                        setSelection('custom');
+                        setCustomPoints(
+                            event.target.value === ''
+                                ? ''
+                                : Number(event.target.value),
+                        );
+                    }}
+                    aria-invalid={Boolean(error)}
+                    required={selection === 'custom'}
+                />
+            </div>
+            <FieldError>{error}</FieldError>
+        </FieldSet>
+    );
+}
+
+function ScoreContributionField({
+    initialValue,
+    maximum,
+    singleSection,
+    error,
+    id,
+}: {
+    initialValue: number;
+    maximum: number;
+    singleSection: boolean;
+    error?: string;
+    id: string;
+}) {
+    const [value, setValue] = useState(singleSection ? 100 : initialValue);
+
+    return (
+        <Field data-invalid={Boolean(error)} data-disabled={singleSection}>
+            <div className="flex items-center justify-between gap-3">
+                <FieldLabel htmlFor={id}>Score contribution</FieldLabel>
+                <span className="text-sm tabular-nums">{value}%</span>
+            </div>
+            <input type="hidden" name="weight" value={value} />
+            <Slider
+                id={id}
+                value={[value]}
+                onValueChange={([nextValue]) => setValue(nextValue)}
+                min={1}
+                max={maximum}
+                step={1}
+                disabled={singleSection}
+                aria-invalid={Boolean(error)}
+            />
+            <FieldError>{error}</FieldError>
+        </Field>
+    );
+}
+
+function focusFirstError(errors: Record<string, string | undefined>) {
+    window.requestAnimationFrame(() => {
+        const invalidControl = document.querySelector<HTMLElement>(
+            '[aria-invalid="true"]:not([type="hidden"])',
+        );
+
+        if (invalidControl) {
+            invalidControl.focus();
+
+            return;
+        }
+
+        for (const key of Object.keys(errors)) {
+            const [root, ...nested] = key.split('.');
+            const name = nested.reduce(
+                (fieldName, segment) => `${fieldName}[${segment}]`,
+                root,
+            );
+            const control = document.querySelector<HTMLElement>(
+                `[name="${CSS.escape(name)}"]:not([type="hidden"])`,
+            );
+
+            if (control) {
+                control.focus();
+
+                return;
+            }
+        }
+    });
+}
+
+function updateDisclosureQuery(
+    pageUrl: string,
+    key: string,
+    value: string | null,
+) {
+    const url = new URL(pageUrl, 'http://localhost');
+
+    if (value === null) {
+        url.searchParams.delete(key);
+    } else {
+        url.searchParams.set(key, value);
+    }
+
+    router.push({
+        url: `${url.pathname}${url.search}${url.hash}`,
+        preserveScroll: true,
+        preserveState: true,
+    });
+}
+
+function normalizeLocale(locale: string): string {
+    try {
+        return Intl.getCanonicalLocales(locale.replaceAll('_', '-'))[0] ?? 'en';
+    } catch {
+        return 'en';
+    }
+}
 
 function CampaignDetailSkeleton() {
     return (
-        <div className="flex flex-col gap-6">
-            <Card className="gap-0">
+        <div role="status" aria-busy="true" className="flex flex-col gap-6">
+            <span className="sr-only">Loading campaign details…</span>
+
+            <Card className="gap-0 bg-background-200">
                 <CardHeader>
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <Skeleton className="h-6 w-64" />
+                        <Skeleton className="h-6 w-full max-w-64" />
                         <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                            <Skeleton className="h-8 w-24" />
-                            <Skeleton className="h-8 w-24" />
-                            <Skeleton className="size-8" />
+                            <Skeleton className="h-10 w-24" />
+                            <Skeleton className="h-10 w-24" />
+                            <Skeleton className="size-10" />
                         </div>
                     </div>
                 </CardHeader>
@@ -264,53 +447,64 @@ function CampaignDetailSkeleton() {
 
             <Card className="gap-0">
                 <CardHeader className="border-b">
-                    <Skeleton className="h-5 w-48" />
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Skeleton className="h-8 w-36" />
-                        <Skeleton className="h-8 w-40" />
-                    </div>
+                    <Skeleton className="h-5 w-full max-w-48" />
+                    <CardAction className="flex flex-wrap items-center gap-2">
+                        <Skeleton className="h-10 w-36" />
+                        <Skeleton className="h-10 w-40" />
+                    </CardAction>
                 </CardHeader>
-                <CardContent className="flex flex-col gap-6 p-(--card-spacing)">
+                <CardContent className="bg-background-200 p-0">
                     {Array.from({ length: 2 }).map((_, index) => (
-                        <div key={index} className="flex flex-col gap-4">
-                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                <div className="flex flex-col gap-2">
-                                    <Skeleton className="h-5 w-40" />
-                                    <Skeleton className="h-4 w-56" />
+                        <div key={index} className="not-last:border-b">
+                            <div className="flex items-start gap-3 px-(--card-spacing) py-4">
+                                <Skeleton className="mt-1 size-4 shrink-0" />
+                                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                                    <Skeleton className="h-5 w-full max-w-40" />
+                                    <Skeleton className="h-4 w-full max-w-56" />
                                 </div>
-                                <Skeleton className="size-8" />
+                                <Skeleton className="size-10 shrink-0" />
                             </div>
-                            <div className="flex flex-col gap-3">
-                                {Array.from({ length: 2 }).map(
-                                    (__, questionIndex) => (
-                                        <div
-                                            key={questionIndex}
-                                            className="rounded-lg border border-sidebar-border/70 p-4"
-                                        >
-                                            <Skeleton className="h-4 w-3/4" />
-                                            <Skeleton className="mt-3 h-4 w-1/2" />
-                                            <div className="mt-4 flex flex-wrap gap-2">
-                                                <Skeleton className="h-6 w-16" />
-                                                <Skeleton className="h-6 w-20" />
-                                                <Skeleton className="h-6 w-14" />
-                                            </div>
-                                        </div>
-                                    ),
-                                )}
-                            </div>
+
+                            {index === 0 ? (
+                                <div className="px-(--card-spacing) pb-4">
+                                    <ItemGroup className="gap-0 overflow-hidden rounded-md border">
+                                        {Array.from({ length: 2 }).map(
+                                            (__, questionIndex) => (
+                                                <Fragment key={questionIndex}>
+                                                    {questionIndex > 0 ? (
+                                                        <ItemSeparator className="my-0" />
+                                                    ) : null}
+                                                    <Item
+                                                        size="sm"
+                                                        className="rounded-none border-0"
+                                                    >
+                                                        <ItemMedia className="w-auto self-start pt-0.5">
+                                                            <Skeleton className="size-4" />
+                                                        </ItemMedia>
+                                                        <ItemContent className="min-w-0">
+                                                            <Skeleton className="h-4 w-full max-w-96" />
+                                                            <div className="flex flex-wrap gap-2">
+                                                                <Skeleton className="h-4 w-16" />
+                                                                <Skeleton className="h-4 w-20" />
+                                                            </div>
+                                                        </ItemContent>
+                                                        <ItemActions className="self-start">
+                                                            <Skeleton className="size-10" />
+                                                        </ItemActions>
+                                                    </Item>
+                                                </Fragment>
+                                            ),
+                                        )}
+                                    </ItemGroup>
+                                </div>
+                            ) : null}
                         </div>
                     ))}
                 </CardContent>
-                <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
-                    <Skeleton className="h-4 w-72" />
-                    <Skeleton className="h-8 w-28" />
+                <CardFooter className="-mb-(--card-spacing) flex-col items-stretch gap-3 border-t bg-background py-(--card-spacing) sm:flex-row sm:items-center sm:justify-between">
+                    <Skeleton className="h-4 w-full max-w-72" />
+                    <Skeleton className="h-10 w-28 shrink-0" />
                 </CardFooter>
-            </Card>
-
-            <Card className="gap-0">
-                <CardHeader>
-                    <Skeleton className="h-5 w-40" />
-                </CardHeader>
             </Card>
         </div>
     );
@@ -320,7 +514,6 @@ export default function AdminCampaignsShow({
     campaign,
     invitations,
     questionTypes,
-    gradingModeOptions,
 }: Props) {
     const page = usePage<
         SharedData & { flash?: { campaign_invite_url?: string } }
@@ -328,6 +521,19 @@ export default function AdminCampaignsShow({
     const latestInviteUrl = page.props.flash?.campaign_invite_url;
     const { auth } = page.props;
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [isGeneratingAssessment, setIsGeneratingAssessment] = useState(false);
+    const [draggedSectionId, setDraggedSectionId] = useState<number | null>(
+        null,
+    );
+    const [draggedQuestion, setDraggedQuestion] = useState<{
+        sectionId: number;
+        questionId: number;
+    } | null>(null);
+    const currentUrl = new URL(page.url, 'http://localhost');
+    const requestedSection = currentUrl.searchParams.get('section');
+    const numberFormatter = new Intl.NumberFormat(
+        normalizeLocale(page.props.locale),
+    );
 
     return (
         <>
@@ -373,15 +579,18 @@ export default function AdminCampaignsShow({
                                                 {({ processing }) => (
                                                     <Button
                                                         type="submit"
-                                                        size="sm"
+                                                        size="default"
                                                         variant="outline"
                                                         disabled={processing}
                                                     >
                                                         {processing && (
                                                             <Spinner />
                                                         )}
-                                                        <Copy data-icon="inline-start" />
-                                                        Clone as new draft
+                                                        <Copy
+                                                            aria-hidden="true"
+                                                            data-icon="inline-start"
+                                                        />
+                                                        Clone as New Draft
                                                     </Button>
                                                 )}
                                             </Form>
@@ -400,95 +609,460 @@ export default function AdminCampaignsShow({
                             <div
                                 className={`flex flex-col gap-6 ${campaign.definition_frozen ? '[&_form]:pointer-events-none [&_form]:opacity-60' : ''}`}
                             >
-                                <Card className="gap-0">
+                                <Card
+                                    className="gap-0 overflow-hidden"
+                                    aria-busy={isGeneratingAssessment}
+                                >
                                     <CardHeader className="border-b">
-                                        <CardTitle>
-                                            Sections and questions
-                                        </CardTitle>
+                                        <h2 className="scroll-mt-24 font-heading text-heading-16 text-balance">
+                                            Sections &amp; Questions
+                                        </h2>
                                         {!campaign.definition_frozen ? (
                                             <CardAction className="flex flex-wrap items-center gap-2">
-                                                <GenerateAssessmentDialog
+                                                <GenerateAssessmentButton
                                                     campaignId={campaign.id}
+                                                    disabled={
+                                                        campaign.draft_questions_count >
+                                                        0
+                                                    }
+                                                    onProcessingChange={
+                                                        setIsGeneratingAssessment
+                                                    }
                                                 />
                                                 {campaign.draft_questions_count >
                                                 0 ? (
-                                                    <Form
-                                                        {...CampaignQuestionController.approveAll.form(
-                                                            campaign.id,
-                                                        )}
-                                                        options={{
-                                                            preserveScroll: true,
-                                                        }}
-                                                    >
-                                                        {({ processing }) => (
-                                                            <Button
-                                                                type="submit"
-                                                                variant="outline"
-                                                                disabled={
-                                                                    processing
-                                                                }
-                                                            >
-                                                                {processing && (
-                                                                    <Spinner />
-                                                                )}
-                                                                <Check data-icon="inline-start" />
-                                                                Approve all
-                                                                drafts
-                                                            </Button>
-                                                        )}
-                                                    </Form>
+                                                    <>
+                                                        <Form
+                                                            {...CampaignQuestionController.approveAll.form(
+                                                                campaign.id,
+                                                            )}
+                                                            options={{
+                                                                preserveScroll: true,
+                                                            }}
+                                                        >
+                                                            {({
+                                                                processing,
+                                                            }) => (
+                                                                <Button
+                                                                    type="submit"
+                                                                    variant="outline"
+                                                                    disabled={
+                                                                        processing
+                                                                    }
+                                                                >
+                                                                    {processing && (
+                                                                        <Spinner />
+                                                                    )}
+                                                                    <Check
+                                                                        aria-hidden="true"
+                                                                        data-icon="inline-start"
+                                                                    />
+                                                                    Approve All
+                                                                    Drafts
+                                                                </Button>
+                                                            )}
+                                                        </Form>
+                                                        <Form
+                                                            {...CampaignQuestionController.discardAll.form.delete(
+                                                                campaign.id,
+                                                            )}
+                                                            options={{
+                                                                preserveScroll: true,
+                                                            }}
+                                                        >
+                                                            {({
+                                                                processing,
+                                                            }) => (
+                                                                <Button
+                                                                    type="submit"
+                                                                    variant="destructive"
+                                                                    disabled={
+                                                                        processing
+                                                                    }
+                                                                >
+                                                                    {processing && (
+                                                                        <Spinner />
+                                                                    )}
+                                                                    Discard All
+                                                                    Drafts
+                                                                </Button>
+                                                            )}
+                                                        </Form>
+                                                    </>
                                                 ) : null}
                                             </CardAction>
                                         ) : null}
                                     </CardHeader>
 
-                                    <CardContent className="p-0">
-                                        {campaign.sections.length === 0 ? (
-                                            <p className="p-(--card-spacing) text-sm text-muted-foreground">
-                                                No sections yet.
-                                            </p>
-                                        ) : (
-                                            <div className="divide-y">
-                                                {campaign.sections.map(
-                                                    (section) => (
-                                                        <section
-                                                            key={section.id}
-                                                            className="flex flex-col gap-4 p-(--card-spacing)"
-                                                        >
-                                                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                                <div className="flex flex-col gap-2">
-                                                                    <div className="flex flex-wrap items-center gap-2">
-                                                                        <h3 className="text-base font-medium">
+                                    <CardContent
+                                        style={
+                                            isGeneratingAssessment
+                                                ? ({
+                                                      '--spread': '90deg',
+                                                      '--shimmer-color':
+                                                          'var(--foreground)',
+                                                      '--radius': '0px',
+                                                      '--speed': '3s',
+                                                      '--cut': '2px',
+                                                  } as CSSProperties)
+                                                : undefined
+                                        }
+                                        className="relative z-10 overflow-hidden bg-background-200 p-0"
+                                    >
+                                        {isGeneratingAssessment ? (
+                                            <div
+                                                aria-hidden="true"
+                                                className="assessment-content-shimmer"
+                                            />
+                                        ) : null}
+                                        <div>
+                                            {campaign.sections.length === 0 ? (
+                                                <Empty className="rounded-none p-8">
+                                                    <EmptyHeader>
+                                                        <EmptyTitle className="text-base">
+                                                            No sections yet
+                                                        </EmptyTitle>
+                                                        <EmptyDescription>
+                                                            Add a section to
+                                                            group questions by
+                                                            topic or score
+                                                            contribution.
+                                                        </EmptyDescription>
+                                                    </EmptyHeader>
+                                                </Empty>
+                                            ) : (
+                                                <Accordion
+                                                    type="single"
+                                                    collapsible
+                                                    value={
+                                                        campaign.sections.some(
+                                                            ({ id }) =>
+                                                                id.toString() ===
+                                                                requestedSection,
+                                                        )
+                                                            ? (requestedSection ??
+                                                              '')
+                                                            : campaign.sections[0].id.toString()
+                                                    }
+                                                    onValueChange={(value) =>
+                                                        updateDisclosureQuery(
+                                                            page.url,
+                                                            'section',
+                                                            value || null,
+                                                        )
+                                                    }
+                                                >
+                                                    {campaign.sections.map(
+                                                        (section) => (
+                                                            <AccordionItem
+                                                                key={section.id}
+                                                                value={section.id.toString()}
+                                                                className="relative"
+                                                                onDragOver={(
+                                                                    event,
+                                                                ) => {
+                                                                    if (
+                                                                        draggedSectionId !==
+                                                                        null
+                                                                    ) {
+                                                                        event.preventDefault();
+                                                                    }
+                                                                }}
+                                                                onDrop={(
+                                                                    event,
+                                                                ) => {
+                                                                    event.preventDefault();
+
+                                                                    if (
+                                                                        draggedSectionId ===
+                                                                            null ||
+                                                                        draggedSectionId ===
+                                                                            section.id
+                                                                    ) {
+                                                                        return;
+                                                                    }
+
+                                                                    submitSectionOrder(
+                                                                        campaign.id,
+                                                                        moveId(
+                                                                            campaign.sections.map(
+                                                                                ({
+                                                                                    id,
+                                                                                }) =>
+                                                                                    id,
+                                                                            ),
+                                                                            draggedSectionId,
+                                                                            section.id,
+                                                                        ),
+                                                                    );
+                                                                    setDraggedSectionId(
+                                                                        null,
+                                                                    );
+                                                                }}
+                                                            >
+                                                                {!campaign.definition_frozen ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        draggable
+                                                                        aria-label={`Reorder ${section.title}`}
+                                                                        className="absolute top-4 left-3 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+                                                                        onDragStart={() =>
+                                                                            setDraggedSectionId(
+                                                                                section.id,
+                                                                            )
+                                                                        }
+                                                                        onDragEnd={() =>
+                                                                            setDraggedSectionId(
+                                                                                null,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <GripVertical
+                                                                            aria-hidden="true"
+                                                                            className="size-4"
+                                                                        />
+                                                                    </button>
+                                                                ) : null}
+                                                                <AccordionTrigger className="pr-(--card-spacing) pl-12 hover:no-underline [&>[data-slot=accordion-trigger-icon]]:hidden">
+                                                                    <div className="flex min-w-0 flex-1 flex-col gap-1 pr-12">
+                                                                        <span className="line-clamp-1 text-base font-medium">
                                                                             {
                                                                                 section.title
                                                                             }
-                                                                        </h3>
-                                                                        <Badge variant="outline">
-                                                                            {
-                                                                                section.weight
-                                                                            }{' '}
-                                                                            weight
-                                                                        </Badge>
-                                                                        {section.duration_minutes ? (
-                                                                            <Badge variant="secondary">
-                                                                                {
-                                                                                    section.duration_minutes
-                                                                                }{' '}
-                                                                                min
-                                                                            </Badge>
-                                                                        ) : null}
+                                                                        </span>
+                                                                        <span className="flex flex-wrap items-center gap-x-1.5 text-xs font-normal text-muted-foreground">
+                                                                            <span>
+                                                                                {numberFormatter.format(
+                                                                                    section
+                                                                                        .questions
+                                                                                        .length,
+                                                                                )}{' '}
+                                                                                {section
+                                                                                    .questions
+                                                                                    .length ===
+                                                                                1
+                                                                                    ? 'question'
+                                                                                    : 'questions'}
+                                                                            </span>
+                                                                            {section.duration_minutes ? (
+                                                                                <>
+                                                                                    <span aria-hidden="true">
+                                                                                        ·
+                                                                                    </span>
+                                                                                    <span>
+                                                                                        {numberFormatter.format(
+                                                                                            section.duration_minutes,
+                                                                                        )}
+                                                                                        &nbsp;min
+                                                                                    </span>
+                                                                                </>
+                                                                            ) : null}
+                                                                            <span aria-hidden="true">
+                                                                                ·
+                                                                            </span>
+                                                                            <span>
+                                                                                {numberFormatter.format(
+                                                                                    section.weight,
+                                                                                )}
+
+                                                                                %
+                                                                                score
+                                                                                contribution
+                                                                            </span>
+                                                                        </span>
                                                                     </div>
-                                                                    {section.description ? (
-                                                                        <p className="text-sm text-muted-foreground">
-                                                                            {
-                                                                                section.description
-                                                                            }
-                                                                        </p>
-                                                                    ) : null}
+                                                                </AccordionTrigger>
+
+                                                                <div className="absolute top-3 right-3">
+                                                                    <SectionActions
+                                                                        campaignId={
+                                                                            campaign.id
+                                                                        }
+                                                                        section={
+                                                                            section
+                                                                        }
+                                                                        sectionCount={
+                                                                            campaign
+                                                                                .sections
+                                                                                .length
+                                                                        }
+                                                                    />
                                                                 </div>
 
-                                                                <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                                                                    <SectionActionsDropdown
+                                                                <AccordionContent className="px-(--card-spacing) [&_p:not(:last-child)]:mb-0">
+                                                                    {section
+                                                                        .questions
+                                                                        .length ===
+                                                                    0 ? (
+                                                                        <Empty className="border p-8">
+                                                                            <EmptyHeader>
+                                                                                <EmptyTitle className="text-base">
+                                                                                    {
+                                                                                        'No questions yet'
+                                                                                    }
+                                                                                </EmptyTitle>
+                                                                                <EmptyDescription>
+                                                                                    {
+                                                                                        'Use the Add Question button to add the first question.'
+                                                                                    }
+                                                                                </EmptyDescription>
+                                                                            </EmptyHeader>
+                                                                        </Empty>
+                                                                    ) : (
+                                                                        <ItemGroup className="gap-0 overflow-hidden rounded-md border">
+                                                                            {section.questions.map(
+                                                                                (
+                                                                                    question,
+                                                                                    questionIndex,
+                                                                                ) => (
+                                                                                    <Fragment
+                                                                                        key={
+                                                                                            question.id
+                                                                                        }
+                                                                                    >
+                                                                                        {questionIndex >
+                                                                                        0 ? (
+                                                                                            <ItemSeparator className="my-0" />
+                                                                                        ) : null}
+                                                                                        <Item
+                                                                                            size="sm"
+                                                                                            className="rounded-none border-0 [contain-intrinsic-size:auto_64px] [content-visibility:auto]"
+                                                                                            onDragOver={(
+                                                                                                event,
+                                                                                            ) => {
+                                                                                                if (
+                                                                                                    draggedQuestion?.sectionId ===
+                                                                                                    section.id
+                                                                                                ) {
+                                                                                                    event.preventDefault();
+                                                                                                }
+                                                                                            }}
+                                                                                            onDrop={(
+                                                                                                event,
+                                                                                            ) => {
+                                                                                                event.preventDefault();
+
+                                                                                                if (
+                                                                                                    draggedQuestion ===
+                                                                                                        null ||
+                                                                                                    draggedQuestion.sectionId !==
+                                                                                                        section.id ||
+                                                                                                    draggedQuestion.questionId ===
+                                                                                                        question.id
+                                                                                                ) {
+                                                                                                    return;
+                                                                                                }
+
+                                                                                                submitQuestionOrder(
+                                                                                                    campaign.id,
+                                                                                                    section.id,
+                                                                                                    moveId(
+                                                                                                        section.questions.map(
+                                                                                                            ({
+                                                                                                                id,
+                                                                                                            }) =>
+                                                                                                                id,
+                                                                                                        ),
+                                                                                                        draggedQuestion.questionId,
+                                                                                                        question.id,
+                                                                                                    ),
+                                                                                                );
+                                                                                                setDraggedQuestion(
+                                                                                                    null,
+                                                                                                );
+                                                                                            }}
+                                                                                        >
+                                                                                            <ItemMedia className="w-auto gap-1 self-start pt-0.5 text-xs text-muted-foreground tabular-nums">
+                                                                                                {!campaign.definition_frozen ? (
+                                                                                                    <button
+                                                                                                        type="button"
+                                                                                                        draggable
+                                                                                                        aria-label={`Reorder question ${questionIndex + 1}`}
+                                                                                                        className="cursor-grab touch-none active:cursor-grabbing"
+                                                                                                        onDragStart={() =>
+                                                                                                            setDraggedQuestion(
+                                                                                                                {
+                                                                                                                    sectionId:
+                                                                                                                        section.id,
+                                                                                                                    questionId:
+                                                                                                                        question.id,
+                                                                                                                },
+                                                                                                            )
+                                                                                                        }
+                                                                                                        onDragEnd={() =>
+                                                                                                            setDraggedQuestion(
+                                                                                                                null,
+                                                                                                            )
+                                                                                                        }
+                                                                                                    >
+                                                                                                        <GripVertical
+                                                                                                            aria-hidden="true"
+                                                                                                            className="size-4"
+                                                                                                        />
+                                                                                                    </button>
+                                                                                                ) : null}
+                                                                                                {String(
+                                                                                                    questionIndex +
+                                                                                                        1,
+                                                                                                ).padStart(
+                                                                                                    2,
+                                                                                                    '0',
+                                                                                                )}
+                                                                                            </ItemMedia>
+                                                                                            <ItemContent className="min-w-0">
+                                                                                                <ItemTitle className="line-clamp-2 w-full">
+                                                                                                    {
+                                                                                                        question.prompt
+                                                                                                    }
+                                                                                                </ItemTitle>
+                                                                                                <ItemDescription className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                                                                                                    <span>
+                                                                                                        {
+                                                                                                            question.type_label
+                                                                                                        }
+                                                                                                    </span>
+                                                                                                    <span aria-hidden="true">
+                                                                                                        ·
+                                                                                                    </span>
+                                                                                                    <span>
+                                                                                                        {numberFormatter.format(
+                                                                                                            question.points,
+                                                                                                        )}
+                                                                                                        &nbsp;pts
+                                                                                                    </span>
+                                                                                                    {question.status !==
+                                                                                                    'approved' ? (
+                                                                                                        <Badge variant="outline">
+                                                                                                            {
+                                                                                                                question.status_label
+                                                                                                            }
+                                                                                                        </Badge>
+                                                                                                    ) : null}
+                                                                                                </ItemDescription>
+                                                                                            </ItemContent>
+                                                                                            <ItemActions className="self-start">
+                                                                                                <QuestionActionsDropdown
+                                                                                                    campaignId={
+                                                                                                        campaign.id
+                                                                                                    }
+                                                                                                    question={
+                                                                                                        question
+                                                                                                    }
+                                                                                                    sections={
+                                                                                                        campaign.sections
+                                                                                                    }
+                                                                                                    questionTypes={
+                                                                                                        questionTypes
+                                                                                                    }
+                                                                                                />
+                                                                                            </ItemActions>
+                                                                                        </Item>
+                                                                                    </Fragment>
+                                                                                ),
+                                                                            )}
+                                                                        </ItemGroup>
+                                                                    )}
+                                                                    <AddQuestionAction
                                                                         campaignId={
                                                                             campaign.id
                                                                         }
@@ -498,134 +1072,14 @@ export default function AdminCampaignsShow({
                                                                         questionTypes={
                                                                             questionTypes
                                                                         }
-                                                                        gradingModeOptions={
-                                                                            gradingModeOptions
-                                                                        }
                                                                     />
-                                                                </div>
-                                                            </div>
-
-                                                            {section.questions
-                                                                .length ===
-                                                            0 ? (
-                                                                <p className="text-sm text-muted-foreground">
-                                                                    No questions
-                                                                    in this
-                                                                    section.
-                                                                </p>
-                                                            ) : (
-                                                                <div className="divide-y rounded-md border">
-                                                                    {section.questions.map(
-                                                                        (
-                                                                            question,
-                                                                        ) => (
-                                                                            <div
-                                                                                key={
-                                                                                    question.id
-                                                                                }
-                                                                                className="grid gap-4 p-4 lg:grid-cols-[1fr_160px]"
-                                                                            >
-                                                                                <div className="flex flex-col gap-2">
-                                                                                    <div className="flex flex-wrap items-center gap-2">
-                                                                                        <Badge variant="secondary">
-                                                                                            {
-                                                                                                question.type_label
-                                                                                            }
-                                                                                        </Badge>
-                                                                                        <Badge variant="outline">
-                                                                                            {
-                                                                                                question.grading_mode_label
-                                                                                            }
-                                                                                        </Badge>
-                                                                                        <Badge variant="outline">
-                                                                                            {
-                                                                                                question.points
-                                                                                            }{' '}
-                                                                                            pts
-                                                                                        </Badge>
-                                                                                        <Badge
-                                                                                            variant={
-                                                                                                question.status ===
-                                                                                                'approved'
-                                                                                                    ? 'default'
-                                                                                                    : 'outline'
-                                                                                            }
-                                                                                        >
-                                                                                            {
-                                                                                                question.status_label
-                                                                                            }
-                                                                                        </Badge>
-                                                                                        <span className="text-xs text-muted-foreground">
-                                                                                            {
-                                                                                                question.difficulty
-                                                                                            }
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    <p className="font-medium">
-                                                                                        {
-                                                                                            question.prompt
-                                                                                        }
-                                                                                    </p>
-                                                                                    {question
-                                                                                        .skill_tags
-                                                                                        .length >
-                                                                                    0 ? (
-                                                                                        <div className="flex flex-wrap gap-2">
-                                                                                            {question.skill_tags.map(
-                                                                                                (
-                                                                                                    tag,
-                                                                                                ) => (
-                                                                                                    <Badge
-                                                                                                        key={
-                                                                                                            tag
-                                                                                                        }
-                                                                                                        variant="outline"
-                                                                                                    >
-                                                                                                        {
-                                                                                                            tag
-                                                                                                        }
-                                                                                                    </Badge>
-                                                                                                ),
-                                                                                            )}
-                                                                                        </div>
-                                                                                    ) : null}
-                                                                                    {question.expected_rubric ? (
-                                                                                        <p className="line-clamp-2 text-sm text-muted-foreground">
-                                                                                            {
-                                                                                                question.expected_rubric
-                                                                                            }
-                                                                                        </p>
-                                                                                    ) : null}
-                                                                                </div>
-                                                                                <div className="flex justify-end">
-                                                                                    <QuestionActionsDropdown
-                                                                                        campaignId={
-                                                                                            campaign.id
-                                                                                        }
-                                                                                        question={
-                                                                                            question
-                                                                                        }
-                                                                                        sections={
-                                                                                            campaign.sections
-                                                                                        }
-                                                                                        questionTypes={
-                                                                                            questionTypes
-                                                                                        }
-                                                                                        gradingModeOptions={
-                                                                                            gradingModeOptions
-                                                                                        }
-                                                                                    />
-                                                                                </div>
-                                                                            </div>
-                                                                        ),
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </section>
-                                                    ),
-                                                )}
-                                            </div>
-                                        )}
+                                                                </AccordionContent>
+                                                            </AccordionItem>
+                                                        ),
+                                                    )}
+                                                </Accordion>
+                                            )}
+                                        </div>
                                     </CardContent>
 
                                     <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
@@ -637,184 +1091,13 @@ export default function AdminCampaignsShow({
                                         {!campaign.definition_frozen ? (
                                             <AddSectionSheet
                                                 campaignId={campaign.id}
+                                                sectionCount={
+                                                    campaign.sections.length
+                                                }
                                             />
                                         ) : null}
                                     </CardFooter>
                                 </Card>
-
-                                <Collapsible className="group/collapsible">
-                                    <Card className="gap-0">
-                                        <CollapsibleTrigger asChild>
-                                            <CardHeader className="cursor-pointer">
-                                                <CardTitle className="flex items-center gap-2">
-                                                    <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                                                    Advanced Settings
-                                                </CardTitle>
-                                            </CardHeader>
-                                        </CollapsibleTrigger>
-                                        <CollapsibleContent>
-                                            <Form<RankingWeightsFormData>
-                                                {...CampaignRankingController.update.form.patch(
-                                                    campaign.id,
-                                                )}
-                                                options={{
-                                                    preserveScroll: true,
-                                                }}
-                                                className="contents"
-                                            >
-                                                {({ errors, processing }) => {
-                                                    const fieldErrors =
-                                                        errors as Record<
-                                                            string,
-                                                            string | undefined
-                                                        >;
-
-                                                    return (
-                                                        <>
-                                                            <CardContent className="flex flex-col gap-6 py-(--card-spacing)">
-                                                                <section className="flex flex-col gap-3">
-                                                                    <div>
-                                                                        <h2 className="text-base font-medium">
-                                                                            Ranking
-                                                                            weights
-                                                                        </h2>
-                                                                        <p className="text-sm text-muted-foreground">
-                                                                            Resume,
-                                                                            essay,
-                                                                            and
-                                                                            MCQ
-                                                                            weights
-                                                                            must
-                                                                            total
-                                                                            100.
-                                                                        </p>
-                                                                    </div>
-                                                                    <div className="grid gap-3 sm:grid-cols-3">
-                                                                        <div className="grid gap-2">
-                                                                            <Label htmlFor="ranking_resume_score">
-                                                                                Resume
-                                                                                %
-                                                                            </Label>
-                                                                            <Input
-                                                                                id="ranking_resume_score"
-                                                                                name="ranking_weights[resume_score]"
-                                                                                type="number"
-                                                                                min={
-                                                                                    0
-                                                                                }
-                                                                                max={
-                                                                                    100
-                                                                                }
-                                                                                defaultValue={
-                                                                                    campaign
-                                                                                        .ranking_weights
-                                                                                        .resume_score
-                                                                                }
-                                                                                required
-                                                                            />
-                                                                            <InputError
-                                                                                message={
-                                                                                    fieldErrors[
-                                                                                        'ranking_weights.resume_score'
-                                                                                    ]
-                                                                                }
-                                                                            />
-                                                                        </div>
-                                                                        <div className="grid gap-2">
-                                                                            <Label htmlFor="ranking_essay_score">
-                                                                                Essay
-                                                                                %
-                                                                            </Label>
-                                                                            <Input
-                                                                                id="ranking_essay_score"
-                                                                                name="ranking_weights[essay_score]"
-                                                                                type="number"
-                                                                                min={
-                                                                                    0
-                                                                                }
-                                                                                max={
-                                                                                    100
-                                                                                }
-                                                                                defaultValue={
-                                                                                    campaign
-                                                                                        .ranking_weights
-                                                                                        .essay_score
-                                                                                }
-                                                                                required
-                                                                            />
-                                                                            <InputError
-                                                                                message={
-                                                                                    fieldErrors[
-                                                                                        'ranking_weights.essay_score'
-                                                                                    ]
-                                                                                }
-                                                                            />
-                                                                        </div>
-                                                                        <div className="grid gap-2">
-                                                                            <Label htmlFor="ranking_mcq_score">
-                                                                                MCQ
-                                                                                %
-                                                                            </Label>
-                                                                            <Input
-                                                                                id="ranking_mcq_score"
-                                                                                name="ranking_weights[mcq_score]"
-                                                                                type="number"
-                                                                                min={
-                                                                                    0
-                                                                                }
-                                                                                max={
-                                                                                    100
-                                                                                }
-                                                                                defaultValue={
-                                                                                    campaign
-                                                                                        .ranking_weights
-                                                                                        .mcq_score
-                                                                                }
-                                                                                required
-                                                                            />
-                                                                            <InputError
-                                                                                message={
-                                                                                    fieldErrors[
-                                                                                        'ranking_weights.mcq_score'
-                                                                                    ]
-                                                                                }
-                                                                            />
-                                                                        </div>
-                                                                    </div>
-                                                                    <InputError
-                                                                        message={
-                                                                            fieldErrors.ranking_weights
-                                                                        }
-                                                                    />
-                                                                </section>
-                                                            </CardContent>
-                                                            <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
-                                                                <p className="text-sm text-muted-foreground">
-                                                                    Apply these
-                                                                    weights to
-                                                                    candidate
-                                                                    ranking.
-                                                                </p>
-                                                                <Button
-                                                                    type="submit"
-                                                                    size="sm"
-                                                                    disabled={
-                                                                        processing
-                                                                    }
-                                                                >
-                                                                    {processing && (
-                                                                        <Spinner />
-                                                                    )}
-                                                                    Save weights
-                                                                </Button>
-                                                            </CardFooter>
-                                                        </>
-                                                    );
-                                                }}
-                                            </Form>
-                                        </CollapsibleContent>
-                                    </Card>
-                                </Collapsible>
                             </div>
                         </>
                     ) : null}
@@ -824,215 +1107,71 @@ export default function AdminCampaignsShow({
     );
 }
 
-function GenerateAssessmentDialog({ campaignId }: { campaignId: number }) {
-    const [open, setOpen] = useState(false);
-
+function GenerateAssessmentButton({
+    campaignId,
+    disabled,
+    onProcessingChange,
+}: {
+    campaignId: number;
+    disabled: boolean;
+    onProcessingChange: (processing: boolean) => void;
+}) {
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                    <Sparkles data-icon="inline-start" />
-                    Generate assessment
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>Generate assessment</DialogTitle>
-                    <DialogDescription>
-                        Create draft questions for review.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <Form<GenerateAssessmentFormData>
-                    {...CampaignAssessmentGenerationController.store.form(
-                        campaignId,
-                    )}
-                    options={{
-                        preserveScroll: true,
-                    }}
-                    onSuccess={() => setOpen(false)}
-                    className="contents"
-                >
-                    {({ errors, processing }) => (
-                        <>
-                            <FieldGroup className="gap-4">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Field
-                                        data-invalid={
-                                            Boolean(errors.question_count) ||
-                                            undefined
-                                        }
-                                    >
-                                        <FieldLabel htmlFor="generate-question-count">
-                                            Questions
-                                        </FieldLabel>
-                                        <Input
-                                            id="generate-question-count"
-                                            name="question_count"
-                                            type="number"
-                                            min={1}
-                                            max={20}
-                                            defaultValue={6}
-                                            required
-                                            aria-invalid={
-                                                Boolean(
-                                                    errors.question_count,
-                                                ) || undefined
-                                            }
-                                        />
-                                        <FieldError
-                                            errors={[
-                                                {
-                                                    message:
-                                                        errors.question_count,
-                                                },
-                                            ]}
-                                        />
-                                    </Field>
-
-                                    <Field
-                                        data-invalid={
-                                            Boolean(errors.difficulty) ||
-                                            undefined
-                                        }
-                                    >
-                                        <FieldLabel>Difficulty</FieldLabel>
-                                        <Select
-                                            name="difficulty"
-                                            defaultValue="mixed"
-                                        >
-                                            <SelectTrigger
-                                                className="w-full"
-                                                aria-invalid={
-                                                    Boolean(
-                                                        errors.difficulty,
-                                                    ) || undefined
-                                                }
-                                            >
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectGroup>
-                                                    <SelectItem value="mixed">
-                                                        Mixed
-                                                    </SelectItem>
-                                                    <SelectItem value="easy">
-                                                        Easy
-                                                    </SelectItem>
-                                                    <SelectItem value="medium">
-                                                        Medium
-                                                    </SelectItem>
-                                                    <SelectItem value="hard">
-                                                        Hard
-                                                    </SelectItem>
-                                                </SelectGroup>
-                                            </SelectContent>
-                                        </Select>
-                                        <FieldError
-                                            errors={[
-                                                {
-                                                    message: errors.difficulty,
-                                                },
-                                            ]}
-                                        />
-                                    </Field>
-                                </div>
-
-                                <Field
-                                    data-invalid={
-                                        Boolean(errors.language) || undefined
-                                    }
-                                >
-                                    <FieldLabel htmlFor="generate-language">
-                                        Language
-                                    </FieldLabel>
-                                    <Input
-                                        id="generate-language"
-                                        name="language"
-                                        defaultValue="English"
-                                        required
-                                        aria-invalid={
-                                            Boolean(errors.language) ||
-                                            undefined
-                                        }
-                                    />
-                                    <FieldError
-                                        errors={[
-                                            {
-                                                message: errors.language,
-                                            },
-                                        ]}
-                                    />
-                                </Field>
-
-                                <Field
-                                    data-invalid={
-                                        Boolean(errors.question_mix) ||
-                                        undefined
-                                    }
-                                >
-                                    <FieldLabel htmlFor="question_mix">
-                                        Question mix
-                                    </FieldLabel>
-                                    <textarea
-                                        id="question_mix"
-                                        name="question_mix"
-                                        rows={3}
-                                        className={textareaClass}
-                                        placeholder="3 multiple choice, 2 essay, 1 fill blank"
-                                        aria-invalid={
-                                            Boolean(errors.question_mix) ||
-                                            undefined
-                                        }
-                                    />
-                                    <FieldError
-                                        errors={[
-                                            {
-                                                message: errors.question_mix,
-                                            },
-                                        ]}
-                                    />
-                                </Field>
-
-                                <InputError message={errors.generation} />
-                            </FieldGroup>
-
-                            <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button type="button" variant="outline">
-                                        Cancel
-                                    </Button>
-                                </DialogClose>
-                                <Button
-                                    type="submit"
-                                    size="sm"
-                                    disabled={processing}
-                                >
-                                    {processing && <Spinner />}
-                                    <Sparkles data-icon="inline-start" />
-                                    Generate drafts
-                                </Button>
-                            </DialogFooter>
-                        </>
-                    )}
-                </Form>
-            </DialogContent>
-        </Dialog>
+        <Form
+            {...CampaignAssessmentGenerationController.store.form(campaignId)}
+            options={{ preserveScroll: true }}
+            onStart={() => onProcessingChange(true)}
+            onFinish={() => onProcessingChange(false)}
+            className="flex flex-col items-end gap-1"
+        >
+            {({ errors, processing }) => (
+                <>
+                    <ShimmerButton
+                        type="submit"
+                        variant="outline"
+                        size="default"
+                        disabled={disabled || processing}
+                    >
+                        {processing ? (
+                            <Spinner />
+                        ) : (
+                            <Sparkles
+                                aria-hidden="true"
+                                data-icon="inline-start"
+                            />
+                        )}
+                        {processing
+                            ? 'Generating Assessment…'
+                            : 'Generate Assessment'}
+                    </ShimmerButton>
+                    <InputError message={errors.generation} />
+                </>
+            )}
+        </Form>
     );
 }
 
-function AddSectionSheet({ campaignId }: { campaignId: number }) {
+function AddSectionSheet({
+    campaignId,
+    sectionCount,
+}: {
+    campaignId: number;
+    sectionCount: number;
+}) {
+    const [open, setOpen] = useState(false);
+    const maximumContribution = Math.max(1, 100 - sectionCount);
+
     return (
-        <Sheet>
+        <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-                <Button variant="outline" size="sm">
-                    <Plus data-icon="inline-start" />
-                    Add section
+                <Button variant="outline" size="default">
+                    <Plus aria-hidden="true" data-icon="inline-start" />
+                    Add Section…
                 </Button>
             </SheetTrigger>
             <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
                 <SheetHeader>
-                    <SheetTitle>Add section</SheetTitle>
+                    <SheetTitle>Add Section</SheetTitle>
                     <SheetDescription>
                         Create a new section for grouping campaign questions.
                     </SheetDescription>
@@ -1043,128 +1182,109 @@ function AddSectionSheet({ campaignId }: { campaignId: number }) {
                     options={{
                         preserveScroll: true,
                     }}
+                    onSuccess={() => setOpen(false)}
+                    onError={focusFirstError}
                     className="flex flex-1 flex-col overflow-hidden"
                 >
-                    {({ errors, processing }) => (
+                    {({ errors, isDirty, processing }) => (
                         <>
-                            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="section-title">Title</Label>
+                            <UnsavedChangesGuard
+                                active={isDirty && !processing}
+                            />
+                            <FieldGroup className="flex-1 overflow-y-auto px-4">
+                                <Field data-invalid={Boolean(errors.title)}>
+                                    <FieldLabel htmlFor="section-title">
+                                        Title
+                                    </FieldLabel>
                                     <Input
                                         id="section-title"
                                         name="title"
+                                        autoComplete="off"
+                                        aria-invalid={Boolean(errors.title)}
                                         required
                                     />
-                                    <InputError message={errors.title} />
-                                </div>
+                                    <FieldError>{errors.title}</FieldError>
+                                </Field>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="section-description">
+                                <Field
+                                    data-invalid={Boolean(errors.description)}
+                                >
+                                    <FieldLabel htmlFor="section-description">
                                         Description
-                                    </Label>
-                                    <textarea
+                                    </FieldLabel>
+                                    <Textarea
                                         id="section-description"
                                         name="description"
+                                        autoComplete="off"
                                         rows={4}
-                                        className={textareaClass}
+                                        className="min-h-28"
+                                        aria-invalid={Boolean(
+                                            errors.description,
+                                        )}
                                     />
-                                    <InputError message={errors.description} />
-                                </div>
+                                    <FieldError>
+                                        {errors.description}
+                                    </FieldError>
+                                </Field>
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="duration_minutes">
-                                            Minutes
-                                        </Label>
-                                        <Input
-                                            id="duration_minutes"
-                                            name="duration_minutes"
-                                            type="number"
-                                            min={1}
-                                        />
-                                        <InputError
-                                            message={errors.duration_minutes}
-                                        />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="section-sort">
-                                            Order
-                                        </Label>
-                                        <Input
-                                            id="section-sort"
-                                            name="sort_order"
-                                            type="number"
-                                            min={0}
-                                            defaultValue={20}
-                                            required
-                                        />
-                                        <InputError
-                                            message={errors.sort_order}
-                                        />
-                                    </div>
-                                </div>
+                                <Field
+                                    data-invalid={Boolean(
+                                        errors.duration_minutes,
+                                    )}
+                                >
+                                    <FieldLabel htmlFor="duration_minutes">
+                                        Duration (minutes)
+                                    </FieldLabel>
+                                    <Input
+                                        id="duration_minutes"
+                                        name="duration_minutes"
+                                        type="number"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                        min={1}
+                                        max={480}
+                                        aria-invalid={Boolean(
+                                            errors.duration_minutes,
+                                        )}
+                                    />
+                                    <FieldError>
+                                        {errors.duration_minutes}
+                                    </FieldError>
+                                </Field>
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="grid gap-2">
-                                        <Label>Scoring</Label>
-                                        <Select
-                                            name="scoring_mode"
-                                            defaultValue="weighted"
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="weighted">
-                                                    Weighted
-                                                </SelectItem>
-                                                <SelectItem value="points">
-                                                    Points
-                                                </SelectItem>
-                                                <SelectItem value="percentage">
-                                                    Percentage
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError
-                                            message={errors.scoring_mode}
-                                        />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="section-weight">
-                                            Weight
-                                        </Label>
-                                        <Input
-                                            id="section-weight"
-                                            name="weight"
-                                            type="number"
-                                            min={1}
-                                            defaultValue={100}
-                                            required
-                                        />
-                                        <InputError message={errors.weight} />
-                                    </div>
-                                </div>
-                            </div>
+                                <ScoreContributionField
+                                    id="section-weight"
+                                    initialValue={Math.min(
+                                        sectionCount === 0 ? 100 : 20,
+                                        maximumContribution,
+                                    )}
+                                    maximum={maximumContribution}
+                                    singleSection={sectionCount === 0}
+                                    error={errors.weight}
+                                />
+                            </FieldGroup>
 
                             <SheetFooter className="flex-row items-center justify-between gap-3 border-t bg-background sm:flex-row">
                                 <SheetClose asChild>
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        size="sm"
+                                        size="default"
                                     >
                                         Cancel
                                     </Button>
                                 </SheetClose>
                                 <Button
                                     type="submit"
-                                    size="sm"
+                                    size="default"
                                     disabled={processing}
                                 >
                                     {processing && <Spinner />}
-                                    <Plus data-icon="inline-start" />
-                                    Add section
+                                    <Plus
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                    />
+                                    Add Section
                                 </Button>
                             </SheetFooter>
                         </>
@@ -1175,61 +1295,65 @@ function AddSectionSheet({ campaignId }: { campaignId: number }) {
     );
 }
 
-function SectionActionsDropdown({
+function SectionActions({
     campaignId,
     section,
-    questionTypes,
-    gradingModeOptions,
+    sectionCount,
 }: {
     campaignId: number;
     section: CampaignSection;
-    questionTypes: QuestionTypeOption[];
-    gradingModeOptions: GradingModeOption[];
+    sectionCount: number;
 }) {
-    const [addQuestionOpen, setAddQuestionOpen] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
     return (
         <>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button
-                        size="icon-sm"
-                        variant="outline"
-                        aria-label="Open section actions"
-                    >
-                        <MoreHorizontal data-icon="inline-start" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                    <DropdownMenuItem
-                        onSelect={(event) => {
-                            event.preventDefault();
-                            setAddQuestionOpen(true);
-                        }}
-                    >
-                        Add question
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={(event) => {
-                            event.preventDefault();
-                            setDeleteOpen(true);
-                        }}
-                    >
-                        Delete
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Open section actions"
+                        >
+                            <MoreHorizontal
+                                aria-hidden="true"
+                                data-icon="inline-start"
+                            />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                        <DropdownMenuGroup>
+                            <DropdownMenuItem
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    setEditOpen(true);
+                                }}
+                            >
+                                Edit Section…
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    setDeleteOpen(true);
+                                }}
+                            >
+                                Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
 
-            <AddQuestionSheet
+            <EditSectionSheet
                 campaignId={campaignId}
                 section={section}
-                questionTypes={questionTypes}
-                gradingModeOptions={gradingModeOptions}
-                open={addQuestionOpen}
-                onOpenChange={setAddQuestionOpen}
+                sectionCount={sectionCount}
+                open={editOpen}
+                onOpenChange={setEditOpen}
             />
             <DeleteSectionDialog
                 campaignId={campaignId}
@@ -1238,6 +1362,189 @@ function SectionActionsDropdown({
                 onOpenChange={setDeleteOpen}
             />
         </>
+    );
+}
+
+function AddQuestionAction({
+    campaignId,
+    section,
+    questionTypes,
+}: {
+    campaignId: number;
+    section: CampaignSection;
+    questionTypes: QuestionTypeOption[];
+}) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <>
+            <div className="mt-3 flex justify-end">
+                <Button
+                    type="button"
+                    size="default"
+                    variant="outline"
+                    onClick={() => setOpen(true)}
+                >
+                    <Plus aria-hidden="true" data-icon="inline-start" />
+                    Add Question…
+                </Button>
+            </div>
+            <AddQuestionSheet
+                campaignId={campaignId}
+                section={section}
+                questionTypes={questionTypes}
+                open={open}
+                onOpenChange={setOpen}
+            />
+        </>
+    );
+}
+
+function EditSectionSheet({
+    campaignId,
+    section,
+    sectionCount,
+    open,
+    onOpenChange,
+}: {
+    campaignId: number;
+    section: CampaignSection;
+    sectionCount: number;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    return (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+            <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
+                <SheetHeader>
+                    <SheetTitle>Edit Section</SheetTitle>
+                    <SheetDescription>
+                        Update how this section is presented, timed, and scored.
+                    </SheetDescription>
+                </SheetHeader>
+
+                <Form<SectionFormData>
+                    {...CampaignSectionController.update.form.patch([
+                        campaignId,
+                        section.id,
+                    ])}
+                    options={{
+                        preserveScroll: true,
+                    }}
+                    onSuccess={() => onOpenChange(false)}
+                    onError={focusFirstError}
+                    className="flex flex-1 flex-col overflow-hidden"
+                >
+                    {({ errors, isDirty, processing }) => (
+                        <>
+                            <UnsavedChangesGuard
+                                active={isDirty && !processing}
+                            />
+                            <FieldGroup className="flex-1 overflow-y-auto px-4">
+                                <Field data-invalid={Boolean(errors.title)}>
+                                    <FieldLabel
+                                        htmlFor={`edit-section-title-${section.id}`}
+                                    >
+                                        Title
+                                    </FieldLabel>
+                                    <Input
+                                        id={`edit-section-title-${section.id}`}
+                                        name="title"
+                                        autoComplete="off"
+                                        defaultValue={section.title}
+                                        aria-invalid={Boolean(errors.title)}
+                                        required
+                                    />
+                                    <FieldError>{errors.title}</FieldError>
+                                </Field>
+
+                                <Field
+                                    data-invalid={Boolean(errors.description)}
+                                >
+                                    <FieldLabel
+                                        htmlFor={`edit-section-description-${section.id}`}
+                                    >
+                                        Description
+                                    </FieldLabel>
+                                    <Textarea
+                                        id={`edit-section-description-${section.id}`}
+                                        name="description"
+                                        autoComplete="off"
+                                        rows={4}
+                                        defaultValue={section.description ?? ''}
+                                        className="min-h-28"
+                                        aria-invalid={Boolean(
+                                            errors.description,
+                                        )}
+                                    />
+                                    <FieldError>
+                                        {errors.description}
+                                    </FieldError>
+                                </Field>
+
+                                <Field
+                                    data-invalid={Boolean(
+                                        errors.duration_minutes,
+                                    )}
+                                >
+                                    <FieldLabel
+                                        htmlFor={`edit-section-duration-${section.id}`}
+                                    >
+                                        Duration (minutes)
+                                    </FieldLabel>
+                                    <Input
+                                        id={`edit-section-duration-${section.id}`}
+                                        name="duration_minutes"
+                                        type="number"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                        min={1}
+                                        max={480}
+                                        defaultValue={
+                                            section.duration_minutes ?? ''
+                                        }
+                                        aria-invalid={Boolean(
+                                            errors.duration_minutes,
+                                        )}
+                                    />
+                                    <FieldError>
+                                        {errors.duration_minutes}
+                                    </FieldError>
+                                </Field>
+
+                                <ScoreContributionField
+                                    id={`edit-section-weight-${section.id}`}
+                                    initialValue={section.weight}
+                                    maximum={Math.max(1, 101 - sectionCount)}
+                                    singleSection={sectionCount === 1}
+                                    error={errors.weight}
+                                />
+                            </FieldGroup>
+
+                            <SheetFooter className="flex-row items-center justify-between gap-3 border-t bg-background sm:flex-row">
+                                <SheetClose asChild>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="default"
+                                    >
+                                        Cancel
+                                    </Button>
+                                </SheetClose>
+                                <Button
+                                    type="submit"
+                                    size="default"
+                                    disabled={processing}
+                                >
+                                    {processing && <Spinner />}
+                                    Save Changes
+                                </Button>
+                            </SheetFooter>
+                        </>
+                    )}
+                </Form>
+            </SheetContent>
+        </Sheet>
     );
 }
 
@@ -1253,15 +1560,15 @@ function DeleteSectionDialog({
     onOpenChange: (open: boolean) => void;
 }) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Delete section?</DialogTitle>
-                    <DialogDescription>
-                        This will permanently delete "{section.title}" and its
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Section?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will permanently delete “{section.title}” and its
                         questions. This action cannot be undone.
-                    </DialogDescription>
-                </DialogHeader>
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
 
                 <Form
                     {...CampaignSectionController.destroy.form.delete([
@@ -1275,25 +1582,21 @@ function DeleteSectionDialog({
                         <>
                             <InputError message={errors.section} />
 
-                            <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button type="button" variant="outline">
-                                        Cancel
-                                    </Button>
-                                </DialogClose>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <Button
                                     type="submit"
                                     variant="destructive"
                                     disabled={processing}
                                 >
-                                    Delete section
+                                    Delete Section
                                 </Button>
-                            </DialogFooter>
+                            </AlertDialogFooter>
                         </>
                     )}
                 </Form>
-            </DialogContent>
-        </Dialog>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 }
 
@@ -1301,14 +1604,12 @@ function AddQuestionSheet({
     campaignId,
     section,
     questionTypes,
-    gradingModeOptions,
     open,
     onOpenChange,
 }: {
     campaignId: number;
     section: CampaignSection;
     questionTypes: QuestionTypeOption[];
-    gradingModeOptions: GradingModeOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -1316,7 +1617,7 @@ function AddQuestionSheet({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
                 <SheetHeader>
-                    <SheetTitle>Add question</SheetTitle>
+                    <SheetTitle>Add Question</SheetTitle>
                     <SheetDescription>
                         Add a question to {section.title}.
                     </SheetDescription>
@@ -1327,31 +1628,47 @@ function AddQuestionSheet({
                     options={{
                         preserveScroll: true,
                     }}
+                    onSuccess={() => onOpenChange(false)}
+                    onError={focusFirstError}
                     className="flex flex-1 flex-col overflow-hidden"
                 >
-                    {({ errors, processing }) => (
+                    {({ errors, isDirty, processing }) => (
                         <>
-                            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
+                            <UnsavedChangesGuard
+                                active={isDirty && !processing}
+                            />
+                            <FieldGroup className="flex-1 overflow-y-auto px-4">
                                 <input
                                     type="hidden"
                                     name="campaign_section_id"
                                     value={section.id}
                                 />
-                                <InputError
-                                    message={errors.campaign_section_id}
+                                <input
+                                    type="hidden"
+                                    name="ai_generated"
+                                    value="0"
                                 />
+                                <FieldError>
+                                    {errors.campaign_section_id}
+                                </FieldError>
 
-                                <div className="grid gap-3 md:grid-cols-3">
-                                    <div className="grid gap-2">
-                                        <Label>Type</Label>
-                                        <Select
-                                            name="type"
-                                            defaultValue="long_text"
+                                <Field data-invalid={Boolean(errors.type)}>
+                                    <FieldLabel htmlFor={`type-${section.id}`}>
+                                        Type
+                                    </FieldLabel>
+                                    <Select
+                                        name="type"
+                                        defaultValue="long_text"
+                                    >
+                                        <SelectTrigger
+                                            id={`type-${section.id}`}
+                                            className="w-full"
+                                            aria-invalid={Boolean(errors.type)}
                                         >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
                                                 {questionTypes.map((type) => (
                                                     <SelectItem
                                                         key={type.value}
@@ -1360,46 +1677,34 @@ function AddQuestionSheet({
                                                         {type.label}
                                                     </SelectItem>
                                                 ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError message={errors.type} />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label>Grading mode</Label>
-                                        <Select
-                                            name="grading_mode"
-                                            defaultValue="ai"
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                    <FieldError>{errors.type}</FieldError>
+                                </Field>
+                                <Field
+                                    data-invalid={Boolean(errors.difficulty)}
+                                >
+                                    <FieldLabel
+                                        htmlFor={`difficulty-${section.id}`}
+                                    >
+                                        Difficulty
+                                    </FieldLabel>
+                                    <Select
+                                        name="difficulty"
+                                        defaultValue="medium"
+                                    >
+                                        <SelectTrigger
+                                            id={`difficulty-${section.id}`}
+                                            className="w-full"
+                                            aria-invalid={Boolean(
+                                                errors.difficulty,
+                                            )}
                                         >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {gradingModeOptions.map(
-                                                    (mode) => (
-                                                        <SelectItem
-                                                            key={mode.value}
-                                                            value={mode.value}
-                                                        >
-                                                            {mode.label}
-                                                        </SelectItem>
-                                                    ),
-                                                )}
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError
-                                            message={errors.grading_mode}
-                                        />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label>Difficulty</Label>
-                                        <Select
-                                            name="difficulty"
-                                            defaultValue="medium"
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
                                                 <SelectItem value="easy">
                                                     Easy
                                                 </SelectItem>
@@ -1409,170 +1714,83 @@ function AddQuestionSheet({
                                                 <SelectItem value="hard">
                                                     Hard
                                                 </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError
-                                            message={errors.difficulty}
-                                        />
-                                    </div>
-                                </div>
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                    <FieldError>{errors.difficulty}</FieldError>
+                                </Field>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor={`prompt-${section.id}`}>
-                                        Prompt
-                                    </Label>
-                                    <textarea
+                                <Field data-invalid={Boolean(errors.prompt)}>
+                                    <FieldLabel
+                                        htmlFor={`prompt-${section.id}`}
+                                    >
+                                        Question
+                                    </FieldLabel>
+                                    <Textarea
                                         id={`prompt-${section.id}`}
                                         name="prompt"
+                                        autoComplete="off"
                                         rows={4}
                                         required
-                                        className={textareaClass}
+                                        className="min-h-28"
+                                        aria-invalid={Boolean(errors.prompt)}
                                     />
-                                    <InputError message={errors.prompt} />
-                                </div>
+                                    <FieldError>{errors.prompt}</FieldError>
+                                </Field>
 
-                                <div className="grid gap-2">
-                                    <Label
+                                <Field
+                                    data-invalid={Boolean(
+                                        errors.expected_rubric,
+                                    )}
+                                >
+                                    <FieldLabel
                                         htmlFor={`expected-rubric-${section.id}`}
                                     >
-                                        Rubric
-                                    </Label>
-                                    <textarea
+                                        Expected answer / scoring guide
+                                    </FieldLabel>
+                                    <Textarea
                                         id={`expected-rubric-${section.id}`}
                                         name="expected_rubric"
+                                        autoComplete="off"
                                         rows={4}
-                                        className={textareaClass}
+                                        required
+                                        className="min-h-28"
+                                        aria-invalid={Boolean(
+                                            errors.expected_rubric,
+                                        )}
                                     />
-                                    <InputError
-                                        message={errors.expected_rubric}
-                                    />
-                                </div>
+                                    <FieldError>
+                                        {errors.expected_rubric}
+                                    </FieldError>
+                                </Field>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor={`options-${section.id}`}>
-                                        Options
-                                    </Label>
-                                    <textarea
-                                        id={`options-${section.id}`}
-                                        name="options_text"
-                                        rows={3}
-                                        className={textareaClass}
-                                    />
-                                    <InputError message={errors.options_text} />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label
-                                        htmlFor={`correct-answer-${section.id}`}
-                                    >
-                                        Correct answer
-                                    </Label>
-                                    <textarea
-                                        id={`correct-answer-${section.id}`}
-                                        name="correct_answer_text"
-                                        rows={3}
-                                        className={textareaClass}
-                                        placeholder="One accepted answer per line. For matching pairs use left = right."
-                                    />
-                                    <InputError
-                                        message={errors.correct_answer_text}
-                                    />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label htmlFor={`skill-tags-${section.id}`}>
-                                        Skill tags
-                                    </Label>
-                                    <textarea
-                                        id={`skill-tags-${section.id}`}
-                                        name="skill_tags_text"
-                                        rows={3}
-                                        className={textareaClass}
-                                    />
-                                    <InputError
-                                        message={errors.skill_tags_text}
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor={`points-${section.id}`}>
-                                            Points
-                                        </Label>
-                                        <Input
-                                            id={`points-${section.id}`}
-                                            name="points"
-                                            type="number"
-                                            min={1}
-                                            defaultValue={10}
-                                            required
-                                        />
-                                        <InputError message={errors.points} />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label
-                                            htmlFor={`question-sort-${section.id}`}
-                                        >
-                                            Order
-                                        </Label>
-                                        <Input
-                                            id={`question-sort-${section.id}`}
-                                            name="sort_order"
-                                            type="number"
-                                            min={0}
-                                            defaultValue={10}
-                                            required
-                                        />
-                                        <InputError
-                                            message={errors.sort_order}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
-                                    <input
-                                        type="hidden"
-                                        name="ai_generated"
-                                        value="0"
-                                    />
-                                    <input
-                                        type="hidden"
-                                        name="is_required"
-                                        value="0"
-                                    />
-                                    <Checkbox
-                                        id={`required-${section.id}`}
-                                        name="is_required"
-                                        value="1"
-                                        defaultChecked
-                                    />
-                                    <Label
-                                        htmlFor={`required-${section.id}`}
-                                        className="text-sm font-normal"
-                                    >
-                                        Required
-                                    </Label>
-                                </div>
-                            </div>
+                                <PointsField
+                                    id={`points-${section.id}`}
+                                    error={errors.points}
+                                />
+                            </FieldGroup>
 
                             <SheetFooter className="flex-row items-center justify-between gap-3 border-t bg-background sm:flex-row">
                                 <SheetClose asChild>
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        size="sm"
+                                        size="default"
                                     >
                                         Cancel
                                     </Button>
                                 </SheetClose>
                                 <Button
                                     type="submit"
-                                    size="sm"
+                                    size="default"
                                     disabled={processing}
                                 >
                                     {processing && <Spinner />}
-                                    <Plus data-icon="inline-start" />
-                                    Add question
+                                    <Plus
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                    />
+                                    Add Question
                                 </Button>
                             </SheetFooter>
                         </>
@@ -1596,18 +1814,41 @@ function CampaignOverviewCard({
     deleteDialogOpen: boolean;
     onDeleteDialogOpenChange: (open: boolean) => void;
 }) {
+    const page = usePage<SharedData>();
+    const isOpen =
+        new URL(page.url, 'http://localhost').searchParams.get('overview') ===
+        'open';
+    const numberFormatter = new Intl.NumberFormat(
+        normalizeLocale(page.props.locale),
+    );
+
     return (
-        <Collapsible className="group/collapsible">
-            <Card className="gap-0">
+        <Collapsible
+            className="group/collapsible"
+            open={isOpen}
+            onOpenChange={(open) =>
+                updateDisclosureQuery(
+                    page.url,
+                    'overview',
+                    open ? 'open' : null,
+                )
+            }
+        >
+            <Card className="gap-0 bg-background-200">
                 <CardHeader>
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <CollapsibleTrigger asChild>
                             <button
                                 type="button"
-                                className="flex cursor-pointer items-center gap-2 text-left"
+                                className="flex min-w-0 cursor-pointer touch-manipulation items-center gap-2 rounded-md text-left hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                             >
-                                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                                <CardTitle>{campaign.title}</CardTitle>
+                                <ChevronRight
+                                    aria-hidden="true"
+                                    className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90"
+                                />
+                                <h1 className="min-w-0 scroll-mt-24 font-heading text-heading-16 text-balance break-words">
+                                    {campaign.title}
+                                </h1>
                             </button>
                         </CollapsibleTrigger>
 
@@ -1643,7 +1884,9 @@ function CampaignOverviewCard({
                             />
                             <CampaignOverviewField
                                 label="Threshold score"
-                                value={`${campaign.threshold_score}`}
+                                value={numberFormatter.format(
+                                    campaign.threshold_score,
+                                )}
                             />
 
                             <div className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:gap-6">
@@ -1658,6 +1901,7 @@ function CampaignOverviewCard({
                                                     <Badge
                                                         key={skill}
                                                         variant="outline"
+                                                        className="max-w-full break-words whitespace-normal"
                                                     >
                                                         {skill}
                                                     </Badge>
@@ -1702,7 +1946,7 @@ function CampaignOverviewField({
     return (
         <div className="flex flex-col gap-1 py-4 first:pt-0 last:pb-0 sm:flex-row sm:gap-6">
             <p className="text-sm font-medium sm:w-48 sm:shrink-0">{label}</p>
-            <p className="flex-1 text-sm whitespace-pre-line text-muted-foreground">
+            <p className="min-w-0 flex-1 text-sm break-words whitespace-pre-line text-muted-foreground">
                 {value}
             </p>
         </div>
@@ -1718,17 +1962,24 @@ function CandidateInvitationsDialog({
     invitations: CampaignInvitationRow[];
     latestInviteUrl: string | undefined;
 }) {
+    const { locale, timeZone } = usePage<SharedData>().props;
+    const dateTimeFormatter = new Intl.DateTimeFormat(normalizeLocale(locale), {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone,
+    });
+
     return (
         <Dialog>
             <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                    <Share2 data-icon="inline-start" />
-                    Share
+                <Button size="default" variant="outline">
+                    <Share2 aria-hidden="true" data-icon="inline-start" />
+                    Share…
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-3xl">
                 <DialogHeader>
-                    <DialogTitle>Candidate invitations</DialogTitle>
+                    <DialogTitle>Candidate Invitations</DialogTitle>
                     <DialogDescription>
                         Assign candidates to this campaign and share their
                         invite links before they can open the exam.
@@ -1739,54 +1990,63 @@ function CandidateInvitationsDialog({
                     action={admin.campaigns.invitations.store.url(campaign.id)}
                     method="post"
                     options={{ preserveScroll: true }}
+                    onError={focusFirstError}
                 >
-                    {({ errors, processing }) => (
+                    {({ errors, isDirty, processing }) => (
                         <FieldGroup>
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                                <Field
-                                    className="flex-1"
-                                    data-invalid={
-                                        Boolean(errors.email) || undefined
-                                    }
-                                >
-                                    <FieldLabel htmlFor="invitation-email">
-                                        Candidate email
-                                    </FieldLabel>
+                            <UnsavedChangesGuard
+                                active={isDirty && !processing}
+                            />
+                            <Field
+                                data-invalid={
+                                    Boolean(errors.email) || undefined
+                                }
+                            >
+                                <FieldLabel htmlFor="invitation-email">
+                                    Candidate email
+                                </FieldLabel>
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                                     <Input
+                                        className="flex-1"
                                         id="invitation-email"
                                         name="email"
                                         type="email"
-                                        placeholder="candidate@example.com"
+                                        inputMode="email"
+                                        autoComplete="email"
+                                        spellCheck={false}
+                                        placeholder="Example: candidate@example.com…"
                                         required
                                         aria-invalid={
                                             Boolean(errors.email) || undefined
                                         }
                                     />
-                                    <FieldError
-                                        errors={[
-                                            {
-                                                message: errors.email,
-                                            },
-                                        ]}
-                                    />
-                                </Field>
-                                <Button
-                                    disabled={processing}
-                                    type="submit"
-                                    className="sm:mt-6"
-                                >
-                                    {processing && <Spinner />}
-                                    <Mail data-icon="inline-start" />
-                                    Send invitation
-                                </Button>
-                            </div>
+                                    <Button disabled={processing} type="submit">
+                                        {processing && <Spinner />}
+                                        <Mail
+                                            aria-hidden="true"
+                                            data-icon="inline-start"
+                                        />
+                                        Send Invitation
+                                    </Button>
+                                </div>
+                                <FieldError
+                                    errors={[
+                                        {
+                                            message: errors.email,
+                                        },
+                                    ]}
+                                />
+                            </Field>
                             <input type="hidden" name="send_email" value="1" />
                         </FieldGroup>
                     )}
                 </Form>
 
                 {latestInviteUrl ? (
-                    <p className="rounded-md bg-background px-3 py-2 text-sm break-all">
+                    <p
+                        aria-live="polite"
+                        className="rounded-md bg-background px-3 py-2 text-sm break-all"
+                    >
                         Latest invite link: {latestInviteUrl}
                     </p>
                 ) : null}
@@ -1816,8 +2076,11 @@ function CandidateInvitationsDialog({
                                 </TableRow>
                             ) : (
                                 invitations.map((invitation) => (
-                                    <TableRow key={invitation.id}>
-                                        <TableCell>
+                                    <TableRow
+                                        key={invitation.id}
+                                        className="[contain-intrinsic-size:auto_44px] [content-visibility:auto]"
+                                    >
+                                        <TableCell className="max-w-64 break-all">
                                             {invitation.email}
                                         </TableCell>
                                         <TableCell>
@@ -1826,18 +2089,40 @@ function CandidateInvitationsDialog({
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            {invitation.sent_at
-                                                ? new Date(
-                                                      invitation.sent_at,
-                                                  ).toLocaleString()
-                                                : '—'}
+                                            {invitation.sent_at ? (
+                                                <time
+                                                    className="tabular-nums"
+                                                    dateTime={
+                                                        invitation.sent_at
+                                                    }
+                                                >
+                                                    {dateTimeFormatter.format(
+                                                        new Date(
+                                                            invitation.sent_at,
+                                                        ),
+                                                    )}
+                                                </time>
+                                            ) : (
+                                                '—'
+                                            )}
                                         </TableCell>
                                         <TableCell>
-                                            {invitation.accepted_at
-                                                ? new Date(
-                                                      invitation.accepted_at,
-                                                  ).toLocaleString()
-                                                : '—'}
+                                            {invitation.accepted_at ? (
+                                                <time
+                                                    className="tabular-nums"
+                                                    dateTime={
+                                                        invitation.accepted_at
+                                                    }
+                                                >
+                                                    {dateTimeFormatter.format(
+                                                        new Date(
+                                                            invitation.accepted_at,
+                                                        ),
+                                                    )}
+                                                </time>
+                                            ) : (
+                                                '—'
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex justify-end gap-2">
@@ -1860,7 +2145,7 @@ function CandidateInvitationsDialog({
                                                                 disabled={
                                                                     processing
                                                                 }
-                                                                size="sm"
+                                                                size="default"
                                                                 type="submit"
                                                                 variant="outline"
                                                             >
@@ -1873,35 +2158,79 @@ function CandidateInvitationsDialog({
                                                     </Form>
                                                 ) : null}
                                                 {invitation.can_revoke ? (
-                                                    <Form
-                                                        {...admin.campaigns.invitations.destroy.form(
-                                                            {
-                                                                campaign:
-                                                                    campaign.id,
-                                                                invitation:
-                                                                    invitation.id,
-                                                            },
-                                                        )}
-                                                        options={{
-                                                            preserveScroll: true,
-                                                        }}
-                                                    >
-                                                        {({ processing }) => (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger
+                                                            asChild
+                                                        >
                                                             <Button
-                                                                disabled={
-                                                                    processing
-                                                                }
-                                                                size="sm"
-                                                                type="submit"
+                                                                size="default"
+                                                                type="button"
                                                                 variant="destructive"
                                                             >
-                                                                {processing && (
-                                                                    <Spinner />
-                                                                )}
-                                                                Revoke
+                                                                Revoke…
                                                             </Button>
-                                                        )}
-                                                    </Form>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>
+                                                                    Revoke
+                                                                    Invitation?
+                                                                </AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Revoke the
+                                                                    invitation
+                                                                    for{' '}
+                                                                    <span className="break-all">
+                                                                        {
+                                                                            invitation.email
+                                                                        }
+                                                                    </span>
+                                                                    ? The
+                                                                    candidate
+                                                                    will no
+                                                                    longer be
+                                                                    able to use
+                                                                    this link.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <Form
+                                                                {...admin.campaigns.invitations.destroy.form(
+                                                                    {
+                                                                        campaign:
+                                                                            campaign.id,
+                                                                        invitation:
+                                                                            invitation.id,
+                                                                    },
+                                                                )}
+                                                                options={{
+                                                                    preserveScroll: true,
+                                                                }}
+                                                            >
+                                                                {({
+                                                                    processing,
+                                                                }) => (
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>
+                                                                            Cancel
+                                                                        </AlertDialogCancel>
+                                                                        <Button
+                                                                            disabled={
+                                                                                processing
+                                                                            }
+                                                                            type="submit"
+                                                                            variant="destructive"
+                                                                        >
+                                                                            {processing && (
+                                                                                <Spinner />
+                                                                            )}
+                                                                            Revoke
+                                                                            Invitation
+                                                                        </Button>
+                                                                    </AlertDialogFooter>
+                                                                )}
+                                                            </Form>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
                                                 ) : null}
                                             </div>
                                         </TableCell>
@@ -1928,9 +2257,13 @@ function CampaignStatusButton({ campaign }: { campaign: Campaign }) {
                 options={{ preserveScroll: true }}
             >
                 {({ processing }) => (
-                    <Button size="sm" variant="outline" disabled={processing}>
+                    <Button
+                        size="default"
+                        variant="outline"
+                        disabled={processing}
+                    >
                         {processing && <Spinner />}
-                        Move to draft
+                        Move to Draft
                     </Button>
                 )}
             </Form>
@@ -1946,7 +2279,7 @@ function CampaignStatusButton({ campaign }: { campaign: Campaign }) {
                 {({ processing, errors }) => (
                     <div className="flex flex-col gap-1">
                         <Button
-                            size="sm"
+                            size="default"
                             variant="outline"
                             disabled={processing || !campaign.can_archive}
                         >
@@ -1972,11 +2305,11 @@ function CampaignStatusButton({ campaign }: { campaign: Campaign }) {
             {({ errors, processing }) => (
                 <div className="flex flex-col gap-1">
                     <Button
-                        size="sm"
+                        size="default"
                         disabled={processing || !campaign.can_publish}
                     >
                         {processing && <Spinner />}
-                        <Rocket data-icon="inline-start" />
+                        <Rocket aria-hidden="true" data-icon="inline-start" />
                         Publish
                     </Button>
                     <InputError message={errors.campaign} />
@@ -1999,8 +2332,11 @@ function CampaignActionsDropdown({
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button size="icon-sm" variant="outline">
-                        <MoreHorizontal data-icon="inline-start" />
+                    <Button size="icon" variant="ghost">
+                        <MoreHorizontal
+                            aria-hidden="true"
+                            data-icon="inline-start"
+                        />
                         <span className="sr-only">Open campaign actions</span>
                     </Button>
                 </DropdownMenuTrigger>
@@ -2013,7 +2349,7 @@ function CampaignActionsDropdown({
                                     setEditOpen(true);
                                 }}
                             >
-                                Edit campaign
+                                Edit Campaign…
                             </DropdownMenuItem>
                         ) : null}
                         {campaign.can_clone ? (
@@ -2027,7 +2363,7 @@ function CampaignActionsDropdown({
                                     );
                                 }}
                             >
-                                Clone as new draft
+                                Clone as New Draft
                             </DropdownMenuItem>
                         ) : null}
                     </DropdownMenuGroup>
@@ -2041,7 +2377,7 @@ function CampaignActionsDropdown({
                                     onDelete();
                                 }}
                             >
-                                Delete campaign
+                                Delete Campaign…
                             </DropdownMenuItem>
                         </>
                     ) : null}
@@ -2052,7 +2388,7 @@ function CampaignActionsDropdown({
                 <Sheet open={editOpen} onOpenChange={setEditOpen}>
                     <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
                         <SheetHeader>
-                            <SheetTitle>Edit campaign</SheetTitle>
+                            <SheetTitle>Edit Campaign</SheetTitle>
                             <SheetDescription>
                                 Update role context, required skills, and
                                 scoring threshold.
@@ -2062,7 +2398,7 @@ function CampaignActionsDropdown({
                             action={CampaignController.update.form.patch(
                                 campaign.id,
                             )}
-                            submitLabel="Save changes"
+                            submitLabel="Save Changes"
                             campaign={campaign}
                             onSuccess={() => setEditOpen(false)}
                             onCancel={() => setEditOpen(false)}
@@ -2087,15 +2423,15 @@ function DeleteCampaignDialog({
     onOpenChange: (open: boolean) => void;
 }) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Delete campaign?</DialogTitle>
-                    <DialogDescription>
-                        This will permanently delete "{campaign.title}". This
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Campaign?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will permanently delete “{campaign.title}”. This
                         action cannot be undone.
-                    </DialogDescription>
-                </DialogHeader>
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
 
                 <Form
                     {...CampaignController.destroy.form.delete(campaign.id)}
@@ -2106,25 +2442,21 @@ function DeleteCampaignDialog({
                         <>
                             <InputError message={errors.campaign} />
 
-                            <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button type="button" variant="outline">
-                                        Cancel
-                                    </Button>
-                                </DialogClose>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <Button
                                     type="submit"
                                     variant="destructive"
                                     disabled={processing}
                                 >
-                                    Delete campaign
+                                    Delete Campaign
                                 </Button>
-                            </DialogFooter>
+                            </AlertDialogFooter>
                         </>
                     )}
                 </Form>
-            </DialogContent>
-        </Dialog>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 }
 
@@ -2133,109 +2465,31 @@ function QuestionActionsDropdown({
     question,
     sections,
     questionTypes,
-    gradingModeOptions,
 }: {
     campaignId: number;
     question: CampaignQuestion;
     sections: CampaignSection[];
     questionTypes: QuestionTypeOption[];
-    gradingModeOptions: GradingModeOption[];
 }) {
     const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const canRegenerateOptions =
-        question.status === 'draft' && question.type === 'multiple_choice';
-    const canConvertToMcq =
-        question.status === 'draft' &&
-        (question.type === 'short_text' || question.type === 'long_text');
-    const canApprove = question.status === 'draft';
 
     return (
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button
-                        size="icon-sm"
-                        variant="outline"
+                        size="icon"
+                        variant="ghost"
                         aria-label="Open question actions"
                     >
-                        <MoreHorizontal data-icon="inline-start" />
+                        <MoreHorizontal
+                            aria-hidden="true"
+                            data-icon="inline-start"
+                        />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-40">
-                    {canRegenerateOptions || canConvertToMcq || canApprove ? (
-                        <DropdownMenuGroup>
-                            {canRegenerateOptions ? (
-                                <DropdownMenuItem asChild>
-                                    <Form
-                                        {...CampaignQuestionController.regenerateMcqOptions.form(
-                                            [campaignId, question.id],
-                                        )}
-                                        options={{
-                                            preserveScroll: true,
-                                        }}
-                                    >
-                                        {({ processing }) => (
-                                            <button
-                                                type="submit"
-                                                disabled={processing}
-                                                className="w-full text-left"
-                                            >
-                                                Regenerate options
-                                            </button>
-                                        )}
-                                    </Form>
-                                </DropdownMenuItem>
-                            ) : null}
-                            {canConvertToMcq ? (
-                                <DropdownMenuItem asChild>
-                                    <Form
-                                        {...CampaignQuestionController.convertToMcq.form(
-                                            [campaignId, question.id],
-                                        )}
-                                        options={{
-                                            preserveScroll: true,
-                                        }}
-                                    >
-                                        {({ processing }) => (
-                                            <button
-                                                type="submit"
-                                                disabled={processing}
-                                                className="w-full text-left"
-                                            >
-                                                Convert to MCQ
-                                            </button>
-                                        )}
-                                    </Form>
-                                </DropdownMenuItem>
-                            ) : null}
-                            {canApprove ? (
-                                <DropdownMenuItem asChild>
-                                    <Form
-                                        {...CampaignQuestionController.approve.form(
-                                            [campaignId, question.id],
-                                        )}
-                                        options={{
-                                            preserveScroll: true,
-                                        }}
-                                    >
-                                        {({ processing }) => (
-                                            <button
-                                                type="submit"
-                                                disabled={processing}
-                                                className="w-full text-left"
-                                            >
-                                                Approve
-                                            </button>
-                                        )}
-                                    </Form>
-                                </DropdownMenuItem>
-                            ) : null}
-                        </DropdownMenuGroup>
-                    ) : null}
-                    {canRegenerateOptions || canConvertToMcq || canApprove ? (
-                        <DropdownMenuSeparator />
-                    ) : null}
                     <DropdownMenuGroup>
                         <DropdownMenuItem
                             onSelect={(event) => {
@@ -2243,7 +2497,7 @@ function QuestionActionsDropdown({
                                 setEditOpen(true);
                             }}
                         >
-                            Edit snapshot
+                            Edit Question…
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -2264,7 +2518,6 @@ function QuestionActionsDropdown({
                 question={question}
                 sections={sections}
                 questionTypes={questionTypes}
-                gradingModeOptions={gradingModeOptions}
                 open={editOpen}
                 onOpenChange={setEditOpen}
             />
@@ -2290,15 +2543,15 @@ function DeleteQuestionDialog({
     onOpenChange: (open: boolean) => void;
 }) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Delete question?</DialogTitle>
-                    <DialogDescription>
-                        This will permanently delete this question snapshot.
-                        This action cannot be undone.
-                    </DialogDescription>
-                </DialogHeader>
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Question?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will permanently delete this question. This action
+                        cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
 
                 <Form
                     {...CampaignQuestionController.destroy.form.delete([
@@ -2312,25 +2565,21 @@ function DeleteQuestionDialog({
                         <>
                             <InputError message={errors.question} />
 
-                            <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button type="button" variant="outline">
-                                        Cancel
-                                    </Button>
-                                </DialogClose>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <Button
                                     type="submit"
                                     variant="destructive"
                                     disabled={processing}
                                 >
-                                    Delete question
+                                    Delete Question
                                 </Button>
-                            </DialogFooter>
+                            </AlertDialogFooter>
                         </>
                     )}
                 </Form>
-            </DialogContent>
-        </Dialog>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 }
 
@@ -2339,7 +2588,6 @@ function EditCampaignQuestionSheet({
     question,
     sections,
     questionTypes,
-    gradingModeOptions,
     open,
     onOpenChange,
 }: {
@@ -2347,7 +2595,6 @@ function EditCampaignQuestionSheet({
     question: CampaignQuestion;
     sections: CampaignSection[];
     questionTypes: QuestionTypeOption[];
-    gradingModeOptions: GradingModeOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -2355,7 +2602,7 @@ function EditCampaignQuestionSheet({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
                 <SheetHeader>
-                    <SheetTitle>Edit question snapshot</SheetTitle>
+                    <SheetTitle>Edit Question</SheetTitle>
                     <SheetDescription>
                         Update this campaign question without changing other
                         questions.
@@ -2370,22 +2617,41 @@ function EditCampaignQuestionSheet({
                     options={{
                         preserveScroll: true,
                     }}
+                    onSuccess={() => onOpenChange(false)}
+                    onError={focusFirstError}
                     className="flex flex-1 flex-col overflow-hidden"
                 >
-                    {({ errors, processing }) => (
+                    {({ errors, isDirty, processing }) => (
                         <>
-                            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
-                                <div className="grid gap-3 md:grid-cols-3">
-                                    <div className="grid gap-2">
-                                        <Label>Section</Label>
-                                        <Select
-                                            name="campaign_section_id"
-                                            defaultValue={question.campaign_section_id.toString()}
+                            <UnsavedChangesGuard
+                                active={isDirty && !processing}
+                            />
+                            <FieldGroup className="flex-1 overflow-y-auto px-4">
+                                <Field
+                                    data-invalid={Boolean(
+                                        errors.campaign_section_id,
+                                    )}
+                                >
+                                    <FieldLabel
+                                        htmlFor={`edit-section-${question.id}`}
+                                    >
+                                        Section
+                                    </FieldLabel>
+                                    <Select
+                                        name="campaign_section_id"
+                                        defaultValue={question.campaign_section_id.toString()}
+                                    >
+                                        <SelectTrigger
+                                            id={`edit-section-${question.id}`}
+                                            className="w-full"
+                                            aria-invalid={Boolean(
+                                                errors.campaign_section_id,
+                                            )}
                                         >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
                                                 {sections.map((section) => (
                                                     <SelectItem
                                                         key={section.id}
@@ -2394,23 +2660,33 @@ function EditCampaignQuestionSheet({
                                                         {section.title}
                                                     </SelectItem>
                                                 ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError
-                                            message={errors.campaign_section_id}
-                                        />
-                                    </div>
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                    <FieldError>
+                                        {errors.campaign_section_id}
+                                    </FieldError>
+                                </Field>
 
-                                    <div className="grid gap-2">
-                                        <Label>Type</Label>
-                                        <Select
-                                            name="type"
-                                            defaultValue={question.type}
+                                <Field data-invalid={Boolean(errors.type)}>
+                                    <FieldLabel
+                                        htmlFor={`edit-type-${question.id}`}
+                                    >
+                                        Type
+                                    </FieldLabel>
+                                    <Select
+                                        name="type"
+                                        defaultValue={question.type}
+                                    >
+                                        <SelectTrigger
+                                            id={`edit-type-${question.id}`}
+                                            className="w-full"
+                                            aria-invalid={Boolean(errors.type)}
                                         >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
                                                 {questionTypes.map((type) => (
                                                     <SelectItem
                                                         key={type.value}
@@ -2419,161 +2695,35 @@ function EditCampaignQuestionSheet({
                                                         {type.label}
                                                     </SelectItem>
                                                 ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError message={errors.type} />
-                                    </div>
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                    <FieldError>{errors.type}</FieldError>
+                                </Field>
 
-                                    <div className="grid gap-2">
-                                        <Label>Grading mode</Label>
-                                        <Select
-                                            name="grading_mode"
-                                            defaultValue={question.grading_mode}
+                                <Field
+                                    data-invalid={Boolean(errors.difficulty)}
+                                >
+                                    <FieldLabel
+                                        htmlFor={`edit-difficulty-${question.id}`}
+                                    >
+                                        Difficulty
+                                    </FieldLabel>
+                                    <Select
+                                        name="difficulty"
+                                        defaultValue={question.difficulty}
+                                    >
+                                        <SelectTrigger
+                                            id={`edit-difficulty-${question.id}`}
+                                            className="w-full"
+                                            aria-invalid={Boolean(
+                                                errors.difficulty,
+                                            )}
                                         >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {gradingModeOptions.map(
-                                                    (mode) => (
-                                                        <SelectItem
-                                                            key={mode.value}
-                                                            value={mode.value}
-                                                        >
-                                                            {mode.label}
-                                                        </SelectItem>
-                                                    ),
-                                                )}
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError
-                                            message={errors.grading_mode}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label
-                                        htmlFor={`edit-prompt-${question.id}`}
-                                    >
-                                        Prompt
-                                    </Label>
-                                    <textarea
-                                        id={`edit-prompt-${question.id}`}
-                                        name="prompt"
-                                        rows={4}
-                                        defaultValue={question.prompt}
-                                        required
-                                        className={textareaClass}
-                                    />
-                                    <InputError message={errors.prompt} />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label
-                                        htmlFor={`edit-rubric-${question.id}`}
-                                    >
-                                        Rubric
-                                    </Label>
-                                    <textarea
-                                        id={`edit-rubric-${question.id}`}
-                                        name="expected_rubric"
-                                        rows={4}
-                                        defaultValue={
-                                            question.expected_rubric ?? ''
-                                        }
-                                        className={textareaClass}
-                                    />
-                                    <InputError
-                                        message={errors.expected_rubric}
-                                    />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label
-                                        htmlFor={`edit-options-${question.id}`}
-                                    >
-                                        Options
-                                    </Label>
-                                    <textarea
-                                        id={`edit-options-${question.id}`}
-                                        name="options_text"
-                                        rows={3}
-                                        defaultValue={question.options.join(
-                                            '\n',
-                                        )}
-                                        className={textareaClass}
-                                    />
-                                    <InputError message={errors.options_text} />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label
-                                        htmlFor={`edit-answer-${question.id}`}
-                                    >
-                                        Correct answer
-                                    </Label>
-                                    <textarea
-                                        id={`edit-answer-${question.id}`}
-                                        name="correct_answer_text"
-                                        rows={3}
-                                        defaultValue={question.correct_answer.join(
-                                            '\n',
-                                        )}
-                                        className={textareaClass}
-                                        placeholder="One accepted answer per line. For matching pairs use left = right."
-                                    />
-                                    <InputError
-                                        message={errors.correct_answer_text}
-                                    />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label htmlFor={`edit-tags-${question.id}`}>
-                                        Skill tags
-                                    </Label>
-                                    <textarea
-                                        id={`edit-tags-${question.id}`}
-                                        name="skill_tags_text"
-                                        rows={3}
-                                        defaultValue={question.skill_tags.join(
-                                            '\n',
-                                        )}
-                                        className={textareaClass}
-                                    />
-                                    <InputError
-                                        message={errors.skill_tags_text}
-                                    />
-                                </div>
-
-                                <div className="grid gap-3 md:grid-cols-3">
-                                    <div className="grid gap-2">
-                                        <Label
-                                            htmlFor={`edit-points-${question.id}`}
-                                        >
-                                            Points
-                                        </Label>
-                                        <Input
-                                            id={`edit-points-${question.id}`}
-                                            name="points"
-                                            type="number"
-                                            min={1}
-                                            defaultValue={question.points}
-                                            required
-                                        />
-                                        <InputError message={errors.points} />
-                                    </div>
-
-                                    <div className="grid gap-2">
-                                        <Label>Difficulty</Label>
-                                        <Select
-                                            name="difficulty"
-                                            defaultValue={question.difficulty}
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
                                                 <SelectItem value="easy">
                                                     Easy
                                                 </SelectItem>
@@ -2583,78 +2733,90 @@ function EditCampaignQuestionSheet({
                                                 <SelectItem value="hard">
                                                     Hard
                                                 </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError
-                                            message={errors.difficulty}
-                                        />
-                                    </div>
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                    <FieldError>{errors.difficulty}</FieldError>
+                                </Field>
 
-                                    <div className="grid gap-2">
-                                        <Label
-                                            htmlFor={`edit-sort-${question.id}`}
-                                        >
-                                            Order
-                                        </Label>
-                                        <Input
-                                            id={`edit-sort-${question.id}`}
-                                            name="sort_order"
-                                            type="number"
-                                            min={0}
-                                            defaultValue={question.sort_order}
-                                            required
-                                        />
-                                        <InputError
-                                            message={errors.sort_order}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
-                                    <input
-                                        type="hidden"
-                                        name="ai_generated"
-                                        value={
-                                            question.ai_generated ? '1' : '0'
-                                        }
-                                    />
-                                    <input
-                                        type="hidden"
-                                        name="is_required"
-                                        value="0"
-                                    />
-                                    <Checkbox
-                                        id={`edit-required-${question.id}`}
-                                        name="is_required"
-                                        value="1"
-                                        defaultChecked={question.is_required}
-                                    />
-                                    <Label
-                                        htmlFor={`edit-required-${question.id}`}
-                                        className="text-sm font-normal"
+                                <Field data-invalid={Boolean(errors.prompt)}>
+                                    <FieldLabel
+                                        htmlFor={`edit-prompt-${question.id}`}
                                     >
-                                        Required
-                                    </Label>
-                                </div>
-                            </div>
+                                        Question
+                                    </FieldLabel>
+                                    <Textarea
+                                        id={`edit-prompt-${question.id}`}
+                                        name="prompt"
+                                        autoComplete="off"
+                                        rows={4}
+                                        defaultValue={question.prompt}
+                                        required
+                                        className="min-h-28"
+                                        aria-invalid={Boolean(errors.prompt)}
+                                    />
+                                    <FieldError>{errors.prompt}</FieldError>
+                                </Field>
+
+                                <Field
+                                    data-invalid={Boolean(
+                                        errors.expected_rubric,
+                                    )}
+                                >
+                                    <FieldLabel
+                                        htmlFor={`edit-rubric-${question.id}`}
+                                    >
+                                        Expected answer / scoring guide
+                                    </FieldLabel>
+                                    <Textarea
+                                        id={`edit-rubric-${question.id}`}
+                                        name="expected_rubric"
+                                        autoComplete="off"
+                                        rows={4}
+                                        defaultValue={
+                                            question.expected_rubric ?? ''
+                                        }
+                                        required
+                                        className="min-h-28"
+                                        aria-invalid={Boolean(
+                                            errors.expected_rubric,
+                                        )}
+                                    />
+                                    <FieldError>
+                                        {errors.expected_rubric}
+                                    </FieldError>
+                                </Field>
+
+                                <PointsField
+                                    id={`edit-points-${question.id}`}
+                                    initialValue={question.points}
+                                    error={errors.points}
+                                />
+
+                                <input
+                                    type="hidden"
+                                    name="ai_generated"
+                                    value={question.ai_generated ? '1' : '0'}
+                                />
+                            </FieldGroup>
 
                             <SheetFooter className="flex-row items-center justify-between gap-3 border-t bg-background sm:flex-row">
                                 <SheetClose asChild>
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        size="sm"
+                                        size="default"
                                     >
                                         Cancel
                                     </Button>
                                 </SheetClose>
                                 <Button
                                     type="submit"
-                                    size="sm"
+                                    size="default"
                                     disabled={processing}
                                 >
                                     {processing && <Spinner />}
-                                    Save question
+                                    Save Question
                                 </Button>
                             </SheetFooter>
                         </>

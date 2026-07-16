@@ -2,6 +2,7 @@ import {
     Deferred,
     Form,
     Head,
+    Link,
     router,
     useForm,
     usePage,
@@ -16,7 +17,6 @@ import CampaignForm from '@/components/admin/campaign-form';
 import InputError from '@/components/input-error';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -62,10 +62,10 @@ type CampaignRow = {
     title: string;
     role_title: string;
     seniority: string | null;
+    job_description: string | null;
+    required_skills: string[];
     language: string | null;
     threshold_score: number;
-    status: string;
-    status_label: string;
     sections_count: number;
     questions_count: number;
     assessments_count: number;
@@ -149,6 +149,8 @@ export default function AdminCampaignsIndex({
         status: filters.status ?? 'all',
     });
     const [campaignPendingDeletion, setCampaignPendingDeletion] =
+        useState<CampaignRow | null>(null);
+    const [campaignPendingEdit, setCampaignPendingEdit] =
         useState<CampaignRow | null>(null);
     const { auth } = usePage<SharedData>().props;
 
@@ -267,57 +269,25 @@ export default function AdminCampaignsIndex({
                                     <Card
                                         key={campaign.id}
                                         size="sm"
-                                        role="link"
-                                        tabIndex={0}
-                                        className="cursor-pointer"
-                                        onClick={() =>
-                                            router.visit(
-                                                admin.campaigns.show.url(
-                                                    campaign.id,
-                                                ),
-                                            )
-                                        }
-                                        onKeyDown={(event) => {
-                                            if (
-                                                event.currentTarget !==
-                                                event.target
-                                            ) {
-                                                return;
-                                            }
-
-                                            if (
-                                                event.key === 'Enter' ||
-                                                event.key === ' '
-                                            ) {
-                                                event.preventDefault();
-                                                router.visit(
-                                                    admin.campaigns.show.url(
-                                                        campaign.id,
-                                                    ),
-                                                );
-                                            }
-                                        }}
+                                        className="relative"
                                     >
-                                        <CardHeader>
+                                        <Link
+                                            href={admin.campaigns.show(
+                                                campaign.id,
+                                            )}
+                                            prefetch
+                                            aria-label={`View ${campaign.title}`}
+                                            className="absolute inset-0 z-10 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                                        >
+                                            <span className="sr-only">
+                                                View {campaign.title}
+                                            </span>
+                                        </Link>
+                                        <CardHeader className="pointer-events-none relative z-20">
                                             <CardTitle>
                                                 {campaign.title}
                                             </CardTitle>
-                                            <CardAction
-                                                className="flex items-center gap-2"
-                                                onClick={(event) =>
-                                                    event.stopPropagation()
-                                                }
-                                            >
-                                                <Badge
-                                                    variant={
-                                                        campaign.status ===
-                                                        'active'
-                                                            ? 'default'
-                                                            : 'secondary'
-                                                    }
-                                                >
-                                                    {campaign.status_label}
-                                                </Badge>
+                                            <CardAction className="pointer-events-auto relative z-30 flex items-center gap-2">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger
                                                         asChild
@@ -351,10 +321,8 @@ export default function AdminCampaignsIndex({
                                                                         event,
                                                                     ) => {
                                                                         event.preventDefault();
-                                                                        router.visit(
-                                                                            admin.campaigns.edit.url(
-                                                                                campaign.id,
-                                                                            ),
+                                                                        setCampaignPendingEdit(
+                                                                            campaign,
                                                                         );
                                                                     }}
                                                                 >
@@ -401,7 +369,7 @@ export default function AdminCampaignsIndex({
                                                 </DropdownMenu>
                                             </CardAction>
                                         </CardHeader>
-                                        <CardContent className="flex flex-1 flex-col gap-4">
+                                        <CardContent className="pointer-events-none relative z-20 flex flex-1 flex-col gap-4">
                                             <div className="flex flex-col gap-1">
                                                 <p className="text-sm font-medium">
                                                     {campaign.role_title}
@@ -449,6 +417,15 @@ export default function AdminCampaignsIndex({
                     ) : null}
                 </Deferred>
 
+                <EditCampaignSheet
+                    campaign={campaignPendingEdit}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setCampaignPendingEdit(null);
+                        }
+                    }}
+                />
+
                 <DeleteCampaignDialog
                     campaign={campaignPendingDeletion}
                     onOpenChange={(open) => {
@@ -485,6 +462,42 @@ function CreateCampaignSheet({ children }: { children: ReactNode }) {
                     bodyClassName="flex-1 overflow-y-auto px-4"
                     footerClassName="mt-auto border-t bg-background p-4"
                 />
+            </SheetContent>
+        </Sheet>
+    );
+}
+
+function EditCampaignSheet({
+    campaign,
+    onOpenChange,
+}: {
+    campaign: CampaignRow | null;
+    onOpenChange: (open: boolean) => void;
+}) {
+    return (
+        <Sheet open={campaign !== null} onOpenChange={onOpenChange}>
+            <SheetContent className="bg-card text-card-foreground data-[side=right]:sm:max-w-2xl">
+                <SheetHeader>
+                    <SheetTitle>Edit campaign</SheetTitle>
+                    <SheetDescription>
+                        Update role context, required skills, and scoring
+                        threshold.
+                    </SheetDescription>
+                </SheetHeader>
+                {campaign !== null ? (
+                    <CampaignForm
+                        action={CampaignController.update.form.patch(
+                            campaign.id,
+                        )}
+                        submitLabel="Save changes"
+                        campaign={campaign}
+                        onSuccess={() => onOpenChange(false)}
+                        onCancel={() => onOpenChange(false)}
+                        className="flex-1 overflow-hidden"
+                        bodyClassName="flex-1 overflow-y-auto px-4"
+                        footerClassName="mt-auto border-t bg-background p-4"
+                    />
+                ) : null}
             </SheetContent>
         </Sheet>
     );
