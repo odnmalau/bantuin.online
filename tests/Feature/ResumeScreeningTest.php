@@ -7,6 +7,7 @@ use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\CandidateApplication;
 use App\Models\User;
 use App\QuestionStatus;
 use App\Services\Ai\QwenResumeScreener;
@@ -203,36 +204,22 @@ test('candidate resume upload must be a pdf', function () {
     $campaign = Campaign::factory()->active()->create();
     assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
-    $question = CampaignQuestion::factory()
+    CampaignQuestion::factory()
         ->for($campaign)
         ->for($section, 'section')
         ->create([
             'status' => QuestionStatus::Approved,
         ]);
 
-    $session = startCandidateExamSession($candidate, $campaign);
-
-    $this->actingAs($candidate)
-        ->patch(route('candidate.campaigns.exam-sessions.update', [$campaign, $session]), [
-            'answers' => [
-                $question->id => 'Answered.',
-            ],
-        ])
-        ->assertRedirect();
-
-    $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.exam-sessions.advance', [$campaign, $session->fresh()]))
-        ->assertRedirect();
-
     $this->actingAs($candidate)
         ->from(route('candidate.campaigns.exam', $campaign))
-        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]), [
+        ->post(route('candidate.campaigns.application.resume.store', $campaign), [
             'resume' => UploadedFile::fake()->createWithContent('resume.txt', 'plain text resume'),
         ])
         ->assertSessionHasErrors('resume')
         ->assertRedirect(route('candidate.campaigns.exam', $campaign));
 
-    expect(Assessment::query()->whereBelongsTo($candidate)->exists())->toBeFalse();
+    expect(CandidateApplication::query()->doesntExist())->toBeTrue();
     Bus::assertNothingDispatched();
 });
 

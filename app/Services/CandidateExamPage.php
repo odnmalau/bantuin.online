@@ -16,6 +16,7 @@ class CandidateExamPage
     public function __construct(
         private ExamSessionService $examSessions,
         private AssessmentSubmissionBuilder $submissionBuilder,
+        private CandidateApplicationService $applications,
     ) {}
 
     /**
@@ -103,10 +104,21 @@ class CandidateExamPage
         $session = $this->examSessions->findActiveSession($user, $campaign);
 
         if ($session === null) {
+            $application = $this->applications->forUserCampaign($user, $campaign);
+
+            if ($application === null) {
+                return [
+                    'state' => 'resume_required',
+                    'campaign' => $this->campaignSummary($campaign),
+                    'sections' => $sectionSummaries,
+                ];
+            }
+
             return [
                 'state' => 'ready_to_start',
                 'campaign' => $this->campaignSummary($campaign),
                 'sections' => $sectionSummaries,
+                'application' => $this->applications->payload($application),
                 'secure_exam' => $this->secureExamConfig(),
             ];
         }
@@ -216,7 +228,6 @@ class CandidateExamPage
                 'name' => $campaign->team->name,
             ],
             'seniority' => $campaign->seniority,
-            'threshold_score' => $campaign->threshold_score,
         ];
     }
 

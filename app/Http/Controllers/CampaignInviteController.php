@@ -35,6 +35,15 @@ class CampaignInviteController extends Controller
             ]));
         }
 
+        if (! $invitation->matchesEmail($user->email)) {
+            $invitations->restartAuthenticationForInvitation($request, $invitation);
+
+            return $this->redirectToLogin(__('This invitation was sent to :invited_email, but you are signed in as :authenticated_email. Sign in with the invited account to continue.', [
+                'invited_email' => $invitation->email,
+                'authenticated_email' => $user->email,
+            ]));
+        }
+
         try {
             $invitation = $invitations->acceptForUser($invitation, $user);
         } catch (ValidationException $exception) {

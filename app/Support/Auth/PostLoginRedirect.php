@@ -30,7 +30,7 @@ class PostLoginRedirect
             return $invitationRedirect;
         }
 
-        $fallback = route('dashboard', absolute: false);
+        $fallback = $this->fallbackUrl($user);
         $intended = $request->session()->get('url.intended');
 
         if ($intended !== null && $this->userCanAccessUrl($user, $intended)) {
@@ -40,6 +40,15 @@ class PostLoginRedirect
         $request->session()->forget('url.intended');
 
         return redirect($fallback);
+    }
+
+    private function fallbackUrl(User $user): string
+    {
+        if ($user->current_team_id === null && $this->campaignInvitations->userHasCandidateWork($user)) {
+            return route('candidate.exam', absolute: false);
+        }
+
+        return route('dashboard', absolute: false);
     }
 
     private function userCanAccessUrl(User $user, string $url): bool

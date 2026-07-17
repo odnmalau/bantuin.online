@@ -15,6 +15,7 @@ use App\TeamStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
@@ -276,6 +277,18 @@ class CampaignInvitationService
         $request->session()->forget(self::SESSION_PENDING_ID);
     }
 
+    public function restartAuthenticationForInvitation(
+        Request $request,
+        CampaignInvitation $invitation,
+    ): void {
+        Auth::guard('web')->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        $this->rememberPendingInvitation($request, $invitation);
+    }
+
     public function pendingInvitation(Request $request): ?CampaignInvitation
     {
         $invitationId = $request->session()->get(self::SESSION_PENDING_ID);
@@ -355,6 +368,17 @@ class CampaignInvitationService
             return null;
         }
 
+        if (! $invitation->matchesEmail($user->email)) {
+            $this->restartAuthenticationForInvitation($request, $invitation);
+
+            return redirect()
+                ->route('login')
+                ->with('status', __('This invitation was sent to :invited_email, but you signed in as :authenticated_email. Sign in with the invited account to continue.', [
+                    'invited_email' => $invitation->email,
+                    'authenticated_email' => $user->email,
+                ]));
+        }
+
         $this->forgetPendingInvitation($request);
 
         try {
@@ -385,6 +409,13 @@ class CampaignInvitationService
         return CampaignInvitation::query()
             ->acceptedForUser($user)
             ->where('campaign_id', $campaign->id)
+            ->exists();
+    }
+
+    public function userHasCandidateWork(User $user): bool
+    {
+        return CampaignInvitation::query()
+            ->acceptedForUser($user)
             ->exists();
     }
 

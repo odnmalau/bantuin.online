@@ -61,7 +61,6 @@ class AssessmentSubmissionBuilder
             'type' => $question->type->value,
             'type_label' => $question->type->label(),
             'max_characters' => $question->type->maxCharacters(),
-            'points' => $question->points,
             'section_title' => $question->section?->title,
             'sort_order' => $question->sort_order,
         ];

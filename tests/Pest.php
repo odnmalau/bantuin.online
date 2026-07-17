@@ -53,6 +53,7 @@ expect()->extend('toBeOne', function () {
 use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignInvitation;
+use App\Models\CandidateApplication;
 use App\Models\ExamSession;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -145,6 +146,20 @@ function assignCandidateToCampaignExam(User $candidate, Campaign $campaign, ?Use
 
 function startCandidateExamSession(User $candidate, Campaign $campaign): ExamSession
 {
+    $invitation = CampaignInvitation::query()
+        ->where('campaign_id', $campaign->id)
+        ->where('user_id', $candidate->id)
+        ->firstOrFail();
+
+    CandidateApplication::query()->firstOrCreate(
+        ['campaign_invitation_id' => $invitation->id],
+        [
+            'resume_path' => 'resumes/test-resume.pdf',
+            'resume_original_name' => 'resume.pdf',
+            'resume_uploaded_at' => now(),
+        ],
+    );
+
     test()
         ->actingAs($candidate)
         ->post(route('candidate.campaigns.exam-sessions.store', $campaign))
@@ -166,6 +181,13 @@ function submitCandidateAssessmentViaExamSession(
     ?UploadedFile $resume = null,
 ): Assessment {
     $resume ??= resumePdfUpload();
+
+    test()->actingAs($candidate)
+        ->post(route('candidate.campaigns.application.resume.store', $campaign), [
+            'resume' => $resume,
+        ])
+        ->assertRedirect(route('candidate.campaigns.exam', $campaign));
+
     $session = startCandidateExamSession($candidate, $campaign);
 
     test()->actingAs($candidate)
@@ -179,9 +201,7 @@ function submitCandidateAssessmentViaExamSession(
         ->assertRedirect();
 
     test()->actingAs($candidate)
-        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]), [
-            'resume' => $resume,
-        ])
+        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]))
         ->assertRedirect();
 
     return Assessment::query()

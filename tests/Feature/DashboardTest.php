@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Campaign;
+use App\Models\CampaignInvitation;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -27,4 +29,18 @@ test('authenticated users can visit the dashboard', function () {
                 'avatar' => $user->avatar,
             ]),
         );
+});
+
+test('candidate-only users are redirected from the dashboard to their assessments', function () {
+    $candidate = User::factory()->create();
+    $campaign = Campaign::factory()->active()->create();
+
+    CampaignInvitation::factory()
+        ->for($campaign)
+        ->accepted($candidate)
+        ->create();
+
+    $this->actingAs($candidate)
+        ->get(route('dashboard'))
+        ->assertRedirect(route('candidate.exam'));
 });

@@ -17,14 +17,6 @@ class FinalizeExamSessionRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
-            'resume' => [
-                'required',
-                'file',
-                'mimes:pdf',
-                'mimetypes:application/pdf,application/x-pdf',
-                'max:'.config('assessment.resume.max_kilobytes', 5120),
-            ],
-        ];
+        return [];
     }
 }

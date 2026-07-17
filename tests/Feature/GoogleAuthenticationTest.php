@@ -52,6 +52,30 @@ test('google callback logs in a new identity', function () {
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
+test('google callback sends returning candidate-only users to their assessments', function () {
+    fakeGoogleAuthConfig();
+
+    $candidate = User::factory()->create([
+        'email' => 'returning-candidate@example.com',
+        'google_id' => null,
+    ]);
+    $campaign = Campaign::factory()->active()->create();
+
+    CampaignInvitation::factory()
+        ->for($campaign)
+        ->accepted($candidate)
+        ->create();
+
+    fakeGoogleUserAuthentication(
+        id: 'google-returning-candidate',
+        email: 'returning-candidate@example.com',
+        name: 'Returning Candidate',
+    );
+
+    $this->get(route('auth.google.callback'))
+        ->assertRedirect(route('candidate.exam', absolute: false));
+});
+
 test('google callback links an existing team owner without changing membership', function () {
     fakeGoogleAuthConfig();
 

@@ -4,6 +4,7 @@ use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\CandidateApplication;
 use App\Models\User;
 use App\QuestionStatus;
 use App\Services\CandidateExamPage;
@@ -49,7 +50,8 @@ test('candidate exam page returns campaign picker state with progress badges', f
             ->create(['status' => QuestionStatus::Approved]);
     }
 
-    assignCandidateToCampaignExam($candidate, $inProgress);
+    $inProgressInvitation = assignCandidateToCampaignExam($candidate, $inProgress);
+    CandidateApplication::factory()->for($inProgressInvitation, 'invitation')->create();
     app(ExamSessionService::class)->startSession($candidate, $inProgress);
     Assessment::factory()->for($candidate)->for($submitted)->create();
     $notStartedTeamName = $notStarted->team->name;
@@ -96,6 +98,8 @@ test('candidate exam page returns ready to start state', function () {
         ->create([
             'status' => QuestionStatus::Approved,
         ]);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
 
     $page = app(CandidateExamPage::class)->for($candidate, $campaign);
 
@@ -103,6 +107,7 @@ test('candidate exam page returns ready to start state', function () {
         ->and($page['campaign']['id'])->toBe($campaign->id)
         ->and($page['campaign']['title'])->toBe('Backend Engineer Campaign')
         ->and($page['campaign']['role_title'])->toBe('Backend Engineer')
+        ->and(array_key_exists('threshold_score', $page['campaign']))->toBeFalse()
         ->and($page['sections'])->toHaveCount(1)
         ->and($page['sections'][0]['id'])->toBe($section->id)
         ->and($page['sections'][0]['title'])->toBe('Knowledge Check')
@@ -129,7 +134,8 @@ test('candidate exam page returns active section state', function () {
             'prompt' => 'Explain dependency injection.',
             'status' => QuestionStatus::Approved,
         ]);
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $session = app(ExamSessionService::class)->startSession($candidate, $campaign);
 
     $page = app(CandidateExamPage::class)->for($candidate, $campaign);
@@ -142,6 +148,7 @@ test('candidate exam page returns active section state', function () {
         ->and($page['questions'])->toHaveCount(1)
         ->and($page['questions'][0]['id'])->toBe($question->id)
         ->and($page['questions'][0]['content'])->toBe('Explain dependency injection.')
+        ->and(array_key_exists('points', $page['questions'][0]))->toBeFalse()
         ->and($page['examSession']['id'])->toBe($session->id)
         ->and($page['examSession']['current_section_id'])->toBe($section->id)
         ->and($page['examSession']['ready_to_finalize'])->toBeFalse()
@@ -162,7 +169,8 @@ test('candidate exam page returns ready to finalize state', function () {
         ->create([
             'status' => QuestionStatus::Approved,
         ]);
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $sessions = app(ExamSessionService::class);
     $session = $sessions->startSession($candidate, $campaign);
 

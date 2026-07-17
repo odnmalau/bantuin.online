@@ -8,6 +8,7 @@ use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\CandidateApplication;
 use App\Models\User;
 use App\QuestionStatus;
 use App\QuestionType;
@@ -25,7 +26,8 @@ test('candidate can view active campaign questions when assigned', function () {
         'title' => 'Backend Engineer Campaign',
         'role_title' => 'Backend Engineer',
     ]);
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $section = CampaignSection::factory()->for($campaign)->create([
         'title' => 'Knowledge Check',
         'description' => 'Answer all questions in order before submitting.',
@@ -100,6 +102,8 @@ test('candidate exam exposes an open ended question without its rubric', functio
             ->where('questions.0.id', $question->id)
             ->where('questions.0.type', QuestionType::LongText->value)
             ->where('questions.0.max_characters', QuestionType::LongText->maxCharacters())
+            ->missing('campaign.threshold_score')
+            ->missing('questions.0.points')
             ->missing('questions.0.expected_rubric'),
         );
 });
@@ -211,7 +215,8 @@ test('candidate sees submitted state only for the assigned campaign', function (
         'status' => CampaignStatus::Archived,
     ]);
     $activeCampaign = Campaign::factory()->active()->create();
-    assignCandidateToCampaignExam($candidate, $activeCampaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $activeCampaign);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $section = CampaignSection::factory()->for($activeCampaign)->create();
     CampaignQuestion::factory()->for($activeCampaign)->for($section, 'section')->create();
     Assessment::factory()
@@ -270,6 +275,12 @@ test('candidate can submit an assessment for an active campaign', function () {
             'status' => QuestionStatus::Draft,
         ]);
 
+    $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.application.resume.store', $campaign), [
+            'resume' => resumePdfUpload(),
+        ])
+        ->assertSessionHasNoErrors();
+
     $session = startCandidateExamSession($candidate, $campaign);
 
     $this->actingAs($candidate)
@@ -286,9 +297,7 @@ test('candidate can submit an assessment for an active campaign', function () {
         ->assertRedirect();
 
     $response = $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]), [
-            'resume' => resumePdfUpload(),
-        ]);
+        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]));
 
     $assessment = Assessment::query()->whereBelongsTo($candidate)->sole();
 
@@ -414,6 +423,12 @@ test('candidate can submit a different active campaign when assigned to both', f
         ->for($previousCampaign)
         ->create();
 
+    $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.application.resume.store', $activeCampaign), [
+            'resume' => resumePdfUpload(),
+        ])
+        ->assertSessionHasNoErrors();
+
     $session = startCandidateExamSession($candidate, $activeCampaign);
 
     $this->actingAs($candidate)
@@ -429,9 +444,7 @@ test('candidate can submit a different active campaign when assigned to both', f
         ->assertRedirect();
 
     $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.exam-sessions.finalize', [$activeCampaign, $session->fresh()]), [
-            'resume' => resumePdfUpload(),
-        ])
+        ->post(route('candidate.campaigns.exam-sessions.finalize', [$activeCampaign, $session->fresh()]))
         ->assertSessionHasNoErrors();
 
     expect(Assessment::query()->whereBelongsTo($candidate)->count())->toBe(2);
@@ -467,9 +480,14 @@ test('candidate can view their own assessment', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
     $assessment = Assessment::factory()->for($candidate)->for($campaign)->create([
+        'resume_score' => 82,
+        'assessment_score' => 91,
+        'ai_justification' => 'Internal evaluation details.',
         'answers_payload' => [
             [
                 'question_id' => 7,
+                'section_id' => 3,
+                'section_title' => 'Database Fundamentals',
                 'question' => 'Explain why PostgreSQL supports relational constraints.',
                 'rubric' => 'Should not be exposed to candidates.',
                 'answer' => 'PostgreSQL provides relational integrity.',
@@ -488,8 +506,13 @@ test('candidate can view their own assessment', function () {
             ->where('assessment.campaign.team.name', $campaign->team->name)
             ->where('assessment.status', AssessmentStatus::Submitted->value)
             ->where('assessment.answers_payload.0.question_id', 7)
+            ->where('assessment.answers_payload.0.section_id', 3)
+            ->where('assessment.answers_payload.0.section_title', 'Database Fundamentals')
             ->where('assessment.answers_payload.0.question', 'Explain why PostgreSQL supports relational constraints.')
             ->where('assessment.answers_payload.0.answer', 'PostgreSQL provides relational integrity.')
+            ->missing('assessment.resume_score')
+            ->missing('assessment.assessment_score')
+            ->missing('assessment.ai_justification')
             ->missing('assessment.answers_payload.0.rubric'),
         );
 });

@@ -79,7 +79,6 @@ class ExamSessionController extends Controller
         $assessment = $this->sessions->finalizeSession(
             $examSession,
             $campaign,
-            $request->file('resume'),
         );
 
         return to_route('candidate.assessments.show', $assessment);

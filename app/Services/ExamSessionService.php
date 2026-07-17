@@ -14,7 +14,6 @@ use App\Models\Team;
 use App\Models\User;
 use App\QuestionStatus;
 use App\TeamStatus;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +23,7 @@ class ExamSessionService
 {
     public function __construct(
         private ExamSessionFinalizer $finalizer,
+        private CandidateApplicationService $applications,
     ) {}
 
     public function findActiveSession(User $user, Campaign $campaign): ?ExamSession
@@ -47,10 +47,13 @@ class ExamSessionService
                 ]);
             }
 
-            if (! $lockedCampaign->invitations()
+            $invitation = $lockedCampaign->invitations()
                 ->where('user_id', $user->id)
                 ->where('status', CampaignInvitationStatus::Accepted)
-                ->exists()) {
+                ->lockForUpdate()
+                ->first();
+
+            if ($invitation === null) {
                 throw ValidationException::withMessages([
                     'session' => __('You do not have an accepted invitation for this Campaign.'),
                 ]);
@@ -67,6 +70,8 @@ class ExamSessionService
             if ($existing !== null) {
                 return $existing;
             }
+
+            $this->applications->lockForExamStart($invitation);
 
             $sections = $this->orderedExamSections($lockedCampaign);
 
@@ -247,7 +252,6 @@ class ExamSessionService
     public function finalizeSession(
         ExamSession $session,
         Campaign $campaign,
-        ?UploadedFile $resume = null,
         ?string $submissionReason = null,
         ExamSessionStatus $status = ExamSessionStatus::Finalized,
         bool $allowIncompleteAnswers = false,
@@ -255,7 +259,6 @@ class ExamSessionService
         return $this->finalizer->finalize(
             session: $session,
             campaign: $campaign,
-            resume: $resume,
             submissionReason: $submissionReason,
             status: $status,
             allowIncompleteAnswers: $allowIncompleteAnswers,

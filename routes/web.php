@@ -16,6 +16,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\CampaignInviteController;
 use App\Http\Controllers\Candidate\AssessmentController;
+use App\Http\Controllers\Candidate\CandidateApplicationController;
 use App\Http\Controllers\Candidate\ExamSessionController;
 use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
@@ -126,6 +127,7 @@ Route::middleware('auth')
     ->group(function () {
         Route::get('exam', [AssessmentController::class, 'redirectExam'])->name('exam');
         Route::get('campaigns/{campaign}/exam', [AssessmentController::class, 'campaignExam'])->name('campaigns.exam');
+        Route::post('campaigns/{campaign}/application/resume', [CandidateApplicationController::class, 'store'])->name('campaigns.application.resume.store');
         Route::post('campaigns/{campaign}/exam-sessions', [ExamSessionController::class, 'store'])->name('campaigns.exam-sessions.store');
         Route::patch('campaigns/{campaign}/exam-sessions/{examSession}', [ExamSessionController::class, 'update'])->name('campaigns.exam-sessions.update');
         Route::post('campaigns/{campaign}/exam-sessions/{examSession}/advance', [ExamSessionController::class, 'advance'])->name('campaigns.exam-sessions.advance');

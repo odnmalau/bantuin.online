@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 #[Fillable([
@@ -66,6 +67,12 @@ class CampaignInvitation extends Model
     public function inviter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'invited_by')->withTrashed();
+    }
+
+    /** @return HasOne<CandidateApplication, $this> */
+    public function application(): HasOne
+    {
+        return $this->hasOne(CandidateApplication::class);
     }
 
     public function isRedeemable(): bool

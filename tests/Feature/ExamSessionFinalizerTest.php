@@ -8,8 +8,10 @@ use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\CandidateApplication;
 use App\Models\User;
 use App\QuestionStatus;
+use App\Services\CandidateApplicationService;
 use App\Services\ExamSessionFinalizer;
 use App\Services\ExamSessionService;
 use Illuminate\Support\Facades\Bus;
@@ -22,7 +24,7 @@ test('exam session finalizer creates the assessment and queues processing', func
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
         'title' => 'Knowledge Check',
     ]);
@@ -33,6 +35,11 @@ test('exam session finalizer creates the assessment and queues processing', func
             'status' => QuestionStatus::Approved,
             'prompt' => 'Explain dependency injection.',
         ]);
+    app(CandidateApplicationService::class)->storeResume(
+        $candidate,
+        $campaign,
+        resumePdfUpload(),
+    );
     $sessions = app(ExamSessionService::class);
     $session = $sessions->startSession($candidate, $campaign);
 
@@ -44,7 +51,6 @@ test('exam session finalizer creates the assessment and queues processing', func
     $assessment = app(ExamSessionFinalizer::class)->finalize(
         session: $session->fresh(),
         campaign: $campaign,
-        resume: resumePdfUpload(),
     );
 
     expect($assessment)
@@ -95,7 +101,7 @@ test('exam session finalizer can force submit incomplete answers', function () {
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
     $answeredQuestion = CampaignQuestion::factory()
         ->for($campaign)
@@ -111,7 +117,9 @@ test('exam session finalizer can force submit incomplete answers', function () {
             'status' => QuestionStatus::Approved,
             'prompt' => 'Unanswered question',
         ]);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $session = app(ExamSessionService::class)->startSession($candidate, $campaign);
+    $invitation->application()->delete();
     $session->update([
         'answer_drafts' => [
             (string) $answeredQuestion->id => 'Only one answer.',
@@ -161,7 +169,7 @@ test('exam session finalizer auto-submits expired incomplete sessions without a 
 
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create([
         'duration_minutes' => 5,
     ]);
@@ -179,7 +187,9 @@ test('exam session finalizer auto-submits expired incomplete sessions without a 
             'status' => QuestionStatus::Approved,
             'prompt' => 'Unanswered question',
         ]);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $session = app(ExamSessionService::class)->startSession($candidate, $campaign);
+    $invitation->application()->delete();
     $session->update([
         'current_section_expires_at' => now()->subMinute(),
         'answer_drafts' => [
@@ -221,7 +231,7 @@ test('exam session finalizer auto-submits expired incomplete sessions without a 
 test('exam session finalizer still requires a resume for manual submissions', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
     $section = CampaignSection::factory()->for($campaign)->create();
     $question = CampaignQuestion::factory()
         ->for($campaign)
@@ -229,8 +239,10 @@ test('exam session finalizer still requires a resume for manual submissions', fu
         ->create([
             'status' => QuestionStatus::Approved,
         ]);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $sessions = app(ExamSessionService::class);
     $session = $sessions->startSession($candidate, $campaign);
+    $invitation->application()->delete();
     $session = $sessions->saveCurrentSectionAnswers($session, $campaign, [
         $question->id => 'Complete answer.',
     ]);

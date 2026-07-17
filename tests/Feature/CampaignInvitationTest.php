@@ -434,9 +434,29 @@ test('invite redemption fails when google email does not match invitation', func
 
     $this->get(route('auth.google.callback'))
         ->assertRedirect(route('login'))
-        ->assertSessionHas('status');
+        ->assertSessionHas('status')
+        ->assertSessionHas(CampaignInvitationService::SESSION_PENDING_ID, $invitation->id);
 
-    expect(CampaignInvitation::query()->sole()->status)->toBe(CampaignInvitationStatus::Pending);
+    $this->assertGuest();
+
+    expect($invitation->fresh()->status)->toBe(CampaignInvitationStatus::Pending);
+
+    $this->get(route('login'))->assertOk();
+
+    fakeGoogleUserAuthentication(
+        id: 'google-invited-user',
+        email: 'invited@example.com',
+        name: 'Invited User',
+    );
+
+    $this->get(route('auth.google.callback'))
+        ->assertRedirect(route('candidate.campaigns.exam', $campaign));
+
+    $this->assertAuthenticated();
+
+    expect(CampaignInvitation::query()->sole())
+        ->status->toBe(CampaignInvitationStatus::Accepted)
+        ->user_id->toBe(User::query()->where('email', 'invited@example.com')->sole()->id);
 });
 
 test('authenticated candidate can redeem invite link directly', function () {

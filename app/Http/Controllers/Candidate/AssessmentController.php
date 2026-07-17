@@ -74,9 +74,6 @@ class AssessmentController extends Controller
                     ->map(fn (mixed $answer): array => $this->answerSnapshotForCandidate($answer))
                     ->all(),
                 'resume_original_name' => $assessment->resume_original_name,
-                'resume_score' => $assessment->resume_score,
-                'assessment_score' => $assessment->assessment_score,
-                'ai_justification' => $assessment->ai_justification,
                 'status' => $assessment->status->value,
                 'created_at' => $assessment->created_at,
                 'evaluated_at' => $assessment->evaluated_at,
@@ -110,12 +107,14 @@ class AssessmentController extends Controller
     }
 
     /**
-     * @return array{question_id: int|null, question: string, answer: string}
+     * @return array{question_id: int|null, section_id: int|null, section_title: string|null, question: string, answer: string}
      */
     private function answerSnapshotForCandidate(mixed $answer): array
     {
         return [
             'question_id' => data_get($answer, 'question_id'),
+            'section_id' => data_get($answer, 'section_id'),
+            'section_title' => data_get($answer, 'section_title'),
             'question' => (string) data_get($answer, 'question', ''),
             'answer' => (string) data_get($answer, 'answer', ''),
         ];

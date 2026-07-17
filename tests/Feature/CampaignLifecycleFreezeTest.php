@@ -8,6 +8,7 @@ use App\Models\Campaign;
 use App\Models\CampaignInvitation;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\CandidateApplication;
 use App\Models\ExamSession;
 use App\Models\User;
 use App\QuestionStatus;
@@ -77,7 +78,8 @@ test('definition mutation atomically rechecks activity created from a stale camp
 test('archived campaign is revalidated when a stale request tries to start an exam', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $section = CampaignSection::factory()->for($campaign)->create();
     CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
         'status' => QuestionStatus::Approved,
@@ -94,7 +96,8 @@ test('archived campaign is revalidated when a stale request tries to start an ex
 test('archive rechecks sessions created after a stale archive view', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $section = CampaignSection::factory()->for($campaign)->create();
     CampaignQuestion::factory()->for($campaign)->for($section, 'section')->create([
         'status' => QuestionStatus::Approved,

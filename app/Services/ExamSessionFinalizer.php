@@ -17,7 +17,6 @@ use App\Models\Team;
 use App\Models\User;
 use App\QuestionStatus;
 use App\TeamStatus;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -28,17 +27,17 @@ class ExamSessionFinalizer
     public function __construct(
         private AssessmentSubmissionBuilder $submissionBuilder,
         private AssessmentEventRecorder $events,
+        private CandidateApplicationService $applications,
     ) {}
 
     public function finalize(
         ExamSession $session,
         Campaign $campaign,
-        ?UploadedFile $resume = null,
         ?string $submissionReason = null,
         ExamSessionStatus $status = ExamSessionStatus::Finalized,
         bool $allowIncompleteAnswers = false,
     ): Assessment {
-        [$assessment, $shouldQueueProcessing] = DB::transaction(function () use ($session, $campaign, $resume, $submissionReason, $status, $allowIncompleteAnswers): array {
+        [$assessment, $shouldQueueProcessing] = DB::transaction(function () use ($session, $campaign, $submissionReason, $status, $allowIncompleteAnswers): array {
             $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
             Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
             $lockedSession = ExamSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
@@ -59,7 +58,6 @@ class ExamSessionFinalizer
             $assessment = $this->finalizeLocked(
                 $lockedSession,
                 $lockedCampaign,
-                $resume,
                 $submissionReason,
                 $status,
                 $allowIncompleteAnswers,
@@ -78,7 +76,6 @@ class ExamSessionFinalizer
     private function finalizeLocked(
         ExamSession $session,
         Campaign $campaign,
-        ?UploadedFile $resume,
         ?string $submissionReason,
         ExamSessionStatus $status,
         bool $allowIncompleteAnswers,
@@ -109,14 +106,15 @@ class ExamSessionFinalizer
             $session->refresh();
         }
 
-        $this->storeResume($session, $resume);
-        $session->refresh();
+        $application = $this->applications->lockForFinalization($session->user_id, $campaign);
+        $resumePath = $application?->resume_path ?? $session->resume_path;
+        $resumeOriginalName = $application?->resume_original_name ?? $session->resume_original_name;
 
         $allowsResumeLess = $this->allowsResumeLessAutoSubmit($submissionReason, $allowIncompleteAnswers);
 
-        if ($session->resume_path === null && ! $allowsResumeLess) {
+        if ($resumePath === null && ! $allowsResumeLess) {
             throw ValidationException::withMessages([
-                'resume' => __('Upload your resume PDF before submitting.'),
+                'resume' => __('Upload your resume PDF before starting the exam.'),
             ]);
         }
 
@@ -129,8 +127,8 @@ class ExamSessionFinalizer
         $assessment = Assessment::query()->create([
             'user_id' => $session->user_id,
             'campaign_id' => $campaign->id,
-            'resume_path' => $session->resume_path,
-            'resume_original_name' => $session->resume_original_name,
+            'resume_path' => $resumePath,
+            'resume_original_name' => $resumeOriginalName,
             'answers_payload' => $this->submissionBuilder->buildAnswersPayload(
                 $questions,
                 $drafts,
@@ -199,26 +197,6 @@ class ExamSessionFinalizer
         }
 
         return $drafts;
-    }
-
-    private function storeResume(ExamSession $session, ?UploadedFile $resume): void
-    {
-        if ($resume === null) {
-            return;
-        }
-
-        $resumePath = $resume->store('resumes', 'r2-private');
-
-        if (! is_string($resumePath)) {
-            throw ValidationException::withMessages([
-                'resume' => __('The resume could not be stored. Please try again.'),
-            ]);
-        }
-
-        $session->update([
-            'resume_path' => $resumePath,
-            'resume_original_name' => $resume->getClientOriginalName(),
-        ]);
     }
 
     /**
