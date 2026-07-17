@@ -1,0 +1,144 @@
+name: bantuin-online
+
+x-app-environment: &app-environment
+    APP_ENV: production
+    APP_DEBUG: 'false'
+    APP_URL: https://app.bantuin.online
+    APP_KEY: ${APP_KEY:?Set APP_KEY in .env}
+    DB_CONNECTION: pgsql
+    DB_HOST: postgres
+    DB_PORT: '5432'
+    DB_DATABASE: ${DB_DATABASE:-bantuin_online}
+    DB_USERNAME: ${DB_USERNAME:-bantuin}
+    DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    LOG_CHANNEL: stderr
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    SESSION_SECURE_COOKIE: 'true'
+    AUTORUN_ENABLED: 'true'
+    AUTORUN_LARAVEL_OPTIMIZE: 'true'
+    AUTORUN_LARAVEL_MIGRATION: 'false'
+    PHP_DISPLAY_ERRORS: 'Off'
+    PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+    PHP_MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-240}
+    PHP_UPLOAD_MAX_FILE_SIZE: ${PHP_UPLOAD_MAX_FILE_SIZE:-8M}
+    PHP_POST_MAX_SIZE: ${PHP_POST_MAX_SIZE:-8M}
+    PHP_OPCACHE_ENABLE: '1'
+    PHP_OPCACHE_VALIDATE_TIMESTAMPS: '0'
+
+x-app-service: &app-service
+    image: ghcr.io/odnmalau/bantuin.online:${IMAGE_TAG:-master}
+    env_file:
+        - ${APP_ENV_FILE:-.env}
+    environment:
+        <<: *app-environment
+    depends_on:
+        postgres:
+            condition: service_healthy
+    networks:
+        - application
+
+services:
+    app:
+        <<: *app-service
+        restart: unless-stopped
+        stop_signal: SIGTERM
+        stop_grace_period: 30s
+        ports:
+            - '80:8080'
+            - '443:8443/tcp'
+            - '443:8443/udp'
+        environment:
+            <<: *app-environment
+            SERVER_NAME: app.bantuin.online
+            CADDY_AUTO_HTTPS: 'on'
+            CADDY_ADMIN: 'off'
+            SSL_MODE: full
+            HEALTHCHECK_PATH: /up
+        volumes:
+            - caddy_data:/data
+            - caddy_config:/config
+        healthcheck:
+            test:
+                - CMD
+                - curl
+                - --insecure
+                - --silent
+                - --location
+                - --show-error
+                - --fail
+                - --resolve
+                - app.bantuin.online:8443:127.0.0.1
+                - https://app.bantuin.online:8443/up
+            start_period: 30s
+            interval: 30s
+            timeout: 5s
+            retries: 5
+
+    queue:
+        <<: *app-service
+        restart: unless-stopped
+        stop_signal: SIGTERM
+        stop_grace_period: 300s
+        command:
+            - php
+            - /var/www/html/artisan
+            - queue:work
+            - --sleep=3
+            - --tries=3
+            - --timeout=240
+            - --max-time=3600
+        healthcheck:
+            test: ['CMD', 'healthcheck-queue']
+            start_period: 10s
+            interval: 30s
+            timeout: 5s
+            retries: 3
+
+    migrate:
+        <<: *app-service
+        profiles:
+            - tools
+        restart: 'no'
+        environment:
+            <<: *app-environment
+            AUTORUN_ENABLED: 'false'
+        command:
+            - php
+            - /var/www/html/artisan
+            - migrate
+            - --force
+            - --no-interaction
+        healthcheck:
+            disable: true
+
+    postgres:
+        image: postgres:17.10-bookworm
+        restart: unless-stopped
+        stop_grace_period: 60s
+        environment:
+            POSTGRES_DB: ${DB_DATABASE:-bantuin_online}
+            POSTGRES_USER: ${DB_USERNAME:-bantuin}
+            POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test:
+                [
+                    'CMD-SHELL',
+                    'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"',
+                ]
+            start_period: 10s
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        networks:
+            - application
+
+networks:
+    application:
+        driver: bridge
+
+volumes:
+    caddy_config:
+    caddy_data:
+    postgres_data:
