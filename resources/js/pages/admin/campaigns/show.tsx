@@ -1,7 +1,6 @@
 import { Deferred, Form, Head, router, usePage } from '@inertiajs/react';
 import {
     ChevronRight,
-    Copy,
     GripVertical,
     Mail,
     MoreHorizontal,
@@ -559,48 +558,6 @@ export default function AdminCampaignsShow({
                 >
                     {campaign !== undefined && invitations !== undefined ? (
                         <>
-                            {campaign.definition_frozen ? (
-                                <Card className="border-amber-500/30 bg-amber-500/5">
-                                    <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                                        <p>
-                                            This campaign definition is frozen
-                                            because candidates have already been
-                                            invited. Clone it as a new draft to
-                                            revise questions, ranking, or role
-                                            context.
-                                        </p>
-                                        {campaign.can_clone &&
-                                        !auth.readOnly ? (
-                                            <Form
-                                                {...CampaignCloneController.store.form(
-                                                    campaign.id,
-                                                )}
-                                                options={{
-                                                    preserveScroll: true,
-                                                }}
-                                            >
-                                                {({ processing }) => (
-                                                    <Button
-                                                        type="submit"
-                                                        size="default"
-                                                        variant="outline"
-                                                        disabled={processing}
-                                                    >
-                                                        {processing && (
-                                                            <Spinner />
-                                                        )}
-                                                        <Copy
-                                                            aria-hidden="true"
-                                                            data-icon="inline-start"
-                                                        />
-                                                        Clone as New Draft
-                                                    </Button>
-                                                )}
-                                            </Form>
-                                        ) : null}
-                                    </CardContent>
-                                </Card>
-                            ) : null}
                             <CampaignOverviewCard
                                 campaign={campaign}
                                 invitations={invitations}
