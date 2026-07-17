@@ -38,7 +38,9 @@ class CampaignInvitationService
 
         $invitation = DB::transaction(function () use ($campaign, $normalizedEmail, $plainToken, $invitedBy): CampaignInvitation {
             $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
-            Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
+            $team = Team::query()->whereKey($lockedCampaign->team_id)->lockForUpdate()->firstOrFail();
+
+            $this->assertCampaignAcceptsInvitations($lockedCampaign, $team, 'email');
 
             $existingUserId = User::query()
                 ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
@@ -150,7 +152,18 @@ class CampaignInvitationService
         $plainToken = Str::random(64);
 
         $lockedInvitation = DB::transaction(function () use ($invitation, $plainToken): CampaignInvitation {
+            $campaignId = CampaignInvitation::query()->whereKey($invitation->id)->value('campaign_id');
+            $campaign = Campaign::query()->whereKey($campaignId)->lockForUpdate()->firstOrFail();
+            $team = Team::query()->whereKey($campaign->team_id)->lockForUpdate()->firstOrFail();
             $lockedInvitation = CampaignInvitation::query()->whereKey($invitation->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedInvitation->campaign_id !== $campaign->id) {
+                throw ValidationException::withMessages([
+                    'invitation' => __('This invitation is no longer available.'),
+                ]);
+            }
+
+            $this->assertCampaignAcceptsInvitations($campaign, $team);
 
             if (! in_array($lockedInvitation->status, [CampaignInvitationStatus::Pending, CampaignInvitationStatus::Expired], true)) {
                 throw ValidationException::withMessages([
@@ -194,6 +207,7 @@ class CampaignInvitationService
             })
             ->whereHas('campaign', fn ($query) => $query
                 ->where('team_id', $teamId)
+                ->where('status', CampaignStatus::Active->value)
                 ->whereHas('team', fn ($teamQuery) => $teamQuery->where('status', TeamStatus::Active)))
             ->update([
                 'send_claim' => $deliveryClaim,
@@ -288,6 +302,7 @@ class CampaignInvitationService
             }
 
             $this->ensureInvitationMatchesUser($lockedInvitation, $user);
+            $this->assertCampaignAcceptsInvitations($campaign, $team);
 
             if ($lockedInvitation->status === CampaignInvitationStatus::Pending
                 && $lockedInvitation->expires_at?->isPast()) {
@@ -408,6 +423,24 @@ class CampaignInvitationService
                 CampaignInvitationStatus::Expired,
             ], true),
         ];
+    }
+
+    private function assertCampaignAcceptsInvitations(
+        Campaign $campaign,
+        Team $team,
+        string $field = 'invitation',
+    ): void {
+        if ($campaign->status !== CampaignStatus::Active) {
+            throw ValidationException::withMessages([
+                $field => __('Candidate Invitations are only available for active Campaigns.'),
+            ]);
+        }
+
+        if ($team->status !== TeamStatus::Active) {
+            throw ValidationException::withMessages([
+                $field => __('This Team is not accepting Candidate Invitations.'),
+            ]);
+        }
     }
 
     private function ensureInvitationMatchesUser(CampaignInvitation $invitation, User $user): void

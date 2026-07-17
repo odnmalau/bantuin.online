@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\CampaignInvitationStatus;
 use App\CampaignStatus;
 use App\ExamSessionStatus;
 use App\Models\Campaign;
@@ -79,6 +80,12 @@ class CampaignLifecycleService
             $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
 
             $this->assertCanArchive($lockedCampaign);
+            $lockedCampaign->invitations()
+                ->where('status', CampaignInvitationStatus::Pending->value)
+                ->update([
+                    'status' => CampaignInvitationStatus::Revoked,
+                    'send_claim' => null,
+                ]);
             $lockedCampaign->update([
                 'status' => CampaignStatus::Archived,
                 'activated_at' => null,

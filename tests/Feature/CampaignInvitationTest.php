@@ -1,6 +1,7 @@
 <?php
 
 use App\CampaignInvitationStatus;
+use App\CampaignStatus;
 use App\Jobs\SendCampaignExamInvitationEmail;
 use App\Mail\CampaignExamInvitationMail;
 use App\Models\Campaign;
@@ -40,6 +41,29 @@ test('admin can create a campaign exam invitation', function () {
 
     Mail::assertNothingSent();
 });
+
+test('admin cannot create invitations for a non-active campaign', function (CampaignStatus $status) {
+    Queue::fake();
+
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create([
+        'status' => $status,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.campaigns.invitations.store', $campaign), [
+            'email' => 'candidate@example.com',
+            'send_email' => true,
+        ])
+        ->assertSessionHasErrors('email');
+
+    expect($campaign->invitations()->exists())->toBeFalse();
+    Queue::assertNothingPushed();
+})->with([
+    'draft' => CampaignStatus::Draft,
+    'question review' => CampaignStatus::QuestionReview,
+    'archived' => CampaignStatus::Archived,
+]);
 
 test('creating an invitation queues the exam invite email job', function () {
     Queue::fake();
@@ -258,6 +282,44 @@ test('owner can resend a pending Campaign Invitation and rotate its token', func
     $this->get(route('invites.show', $oldToken))
         ->assertRedirect(route('login'))
         ->assertSessionHas('status');
+});
+
+test('non-active campaign blocks invitation resend acceptance and email delivery', function () {
+    Queue::fake();
+
+    $owner = User::factory()->teamOwner()->create();
+    $candidate = User::factory()->create([
+        'email' => 'candidate@example.com',
+    ]);
+    $campaign = Campaign::factory()->for($owner->currentTeam)->create([
+        'created_by' => $owner->id,
+        'status' => CampaignStatus::Archived,
+    ]);
+    ['invitation' => $invitation, 'plain_token' => $plainToken] = CampaignInvitation::factory()
+        ->for($campaign)
+        ->createWithPlainToken([
+            'email' => $candidate->email,
+            'invited_by' => $owner->id,
+            'sent_at' => null,
+        ]);
+    $invitations = app(CampaignInvitationService::class);
+
+    $this->actingAs($owner)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->post(route('admin.campaigns.invitations.resend', [$campaign, $invitation]))
+        ->assertSessionHasErrors('invitation');
+
+    expect(fn () => $invitations->acceptForUser($invitation->fresh(), $candidate))
+        ->toThrow(ValidationException::class, 'only available for active Campaigns')
+        ->and($invitations->claimEmailDelivery(
+            $invitation->id,
+            $plainToken,
+            (string) Str::uuid(),
+            $campaign->team_id,
+        ))->toBeNull()
+        ->and($invitation->fresh()->status)->toBe(CampaignInvitationStatus::Pending);
+
+    Queue::assertNothingPushed();
 });
 
 test('accepted Campaign Invitations cannot be revoked', function () {

@@ -1,5 +1,6 @@
 <?php
 
+use App\CampaignInvitationStatus;
 use App\CampaignStatus;
 use App\ExamSessionStatus;
 use App\Models\Assessment;
@@ -333,6 +334,7 @@ test('definition guard middleware is applied only to definition mutation routes'
         'admin.campaigns.questions.update',
         'admin.campaigns.ranking.update',
         'admin.campaigns.sections.destroy',
+        'admin.campaigns.sections.generate-question',
         'admin.campaigns.sections.reorder',
         'admin.campaigns.sections.store',
         'admin.campaigns.sections.update',
@@ -379,6 +381,25 @@ test('used campaign can be archived after exam sessions complete', function () {
     expect($campaign->refresh())
         ->status->toBe(CampaignStatus::Archived)
         ->activated_at->toBeNull();
+});
+
+test('archiving a campaign revokes its pending invitations', function () {
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create([
+        'status' => CampaignStatus::Active,
+    ]);
+    $pendingInvitation = CampaignInvitation::factory()->for($campaign)->create();
+    $acceptedInvitation = CampaignInvitation::factory()
+        ->for($campaign)
+        ->accepted(User::factory()->create())
+        ->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.campaigns.archive', $campaign))
+        ->assertSessionHasNoErrors();
+
+    expect($pendingInvitation->fresh()->status)->toBe(CampaignInvitationStatus::Revoked)
+        ->and($acceptedInvitation->fresh()->status)->toBe(CampaignInvitationStatus::Accepted);
 });
 
 test('used campaign cannot move back to draft', function () {

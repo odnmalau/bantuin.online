@@ -2005,6 +2005,7 @@ function CandidateInvitationsDialog({
     latestInviteUrl: string | undefined;
 }) {
     const { locale, timeZone } = usePage<SharedData>().props;
+    const canInvite = campaign.status === 'active';
     const dateTimeFormatter = new Intl.DateTimeFormat(normalizeLocale(locale), {
         dateStyle: 'medium',
         timeStyle: 'short',
@@ -2016,73 +2017,86 @@ function CandidateInvitationsDialog({
             <DialogTrigger asChild>
                 <Button size="default" variant="outline">
                     <Share2 aria-hidden="true" data-icon="inline-start" />
-                    Share…
+                    {canInvite ? 'Share…' : 'Invitations…'}
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>Candidate Invitations</DialogTitle>
                     <DialogDescription>
-                        Assign candidates to this campaign and share their
-                        invite links before they can open the exam.
+                        {canInvite
+                            ? 'Assign candidates to this campaign and share their invite links before they can open the exam.'
+                            : 'Review this campaign’s invitation history. Publish the campaign to invite candidates.'}
                     </DialogDescription>
                 </DialogHeader>
 
-                <Form
-                    action={admin.campaigns.invitations.store.url(campaign.id)}
-                    method="post"
-                    options={{ preserveScroll: true }}
-                    onError={focusFirstError}
-                >
-                    {({ errors, isDirty, processing }) => (
-                        <FieldGroup>
-                            <UnsavedChangesGuard
-                                active={isDirty && !processing}
-                            />
-                            <Field
-                                data-invalid={
-                                    Boolean(errors.email) || undefined
-                                }
-                            >
-                                <FieldLabel htmlFor="invitation-email">
-                                    Candidate email
-                                </FieldLabel>
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                    <Input
-                                        className="flex-1"
-                                        id="invitation-email"
-                                        name="email"
-                                        type="email"
-                                        inputMode="email"
-                                        autoComplete="email"
-                                        spellCheck={false}
-                                        placeholder="Example: candidate@example.com…"
-                                        required
-                                        aria-invalid={
-                                            Boolean(errors.email) || undefined
-                                        }
-                                    />
-                                    <Button disabled={processing} type="submit">
-                                        {processing && <Spinner />}
-                                        <Mail
-                                            aria-hidden="true"
-                                            data-icon="inline-start"
-                                        />
-                                        Send Invitation
-                                    </Button>
-                                </div>
-                                <FieldError
-                                    errors={[
-                                        {
-                                            message: errors.email,
-                                        },
-                                    ]}
+                {canInvite ? (
+                    <Form
+                        action={admin.campaigns.invitations.store.url(
+                            campaign.id,
+                        )}
+                        method="post"
+                        options={{ preserveScroll: true }}
+                        onError={focusFirstError}
+                    >
+                        {({ errors, isDirty, processing }) => (
+                            <FieldGroup>
+                                <UnsavedChangesGuard
+                                    active={isDirty && !processing}
                                 />
-                            </Field>
-                            <input type="hidden" name="send_email" value="1" />
-                        </FieldGroup>
-                    )}
-                </Form>
+                                <Field
+                                    data-invalid={
+                                        Boolean(errors.email) || undefined
+                                    }
+                                >
+                                    <FieldLabel htmlFor="invitation-email">
+                                        Candidate email
+                                    </FieldLabel>
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                        <Input
+                                            className="flex-1"
+                                            id="invitation-email"
+                                            name="email"
+                                            type="email"
+                                            inputMode="email"
+                                            autoComplete="email"
+                                            spellCheck={false}
+                                            placeholder="Example: candidate@example.com…"
+                                            required
+                                            aria-invalid={
+                                                Boolean(errors.email) ||
+                                                undefined
+                                            }
+                                        />
+                                        <Button
+                                            disabled={processing}
+                                            type="submit"
+                                        >
+                                            {processing && <Spinner />}
+                                            <Mail
+                                                aria-hidden="true"
+                                                data-icon="inline-start"
+                                            />
+                                            Send Invitation
+                                        </Button>
+                                    </div>
+                                    <FieldError
+                                        errors={[
+                                            {
+                                                message: errors.email,
+                                            },
+                                        ]}
+                                    />
+                                </Field>
+                                <input
+                                    type="hidden"
+                                    name="send_email"
+                                    value="1"
+                                />
+                            </FieldGroup>
+                        )}
+                    </Form>
+                ) : null}
 
                 {latestInviteUrl ? (
                     <p
@@ -2168,7 +2182,8 @@ function CandidateInvitationsDialog({
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex justify-end gap-2">
-                                                {invitation.can_resend ? (
+                                                {canInvite &&
+                                                invitation.can_resend ? (
                                                     <Form
                                                         {...admin.campaigns.invitations.resend.form(
                                                             {
