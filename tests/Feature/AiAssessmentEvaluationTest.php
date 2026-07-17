@@ -370,7 +370,7 @@ test('qwen evaluator sends prompt through laravel ai sdk qwen provider', functio
         && str_contains(data_get($request->data(), 'messages.1.content'), 'Explain indexes.'));
 });
 
-test('evaluation job marks low score as evaluated for manual review', function () {
+test('evaluation job automatically rejects a score below the review margin', function () {
     AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(60, includeEmail: false)]);
 
     $assessment = Assessment::factory()
@@ -392,11 +392,86 @@ test('evaluation job marks low score as evaluated for manual review', function (
     $assessment->refresh();
 
     expect($assessment)
-        ->status->toBe(AssessmentStatus::Evaluated)
+        ->status->toBe(AssessmentStatus::Rejected)
         ->assessment_score->toBe(60)
+        ->needs_manual_review->toBeFalse()
         ->ai_email_subject->toBeNull()
         ->ai_email_body->toBeNull()
+        ->rejected_at->not->toBeNull()
         ->evaluated_at->not->toBeNull();
+
+    expect($assessment->events()->pluck('type')->all())
+        ->toContain('autopilot_rejected');
+});
+
+test('evaluation ignores resume screening flags when the assessment clearly fails', function () {
+    AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(0, includeEmail: false)]);
+
+    $assessment = Assessment::factory()->for(User::factory())->create([
+        'needs_manual_review' => true,
+        'answers_payload' => [[
+            'question_id' => 1,
+            'question' => 'Explain dependency injection.',
+            'rubric' => 'Mentions inversion of control and testability.',
+            'answer' => 'I do not know.',
+            'points' => 10,
+        ]],
+    ]);
+
+    app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
+
+    expect($assessment->refresh())
+        ->status->toBe(AssessmentStatus::Rejected)
+        ->needs_manual_review->toBeFalse()
+        ->rejected_at->not->toBeNull()
+        ->and($assessment->evaluation_payload['manual_review_reasons'])->not->toContain('resume_screening_flag');
+});
+
+test('evaluation keeps a passing score with resume screening flags in manual review', function () {
+    AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(82)]);
+
+    $assessment = Assessment::factory()->for(User::factory())->create([
+        'needs_manual_review' => true,
+        'answers_payload' => [[
+            'question_id' => 1,
+            'question' => 'Explain dependency injection.',
+            'rubric' => 'Mentions inversion of control and testability.',
+            'answer' => 'Dependencies are supplied from outside the class.',
+            'points' => 10,
+        ]],
+    ]);
+
+    app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
+
+    expect($assessment->refresh())
+        ->status->toBe(AssessmentStatus::NeedsManualReview)
+        ->needs_manual_review->toBeTrue()
+        ->rejected_at->toBeNull()
+        ->and($assessment->evaluation_payload['manual_review_reasons'])->toContain('resume_screening_flag');
+});
+
+test('evaluation keeps technical resume screening failures in manual review despite a low score', function () {
+    AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(0, includeEmail: false)]);
+
+    $assessment = Assessment::factory()->for(User::factory())->create([
+        'needs_manual_review' => true,
+        'resume_payload' => ['screening_failed' => true],
+        'answers_payload' => [[
+            'question_id' => 1,
+            'question' => 'Explain dependency injection.',
+            'rubric' => 'Mentions inversion of control and testability.',
+            'answer' => 'I do not know.',
+            'points' => 10,
+        ]],
+    ]);
+
+    app()->call([(new EvaluateAssessmentWithAi($assessment)), 'handle']);
+
+    expect($assessment->refresh())
+        ->status->toBe(AssessmentStatus::NeedsManualReview)
+        ->needs_manual_review->toBeTrue()
+        ->rejected_at->toBeNull()
+        ->and($assessment->evaluation_payload['manual_review_reasons'])->toContain('resume_screening_flag');
 });
 
 test('evaluation routes low confidence results to exception review', function () {
@@ -466,10 +541,11 @@ test('evaluation job uses configured campaign threshold to determine review stat
     $assessment->refresh();
 
     expect($assessment)
-        ->status->toBe(AssessmentStatus::Evaluated)
+        ->status->toBe(AssessmentStatus::Rejected)
         ->assessment_score->toBe(82)
         ->ai_email_subject->toBeNull()
-        ->ai_email_body->toBeNull();
+        ->ai_email_body->toBeNull()
+        ->rejected_at->not->toBeNull();
 });
 
 test('evaluation job uses campaign threshold when assessment belongs to a campaign', function () {

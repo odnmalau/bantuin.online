@@ -75,8 +75,13 @@ class AssessmentEvaluationPipeline
         $minimumConfidence = max(0, min(100, (int) config('assessment.evaluation.minimum_confidence', 70)));
         $reviewMargin = max(0, (int) config('assessment.evaluation.manual_review_margin', 3));
         $reviewReasons = [];
+        $hasPassingScore = $reviewScore >= $passingScore;
+        $resumePayload = $assessment->resume_payload ?? [];
+        $resumeScreeningHasTechnicalIssue = ($resumePayload['input_truncated'] ?? false) === true
+            || ($resumePayload['screening_failed'] ?? false) === true
+            || (isset($resumePayload['confidence']) && (int) $resumePayload['confidence'] < 50);
 
-        if ($assessment->needs_manual_review) {
+        if ($assessment->needs_manual_review && ($hasPassingScore || $resumeScreeningHasTechnicalIssue)) {
             $reviewReasons[] = 'resume_screening_flag';
         }
 
@@ -175,6 +180,19 @@ class AssessmentEvaluationPipeline
             );
         }
 
+        if ($status === AssessmentStatus::Rejected) {
+            $events[] = AssessmentEvaluationOutcome::event(
+                type: 'autopilot_rejected',
+                title: __('Assessment rejected automatically'),
+                description: __('The assessment score was below the passing threshold and outside the manual review margin.'),
+                payload: [
+                    'review_score' => $reviewScore,
+                    'passing_score' => $passingScore,
+                    'confidence' => $result->confidence,
+                ],
+            );
+        }
+
         if (filled($emailSubject) && filled($emailBody)) {
             $events[] = AssessmentEvaluationOutcome::event(
                 type: 'draft_email_generated',
@@ -221,6 +239,7 @@ class AssessmentEvaluationPipeline
                 'approved_email_body' => $status === AssessmentStatus::Approved ? $emailBody : null,
                 'approved_at' => $status === AssessmentStatus::Approved ? now() : null,
                 'approved_by' => null,
+                'rejected_at' => $status === AssessmentStatus::Rejected ? now() : null,
                 'evaluated_at' => now(),
                 'status' => $status,
             ],
@@ -279,7 +298,7 @@ class AssessmentEvaluationPipeline
             return AssessmentStatus::Approved;
         }
 
-        return AssessmentStatus::Evaluated;
+        return AssessmentStatus::Rejected;
     }
 
     /**

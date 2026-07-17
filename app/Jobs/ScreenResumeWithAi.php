@@ -114,6 +114,9 @@ class ScreenResumeWithAi implements ShouldQueue
                 attemptId: $claimed->attemptId,
                 attributes: [
                     'resume_justification' => __('Resume screening failed and needs manual review.'),
+                    'resume_payload' => [
+                        'screening_failed' => true,
+                    ],
                     'needs_manual_review' => true,
                     'status' => AssessmentStatus::Submitted,
                 ],
