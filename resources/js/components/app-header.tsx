@@ -40,16 +40,24 @@ const activeItemStyles = 'bg-gray-alpha-200 text-foreground';
 export function AppHeader({ breadcrumbs = [] }: Props) {
     const page = usePage<{ auth: Auth }>();
     const { auth } = page.props;
-    const mainNavItems = resolveMainNavItems(auth, 'header');
+    const isCandidateMode = page.url.startsWith('/candidate');
+    const mainNavItems = resolveMainNavItems(
+        auth,
+        'header',
+        isCandidateMode ? 'candidate' : 'workspace',
+    );
+    const showMobileMenu = !isCandidateMode || mainNavItems.length > 1;
     const getInitials = useInitials();
     const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
 
     return (
-        <>
+        <header data-app-header>
             <div className="border-b border-sidebar-border/80">
                 <div className="mx-auto flex h-16 items-center px-4 md:max-w-7xl">
                     {/* Mobile Menu */}
-                    <div className="lg:hidden">
+                    <div
+                        className={cn('lg:hidden', !showMobileMenu && 'hidden')}
+                    >
                         <Sheet>
                             <SheetTrigger asChild>
                                 <Button
@@ -71,7 +79,9 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                     <AppLogoIcon className="h-6 w-6" />
                                 </SheetHeader>
                                 <div className="flex h-full flex-1 flex-col gap-4 p-4">
-                                    <TeamSwitcher className="w-full" />
+                                    {!isCandidateMode ? (
+                                        <TeamSwitcher className="w-full" />
+                                    ) : null}
                                     <div className="flex h-full flex-col justify-between text-sm">
                                         <div className="flex flex-col space-y-4">
                                             {mainNavItems.map((item) => (
@@ -94,7 +104,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
 
                     <Link
-                        href={primaryMainNavHref()}
+                        href={primaryMainNavHref(auth, isCandidateMode)}
                         prefetch
                         className="flex items-center space-x-2"
                     >
@@ -136,7 +146,9 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
 
                     <div className="ml-auto flex items-center space-x-2">
-                        <TeamSwitcher className="hidden max-w-52 sm:flex" />
+                        {!isCandidateMode ? (
+                            <TeamSwitcher className="hidden max-w-52 sm:flex" />
+                        ) : null}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
@@ -170,6 +182,6 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
                 </div>
             )}
-        </>
+        </header>
     );
 }

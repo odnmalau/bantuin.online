@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useEffect, useRef } from 'react';
 import ExamSessionController from '@/actions/App/Http/Controllers/Candidate/ExamSessionController';
+import { exitSecureExamFullscreen } from '@/lib/secure-exam-fullscreen';
 
 type SecureExamConfig = {
     require_fullscreen: boolean;
@@ -46,6 +47,11 @@ export function useExamProctoring({
                 {
                     preserveScroll: true,
                     preserveState: true,
+                    onSuccess: (page) => {
+                        if (page.component === 'candidate/assessments/show') {
+                            exitSecureExamFullscreen();
+                        }
+                    },
                 },
             );
         };

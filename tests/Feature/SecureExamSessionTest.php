@@ -8,6 +8,7 @@ use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignQuestion;
 use App\Models\CampaignSection;
+use App\Models\CandidateApplication;
 use App\Models\ExamSession;
 use App\Models\User;
 use App\QuestionStatus;
@@ -24,7 +25,8 @@ beforeEach(function () {
 test('candidate must start a secure exam session before seeing section questions', function () {
     $candidate = User::factory()->create();
     $campaign = Campaign::factory()->active()->create();
-    assignCandidateToCampaignExam($candidate, $campaign);
+    $invitation = assignCandidateToCampaignExam($candidate, $campaign);
+    CandidateApplication::factory()->for($invitation, 'invitation')->create();
     $section = CampaignSection::factory()->for($campaign)->create([
         'duration_minutes' => 30,
     ]);
@@ -155,9 +157,9 @@ test('incomplete section timer expiry auto-finalizes the exam session', function
         ->status->toBe(ExamSessionStatus::AutoSubmitted)
         ->submission_reason->toBe('section_timer_expired')
         ->assessment_id->toBe($assessment->id)
-        ->and($assessment->resume_path)->toBeNull()
+        ->and($assessment->resume_path)->not->toBeNull()
         ->and($assessment->events()->where('type', 'candidate_submitted')->value('payload'))
-        ->toMatchArray(['resume_uploaded' => false]);
+        ->toMatchArray(['resume_uploaded' => true]);
 });
 
 test('exam page loads after incomplete section timer expiry', function () {
@@ -456,6 +458,12 @@ test('candidate can finalize a secure exam session into an assessment', function
             'prompt' => 'Finalize me',
         ]);
 
+    $this->actingAs($candidate)
+        ->post(route('candidate.campaigns.application.resume.store', $campaign), [
+            'resume' => resumePdfUpload(),
+        ])
+        ->assertSessionHasNoErrors();
+
     $session = startCandidateExamSession($candidate, $campaign);
 
     $this->actingAs($candidate)
@@ -474,9 +482,7 @@ test('candidate can finalize a secure exam session into an assessment', function
     expect($session->current_section_id)->toBeNull();
 
     $response = $this->actingAs($candidate)
-        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]), [
-            'resume' => resumePdfUpload(),
-        ]);
+        ->post(route('candidate.campaigns.exam-sessions.finalize', [$campaign, $session->fresh()]));
     $response->assertSessionHasNoErrors();
     $response->assertRedirect();
 
@@ -501,6 +507,8 @@ test('candidate can finalize a secure exam session into an assessment', function
 test('source contract gates secure exam interaction and reports fullscreen exits once', function () {
     $examSource = file_get_contents(resource_path('js/pages/candidate/exam.tsx'));
     $proctoringSource = file_get_contents(resource_path('js/hooks/use-exam-proctoring.ts'));
+    $timerSource = file_get_contents(resource_path('js/hooks/use-exam-timer.ts'));
+    $fullscreenSource = file_get_contents(resource_path('js/lib/secure-exam-fullscreen.ts'));
 
     $startOffset = strpos($examSource, 'function StartExamState');
     $activeOffset = strpos($examSource, 'function ActiveSectionExam');
@@ -523,7 +531,11 @@ test('source contract gates secure exam interaction and reports fullscreen exits
         ->toContain('function SecureExamAccess')
         ->toContain('hidden={!hasSecureAccess}')
         ->toContain('enabled: hasSecureAccess')
-        ->toContain('<InputError message={props.errors?.session} />')
+        ->toContain("dataset.secureExamActive = 'true'")
+        ->toContain('!isSectionComplete || isAdvancing || isExpired')
+        ->toContain('Saving section...')
+        ->toContain('onSuccess={exitSecureExamFullscreen}')
+        ->toContain('{props.errors.session}')
         ->not->toContain('storeViolation')
         ->and(substr_count($examSource, '<SecureExamAccess'))
         ->toBe(2)
@@ -531,6 +543,13 @@ test('source contract gates secure exam interaction and reports fullscreen exits
         ->not->toContain('requestFullscreen')
         ->toContain('fullscreenchange')
         ->toContain("report('fullscreen_exit')")
+        ->toContain("page.component === 'candidate/assessments/show'")
+        ->toContain('exitSecureExamFullscreen()')
         ->and(substr_count($proctoringSource, "report('fullscreen_exit')"))
-        ->toBe(1);
+        ->toBe(1)
+        ->and($timerSource)
+        ->toContain("'state'")
+        ->toContain("'assessment'")
+        ->and($fullscreenSource)
+        ->toContain('document.exitFullscreen?.()');
 });

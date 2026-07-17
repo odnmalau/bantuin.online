@@ -1,11 +1,57 @@
 import { Form, Head, Link, router } from '@inertiajs/react';
-import { AlertTriangle, CheckCircle2, FileText, Shield } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import {
+    AlertTriangle,
+    ArrowRight,
+    CheckCircle2,
+    Clock3,
+    FileCheck2,
+    FileText,
+    LockKeyhole,
+    Shield,
+} from 'lucide-react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { store as storeCandidateResume } from '@/actions/App/Http/Controllers/Candidate/CandidateApplicationController';
 import ExamSessionController from '@/actions/App/Http/Controllers/Candidate/ExamSessionController';
 import InputError from '@/components/input-error';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardAction,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import {
+    Empty,
+    EmptyContent,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+} from '@/components/ui/empty';
+import {
+    Field,
+    FieldDescription,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from '@/components/ui/field';
+import {
+    Item,
+    ItemActions,
+    ItemContent,
+    ItemDescription,
+    ItemGroup,
+    ItemMedia,
+    ItemSeparator,
+    ItemTitle,
+} from '@/components/ui/item';
+import { Progress } from '@/components/ui/progress';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { useExamNavigationGuard } from '@/hooks/use-exam-navigation-guard';
@@ -15,6 +61,7 @@ import {
     useExamTimer,
     useSectionExpiryReload,
 } from '@/hooks/use-exam-timer';
+import { exitSecureExamFullscreen } from '@/lib/secure-exam-fullscreen';
 import candidate from '@/routes/candidate';
 
 type Question = {
@@ -24,7 +71,6 @@ type Question = {
     type: string;
     type_label: string;
     max_characters: number;
-    points: number;
     section_title: string | null;
     sort_order: number;
 };
@@ -67,7 +113,6 @@ type Campaign = {
         name: string;
     };
     seniority: string | null;
-    threshold_score: number;
 };
 
 type ExistingAssessment = {
@@ -103,10 +148,23 @@ type SubmittedProps = {
     assessment: ExistingAssessment;
 };
 
+type CandidateApplication = {
+    resume_original_name: string;
+    resume_uploaded_at: string;
+    locked: boolean;
+};
+
+type ResumeRequiredProps = {
+    state: 'resume_required';
+    campaign: Campaign;
+    sections: SectionSummary[];
+};
+
 type ReadyToStartProps = {
     state: 'ready_to_start';
     campaign: Campaign;
     sections: SectionSummary[];
+    application: CandidateApplication;
     secure_exam: ExamSessionProps['secure_exam'];
 };
 
@@ -130,6 +188,7 @@ type Props = (
     | NoCampaignProps
     | CampaignPickerProps
     | SubmittedProps
+    | ResumeRequiredProps
     | ReadyToStartProps
     | ActiveSectionProps
     | ReadyToFinalizeProps
@@ -140,22 +199,29 @@ type Props = (
 };
 
 export default function CandidateExam(props: Props) {
+    useEffect(() => {
+        if (
+            props.state === 'submitted' &&
+            document.fullscreenElement !== null
+        ) {
+            exitSecureExamFullscreen();
+        }
+    }, [props.state]);
+
     return (
         <>
             <Head title="Candidate Exam" />
 
-            <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-                {props.campaign ? (
-                    <p className="text-sm text-muted-foreground">
-                        {props.campaign.team.name} / {props.campaign.title} -{' '}
-                        {props.campaign.role_title}
-                        {props.campaign.seniority
-                            ? `, ${props.campaign.seniority}`
-                            : ''}
-                    </p>
+            <div className="flex w-full flex-col gap-6 p-4">
+                {props.errors?.session ? (
+                    <Alert variant="destructive">
+                        <AlertTriangle />
+                        <AlertTitle>Unable to continue</AlertTitle>
+                        <AlertDescription>
+                            {props.errors.session}
+                        </AlertDescription>
+                    </Alert>
                 ) : null}
-
-                <InputError message={props.errors?.session} />
 
                 {renderExamContent(props)}
             </div>
@@ -166,15 +232,28 @@ export default function CandidateExam(props: Props) {
 function renderExamContent(props: Props) {
     switch (props.state) {
         case 'submitted':
-            return <SubmittedState assessment={props.assessment} />;
+            return (
+                <SubmittedState
+                    campaign={props.campaign}
+                    assessment={props.assessment}
+                />
+            );
         case 'no_campaign':
             return <EmptyQuestionsState />;
         case 'campaign_picker':
             return <CampaignPickerState campaigns={props.campaigns} />;
+        case 'resume_required':
+            return (
+                <ResumeRequiredState
+                    campaign={props.campaign}
+                    sectionCount={props.sections.length}
+                />
+            );
         case 'ready_to_start':
             return (
                 <StartExamState
                     campaign={props.campaign}
+                    application={props.application}
                     sectionCount={props.sections.length}
                     secureExam={props.secure_exam}
                 />
@@ -209,52 +288,63 @@ function renderExamContent(props: Props) {
     }
 }
 
-function SubmittedState({ assessment }: { assessment: ExistingAssessment }) {
+function SubmittedState({
+    campaign,
+    assessment,
+}: {
+    campaign: Campaign;
+    assessment: ExistingAssessment;
+}) {
     return (
-        <div className="rounded-lg border border-sidebar-border/70 p-6 dark:border-sidebar-border">
-            <div className="flex items-start gap-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                    <CheckCircle2 className="size-5 text-muted-foreground" />
-                </div>
-                <div className="space-y-3">
-                    <div className="space-y-1">
-                        <h2 className="text-base font-medium">
-                            Assessment already submitted
-                        </h2>
-                        <p className="max-w-2xl text-sm text-muted-foreground">
-                            You can only submit once for this campaign. Review
-                            the current status from your assessment detail page.
-                        </p>
-                    </div>
-                    <Button asChild>
-                        <Link href={candidate.assessments.show(assessment.id)}>
-                            View status
-                        </Link>
-                    </Button>
-                </div>
-            </div>
-        </div>
+        <Card className="gap-0 overflow-hidden">
+            <CampaignCardHeader campaign={campaign} badge="Submitted" />
+            <CardContent className="bg-background-200 py-(--card-spacing)">
+                <Empty className="border bg-background">
+                    <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                            <CheckCircle2 />
+                        </EmptyMedia>
+                        <EmptyTitle>Assessment already submitted</EmptyTitle>
+                        <EmptyDescription>
+                            This campaign can only be submitted once. Your
+                            assessment status and submission details remain
+                            available.
+                        </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                        <Button asChild>
+                            <Link
+                                href={candidate.assessments.show(assessment.id)}
+                            >
+                                View assessment
+                                <ArrowRight data-icon="inline-end" />
+                            </Link>
+                        </Button>
+                    </EmptyContent>
+                </Empty>
+            </CardContent>
+        </Card>
     );
 }
 
 function EmptyQuestionsState() {
     return (
-        <div className="rounded-lg border border-sidebar-border/70 p-6 dark:border-sidebar-border">
-            <div className="flex items-start gap-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                    <FileText className="size-5 text-muted-foreground" />
-                </div>
-                <div className="space-y-1">
-                    <h2 className="text-base font-medium">
-                        No active questions
-                    </h2>
-                    <p className="max-w-2xl text-sm text-muted-foreground">
-                        Open the invite link sent to your email to access an
-                        assigned campaign exam.
-                    </p>
-                </div>
-            </div>
-        </div>
+        <Card>
+            <CardContent>
+                <Empty>
+                    <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                            <FileText />
+                        </EmptyMedia>
+                        <EmptyTitle>No assigned assessments</EmptyTitle>
+                        <EmptyDescription>
+                            Open the invitation link sent to your email to
+                            access a campaign assessment.
+                        </EmptyDescription>
+                    </EmptyHeader>
+                </Empty>
+            </CardContent>
+        </Card>
     );
 }
 
@@ -269,51 +359,92 @@ const progressLabels: Record<
 
 function CampaignPickerState({ campaigns }: { campaigns: PickerCampaign[] }) {
     return (
-        <div className="space-y-4">
-            <div className="space-y-1">
-                <h2 className="text-base font-medium">Choose an exam</h2>
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                    You have more than one assigned campaign. Select an exam to
-                    continue.
-                </p>
-            </div>
-            <ul className="divide-y divide-sidebar-border/70 rounded-lg border border-sidebar-border/70 dark:divide-sidebar-border dark:border-sidebar-border">
-                {campaigns.map((campaign) => {
-                    const progress = progressLabels[campaign.progress];
+        <Card className="gap-0 overflow-hidden">
+            <CardHeader className="border-b">
+                <CardTitle>Your assessments</CardTitle>
+                <CardDescription>
+                    Select a campaign to continue its application or assessment.
+                </CardDescription>
+                <CardAction>
+                    <Badge variant="secondary">
+                        {campaigns.length} assigned
+                    </Badge>
+                </CardAction>
+            </CardHeader>
+            <CardContent className="bg-background-200 py-(--card-spacing)">
+                <ItemGroup className="gap-0 overflow-hidden rounded-md border bg-background">
+                    {campaigns.map((campaign, index) => {
+                        const progress = progressLabels[campaign.progress];
 
-                    return (
-                        <li key={campaign.id}>
-                            <Link
-                                href={candidate.campaigns.exam(campaign.id)}
-                                className="flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-muted/50"
-                            >
-                                <div className="min-w-0 space-y-0.5">
-                                    <p className="truncate text-sm font-medium">
-                                        {campaign.title}
-                                    </p>
-                                    <p className="truncate text-sm text-muted-foreground">
-                                        {campaign.team.name} ·{' '}
-                                        {campaign.role_title}
-                                    </p>
-                                </div>
-                                <Badge variant={progress.variant}>
-                                    {progress.label}
-                                </Badge>
-                            </Link>
-                        </li>
-                    );
-                })}
-            </ul>
-        </div>
+                        return (
+                            <Fragment key={campaign.id}>
+                                {index > 0 ? (
+                                    <ItemSeparator className="my-0" />
+                                ) : null}
+                                <Item asChild className="rounded-none border-0">
+                                    <Link
+                                        href={candidate.campaigns.exam(
+                                            campaign.id,
+                                        )}
+                                    >
+                                        <ItemMedia variant="icon">
+                                            <FileCheck2 />
+                                        </ItemMedia>
+                                        <ItemContent>
+                                            <ItemTitle>
+                                                {campaign.title}
+                                            </ItemTitle>
+                                            <ItemDescription>
+                                                {campaign.team.name} ·{' '}
+                                                {campaign.role_title}
+                                            </ItemDescription>
+                                        </ItemContent>
+                                        <ItemActions>
+                                            <Badge variant={progress.variant}>
+                                                {progress.label}
+                                            </Badge>
+                                            <ArrowRight />
+                                        </ItemActions>
+                                    </Link>
+                                </Item>
+                            </Fragment>
+                        );
+                    })}
+                </ItemGroup>
+            </CardContent>
+        </Card>
+    );
+}
+
+function CampaignCardHeader({
+    campaign,
+    badge,
+}: {
+    campaign: Campaign;
+    badge: string;
+}) {
+    return (
+        <CardHeader className="border-b">
+            <CardTitle>{campaign.title}</CardTitle>
+            <CardDescription>
+                {campaign.team.name} · {campaign.role_title}
+                {campaign.seniority ? ` · ${campaign.seniority}` : ''}
+            </CardDescription>
+            <CardAction>
+                <Badge variant="secondary">{badge}</Badge>
+            </CardAction>
+        </CardHeader>
     );
 }
 
 function StartExamState({
     campaign,
+    application,
     sectionCount,
     secureExam,
 }: {
     campaign: Campaign;
+    application: CandidateApplication;
     sectionCount: number;
     secureExam: ExamSessionProps['secure_exam'];
 }) {
@@ -332,7 +463,7 @@ function StartExamState({
             }
 
             enteredFullscreen = false;
-            void document.exitFullscreen?.();
+            exitSecureExamFullscreen();
         };
 
         if (
@@ -382,25 +513,28 @@ function StartExamState({
     };
 
     return (
-        <div className="space-y-6 rounded-lg border border-sidebar-border/70 p-6 dark:border-sidebar-border">
-            <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                    <Shield className="size-5 text-muted-foreground" />
-                </div>
-                <div className="space-y-2">
-                    <h2 className="text-base font-medium">Secure exam mode</h2>
-                    <p className="max-w-2xl text-sm text-muted-foreground">
-                        This assessment runs one section at a time with server
-                        timers, fullscreen enforcement, and integrity warnings.
-                        You cannot navigate back once the attempt starts.
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                        {sectionCount} section{sectionCount === 1 ? '' : 's'} to
-                        complete.
-                    </p>
-                </div>
-            </div>
-            <div className="space-y-2">
+        <Card className="gap-0 overflow-hidden">
+            <CampaignCardHeader campaign={campaign} badge="Ready" />
+            <CardContent className="grid gap-4 bg-background-200 py-(--card-spacing) lg:grid-cols-2">
+                <Alert>
+                    <Shield />
+                    <AlertTitle>Secure assessment</AlertTitle>
+                    <AlertDescription>
+                        {sectionCount} section
+                        {sectionCount === 1 ? '' : 's'} with server timers,
+                        fullscreen enforcement, and integrity monitoring. You
+                        cannot return to a completed section.
+                    </AlertDescription>
+                </Alert>
+                <ResumeUploadForm
+                    campaign={campaign}
+                    application={application}
+                />
+            </CardContent>
+            <CardFooter className="flex-col items-stretch gap-2 border-t bg-background sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                    Starting the assessment locks your saved resume.
+                </p>
                 <Button
                     type="button"
                     disabled={processing}
@@ -408,12 +542,120 @@ function StartExamState({
                         void startExam();
                     }}
                 >
-                    {processing && <Spinner />}
+                    {processing ? (
+                        <Spinner data-icon="inline-start" />
+                    ) : (
+                        <LockKeyhole data-icon="inline-start" />
+                    )}
                     Start secure exam
                 </Button>
                 <InputError message={setupError ?? undefined} />
-            </div>
-        </div>
+            </CardFooter>
+        </Card>
+    );
+}
+
+function ResumeRequiredState({
+    campaign,
+    sectionCount,
+}: {
+    campaign: Campaign;
+    sectionCount: number;
+}) {
+    return (
+        <Card className="gap-0 overflow-hidden">
+            <CampaignCardHeader campaign={campaign} badge="Application" />
+            <CardContent className="bg-background-200 py-(--card-spacing)">
+                <ResumeUploadForm
+                    campaign={campaign}
+                    description={`Upload a PDF resume before starting this ${sectionCount}-section assessment.`}
+                />
+            </CardContent>
+        </Card>
+    );
+}
+
+function ResumeUploadForm({
+    campaign,
+    application,
+    description,
+}: {
+    campaign: Campaign;
+    application?: CandidateApplication;
+    description?: string;
+}) {
+    const [resumeName, setResumeName] = useState('');
+
+    return (
+        <Card size="sm" className="gap-0">
+            <CardHeader className="border-b">
+                <CardTitle>
+                    {application ? 'Saved resume' : 'Add your resume'}
+                </CardTitle>
+                <CardDescription>
+                    {application?.resume_original_name ??
+                        description ??
+                        'PDF format, up to the configured upload limit.'}
+                </CardDescription>
+                {application ? (
+                    <CardAction>
+                        <Badge variant="outline">Saved</Badge>
+                    </CardAction>
+                ) : null}
+            </CardHeader>
+            <Form {...storeCandidateResume.form(campaign.id)}>
+                {({ errors, processing, progress }) => (
+                    <>
+                        <CardContent className="py-(--card-spacing)">
+                            <FieldGroup className="gap-4">
+                                <Field data-invalid={Boolean(errors.resume)}>
+                                    <FieldLabel htmlFor="resume">
+                                        {application
+                                            ? 'Choose a replacement PDF'
+                                            : 'Resume PDF'}
+                                    </FieldLabel>
+                                    <input
+                                        id="resume"
+                                        name="resume"
+                                        type="file"
+                                        accept="application/pdf,.pdf"
+                                        required
+                                        aria-invalid={Boolean(errors.resume)}
+                                        onChange={(event) =>
+                                            setResumeName(
+                                                event.currentTarget.files?.[0]
+                                                    ?.name ?? '',
+                                            )
+                                        }
+                                        className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
+                                    />
+                                    <FieldDescription>
+                                        {resumeName
+                                            ? `Selected: ${resumeName}`
+                                            : 'Your resume remains editable until the assessment starts.'}
+                                    </FieldDescription>
+                                    {progress ? (
+                                        <Progress
+                                            value={progress.percentage}
+                                            aria-label={`Uploading ${progress.percentage}%`}
+                                        />
+                                    ) : null}
+                                    <FieldError>{errors.resume}</FieldError>
+                                </Field>
+                            </FieldGroup>
+                        </CardContent>
+                        <CardFooter className="justify-end border-t bg-background">
+                            <Button type="submit" disabled={processing}>
+                                {processing && (
+                                    <Spinner data-icon="inline-start" />
+                                )}
+                                {application ? 'Replace resume' : 'Save resume'}
+                            </Button>
+                        </CardFooter>
+                    </>
+                )}
+            </Form>
+        </Card>
     );
 }
 
@@ -437,6 +679,8 @@ function SecureExamAccess({
     const [requestingFullscreen, setRequestingFullscreen] = useState(false);
 
     useEffect(() => {
+        document.documentElement.dataset.secureExamActive = 'true';
+
         const updateSecureAccess = (): void => {
             setHasSecureAccess(
                 !requiresFullscreen || document.fullscreenElement !== null,
@@ -447,6 +691,7 @@ function SecureExamAccess({
         document.addEventListener('fullscreenchange', updateSecureAccess);
 
         return () => {
+            delete document.documentElement.dataset.secureExamActive;
             document.removeEventListener(
                 'fullscreenchange',
                 updateSecureAccess,
@@ -494,22 +739,18 @@ function SecureExamAccess({
     return (
         <>
             {!hasSecureAccess ? (
-                <div className="space-y-4 rounded-lg border border-sidebar-border/70 p-6 dark:border-sidebar-border">
-                    <div className="flex items-start gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                            <Shield className="size-5 text-muted-foreground" />
-                        </div>
-                        <div className="space-y-2">
-                            <h2 className="text-base font-medium">
-                                Fullscreen required
-                            </h2>
-                            <p className="max-w-2xl text-sm text-muted-foreground">
-                                Return to fullscreen to continue. Exam controls
-                                remain locked until fullscreen is active.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
+                <Card className="gap-0 overflow-hidden bg-background-200">
+                    <CardHeader>
+                        <CardTitle>Fullscreen required</CardTitle>
+                        <CardDescription>
+                            Return to fullscreen to unlock your assessment
+                            controls and continue the active section.
+                        </CardDescription>
+                        <CardAction>
+                            <Badge variant="outline">Paused</Badge>
+                        </CardAction>
+                    </CardHeader>
+                    <CardFooter className="flex-col items-stretch gap-2 border-t sm:flex-row sm:items-center">
                         <Button
                             type="button"
                             disabled={requestingFullscreen}
@@ -517,12 +758,16 @@ function SecureExamAccess({
                                 void acquireSecureAccess();
                             }}
                         >
-                            {requestingFullscreen && <Spinner />}
+                            {requestingFullscreen ? (
+                                <Spinner data-icon="inline-start" />
+                            ) : (
+                                <Shield data-icon="inline-start" />
+                            )}
                             Enter fullscreen
                         </Button>
                         <InputError message={setupError ?? undefined} />
-                    </div>
-                </div>
+                    </CardFooter>
+                </Card>
             ) : null}
 
             <div hidden={!hasSecureAccess} inert={!hasSecureAccess}>
@@ -566,6 +811,7 @@ function ActiveSectionExam({
     const [storedAnswerSeed, setStoredAnswerSeed] = useState(answerSeed);
     const [answers, setAnswers] =
         useState<Record<number, string>>(initialAnswers);
+    const [isAdvancing, setIsAdvancing] = useState(false);
 
     if (storedAnswerSeed !== answerSeed) {
         setStoredAnswerSeed(answerSeed);
@@ -581,6 +827,9 @@ function ActiveSectionExam({
 
     const sectionIndex =
         sections.findIndex((section) => section.id === currentSection.id) + 1;
+    const isSectionComplete = questions.every(
+        (question) => (answers[question.id] ?? '').trim().length > 0,
+    );
 
     function updateAnswer(questionId: number, value: string) {
         setAnswers((current) => ({
@@ -590,6 +839,16 @@ function ActiveSectionExam({
     }
 
     function saveAndAdvance() {
+        if (!isSectionComplete || isAdvancing || isExpired) {
+            return;
+        }
+
+        setIsAdvancing(true);
+
+        const stopAdvancing = (): void => {
+            setIsAdvancing(false);
+        };
+
         router.patch(
             ExamSessionController.update.url([campaign.id, examSession.id]),
             { answers: stringifyAnswerKeys(answers) },
@@ -602,77 +861,108 @@ function ActiveSectionExam({
                             examSession.id,
                         ]),
                         {},
-                        { preserveScroll: true },
+                        {
+                            preserveScroll: true,
+                            onFinish: stopAdvancing,
+                        },
                     );
                 },
+                onError: stopAdvancing,
+                onCancel: stopAdvancing,
+                onNetworkError: stopAdvancing,
+                onHttpException: stopAdvancing,
             },
         );
     }
 
     return (
-        <div className="space-y-6">
-            <IntegrityBanner examSession={examSession} />
-
-            <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground">
+        <Card className="gap-0 overflow-hidden">
+            <CardHeader className="border-b">
+                <CardTitle>{currentSection.title}</CardTitle>
+                <CardDescription>
+                    {campaign.team.name} · {campaign.title}
+                    {currentSection.description
+                        ? ` · ${currentSection.description}`
+                        : ''}
+                </CardDescription>
+                <CardAction>
+                    <Badge variant="outline">
+                        <Clock3 />
+                        <span className="tabular-nums">
+                            {formatExamTimer(remainingSeconds, isPending)}
+                        </span>
+                    </Badge>
+                </CardAction>
+                <div className="col-span-full flex flex-col gap-2 pt-3">
+                    <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
+                        <span>
                             Section {sectionIndex} of {sections.length}
-                        </p>
-                        <h2 className="text-lg font-medium">
-                            {currentSection.title}
-                        </h2>
-                        {currentSection.description ? (
-                            <p className="text-sm text-muted-foreground">
-                                {currentSection.description}
-                            </p>
-                        ) : null}
+                        </span>
+                        <span>
+                            {questions.length} question
+                            {questions.length === 1 ? '' : 's'}
+                        </span>
                     </div>
-                    <div className="rounded-lg bg-muted px-3 py-2 text-sm font-medium">
-                        {formatExamTimer(remainingSeconds, isPending)}
-                    </div>
+                    <Progress
+                        value={(sectionIndex / sections.length) * 100}
+                        aria-label={`Section ${sectionIndex} of ${sections.length}`}
+                    />
                 </div>
-            </section>
+            </CardHeader>
 
-            <div className="space-y-4">
+            <CardContent className="flex flex-col gap-4 bg-background-200 py-(--card-spacing)">
+                <IntegrityBanner examSession={examSession} />
+
                 {questions.map((question, index) => (
-                    <section
-                        key={question.id}
-                        className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border"
-                    >
-                        <div className="space-y-4">
-                            <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                    Question {index + 1}
-                                </p>
-                                <h3 className="text-base font-medium">
-                                    {question.content}
-                                </h3>
-                                <p className="text-xs text-muted-foreground">
-                                    {question.type_label} - {question.points}{' '}
-                                    pts
-                                </p>
-                            </div>
+                    <Card key={question.id} size="sm" className="gap-0">
+                        <CardHeader className="border-b">
+                            <CardTitle>{question.content}</CardTitle>
+                            <CardDescription>
+                                Question {index + 1} of {questions.length}
+                            </CardDescription>
+                            <CardAction>
+                                <Badge variant="secondary">
+                                    {question.type_label}
+                                </Badge>
+                            </CardAction>
+                        </CardHeader>
+                        <CardContent className="py-(--card-spacing)">
                             <AnswerField
                                 question={question}
                                 value={answers[question.id] ?? ''}
                                 onAnswerChanged={updateAnswer}
                             />
-                        </div>
-                    </section>
+                        </CardContent>
+                    </Card>
                 ))}
-            </div>
+            </CardContent>
 
-            <Button
-                type="button"
-                onClick={saveAndAdvance}
-                data-test="exam-next-section-button"
-            >
-                {sectionIndex === sections.length
-                    ? 'Complete sections'
-                    : 'Save and continue'}
-            </Button>
-        </div>
+            <CardFooter className="flex-col items-stretch gap-3 border-t bg-background sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                    Answer every question in this section before continuing.
+                </p>
+                <Button
+                    type="button"
+                    onClick={saveAndAdvance}
+                    disabled={!isSectionComplete || isAdvancing || isExpired}
+                    data-test="exam-next-section-button"
+                >
+                    {isAdvancing ? (
+                        <>
+                            <Spinner data-icon="inline-start" />
+                            Saving section...
+                        </>
+                    ) : (
+                        <>
+                            {sectionIndex === sections.length
+                                ? 'Complete sections'
+                                : 'Save and continue'}
+                            <ArrowRight data-icon="inline-end" />
+                        </>
+                    )}
+                </Button>
+            </CardFooter>
+        </Card>
     );
 }
 
@@ -685,94 +975,55 @@ function FinalizeExamState({
 }) {
     useExamNavigationGuard(true);
 
-    const [resumeName, setResumeName] = useState('');
-
     return (
-        <div className="space-y-6">
-            <IntegrityBanner examSession={examSession} />
-
-            <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                <div className="space-y-2">
-                    <h2 className="text-base font-medium">
-                        Upload resume and submit
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                        All sections are complete. Upload your PDF resume to
-                        finalize the assessment.
-                    </p>
-                </div>
-            </section>
-
-            <Form
-                {...ExamSessionController.finalize.form([
-                    campaign.id,
-                    examSession.id,
-                ])}
-                className="space-y-4"
-            >
-                {({ errors, processing, progress }) => (
-                    <>
-                        <div className="grid gap-2">
-                            <label
-                                htmlFor="resume"
-                                className="text-sm font-medium"
-                            >
-                                Resume PDF
-                            </label>
-                            <input
-                                id="resume"
-                                name="resume"
-                                type="file"
-                                accept="application/pdf,.pdf"
-                                required
-                                onChange={(event) =>
-                                    setResumeName(
-                                        event.currentTarget.files?.[0]?.name ??
-                                            '',
-                                    )
-                                }
-                                className="flex min-h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
-                            />
-                            {resumeName ? (
-                                <p className="text-xs text-muted-foreground">
-                                    Selected: {resumeName}
-                                </p>
-                            ) : null}
-                            {progress ? (
-                                <p className="text-xs text-muted-foreground">
-                                    Uploading {progress.percentage}%
-                                </p>
-                            ) : null}
-                            <InputError message={errors.resume} />
-                        </div>
+        <Card className="gap-0 overflow-hidden">
+            <CampaignCardHeader campaign={campaign} badge="Complete" />
+            <CardContent className="flex flex-col gap-4 bg-background-200 py-(--card-spacing)">
+                <IntegrityBanner examSession={examSession} />
+                <Alert>
+                    <CheckCircle2 />
+                    <AlertTitle>All sections completed</AlertTitle>
+                    <AlertDescription>
+                        Your answers and saved resume are ready. Submit once to
+                        send this assessment for evaluation.
+                    </AlertDescription>
+                </Alert>
+            </CardContent>
+            <CardFooter className="justify-end border-t bg-background">
+                <Form
+                    {...ExamSessionController.finalize.form([
+                        campaign.id,
+                        examSession.id,
+                    ])}
+                    onSuccess={exitSecureExamFullscreen}
+                >
+                    {({ processing }) => (
                         <Button
                             type="submit"
                             disabled={processing}
                             data-test="submit-assessment-button"
                         >
-                            {processing && <Spinner />}
+                            {processing && <Spinner data-icon="inline-start" />}
                             Submit assessment
                         </Button>
-                    </>
-                )}
-            </Form>
-        </div>
+                    )}
+                </Form>
+            </CardFooter>
+        </Card>
     );
 }
 
 function IntegrityBanner({ examSession }: { examSession: ExamSessionProps }) {
     return (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-            <div className="space-y-1">
-                <p className="font-medium">Secure exam in progress</p>
-                <p className="text-muted-foreground">
-                    Stay in fullscreen. Copy, paste, and back navigation are
-                    restricted. Integrity warnings: {examSession.warning_count}{' '}
-                    / {examSession.max_warnings}.
-                </p>
-            </div>
-        </div>
+        <Alert>
+            <Shield />
+            <AlertTitle>Secure exam in progress</AlertTitle>
+            <AlertDescription>
+                Stay in fullscreen. Copy, paste, and back navigation are
+                restricted. Integrity warnings: {examSession.warning_count} /{' '}
+                {examSession.max_warnings}.
+            </AlertDescription>
+        </Alert>
     );
 }
 
@@ -798,15 +1049,14 @@ function AnswerField({
     const inputId = `answer-${question.id}`;
 
     return (
-        <div className="grid gap-2">
-            <label htmlFor={inputId} className="text-sm font-medium">
-                Answer
-            </label>
+        <Field data-invalid={Boolean(error)}>
+            <FieldLabel htmlFor={inputId}>Your answer</FieldLabel>
             <Textarea
                 id={inputId}
                 rows={question.type === 'short_text' ? 4 : 8}
                 value={value}
                 required
+                aria-invalid={Boolean(error)}
                 maxLength={question.max_characters}
                 onChange={(event) =>
                     onAnswerChanged(question.id, event.currentTarget.value)
@@ -814,12 +1064,12 @@ function AnswerField({
                 className="min-h-40"
                 placeholder="Write your answer here."
             />
-            <p className="text-right text-xs text-muted-foreground">
+            <FieldDescription className="text-right">
                 {value.length.toLocaleString()} /{' '}
                 {question.max_characters.toLocaleString()} characters
-            </p>
-            <InputError message={error} />
-        </div>
+            </FieldDescription>
+            <FieldError>{error}</FieldError>
+        </Field>
     );
 }
 

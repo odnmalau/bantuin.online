@@ -28,7 +28,7 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            <Link href={primaryMainNavHref()} prefetch>
+                            <Link href={primaryMainNavHref(auth)} prefetch>
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>

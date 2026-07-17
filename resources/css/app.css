@@ -733,6 +733,10 @@
 }
 
 @layer components {
+    html:fullscreen[data-secure-exam-active='true'] [data-app-header] {
+        display: none;
+    }
+
     .assessment-content-shimmer {
         position: absolute;
         inset: 0;

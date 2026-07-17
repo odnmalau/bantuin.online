@@ -116,6 +116,37 @@ test('application forms compose shared controls', function (string $page) {
     'campaign details' => 'js/pages/admin/campaigns/show.tsx',
 ]);
 
+test('candidate assessment surfaces use wide shadcn composition', function () {
+    $exam = file_get_contents(resource_path('js/pages/candidate/exam.tsx'));
+    $assessment = file_get_contents(resource_path('js/pages/candidate/assessments/show.tsx'));
+    $header = file_get_contents(resource_path('js/components/app-header.tsx'));
+    $styles = file_get_contents(resource_path('css/app.css'));
+
+    expect($exam)->not->toBeFalse()
+        ->toContain('flex w-full flex-col gap-6 p-4')
+        ->toContain('<Card className="gap-0 overflow-hidden">')
+        ->toContain('bg-background-200 py-(--card-spacing)')
+        ->toContain('Answer every question in this section before continuing.')
+        ->toContain('Upload a PDF resume before starting this')
+        ->not->toContain('<AlertTitle>Resume required</AlertTitle>')
+        ->toContain('<ItemGroup')
+        ->toContain('<Alert>')
+        ->toContain('<FieldGroup')
+        ->not->toContain('mx-auto max-w-4xl')
+        ->not->toContain('Choose an exam')
+        ->and($assessment)->not->toBeFalse()
+        ->toContain('flex w-full flex-col gap-6 p-4')
+        ->toContain('<Card className="gap-0 overflow-hidden">')
+        ->toContain('className="overflow-hidden rounded-md border bg-background"')
+        ->toContain('<ItemSeparator className="my-0" />')
+        ->toContain('<ItemGroup')
+        ->toContain('<Accordion')
+        ->toContain('groupAnswersBySection')
+        ->not->toContain('border-sidebar-border')
+        ->and($header)->toContain('<header data-app-header>')
+        ->and($styles)->toContain("html:fullscreen[data-secure-exam-active='true'] [data-app-header]");
+});
+
 test('campaign assessment authoring uses compact disclosure and item components', function () {
     $campaign = file_get_contents(resource_path('js/pages/admin/campaigns/show.tsx'));
 
@@ -132,8 +163,8 @@ test('campaign assessment authoring uses compact disclosure and item components'
         ->toContain('onClick={() => setOpen(true)}')
         ->toContain('className="mt-3 flex justify-end"')
         ->toContain('Use the Add Question button to add the first question.')
-        ->toContain('Discard All')
-        ->toContain('Drafts')
+        ->toContain('Discard')
+        ->toContain('campaign.draft_questions_count >')
         ->not->toContain('const canApprove =')
         ->toContain('<SheetTitle>Edit Question</SheetTitle>')
         ->toContain('Edit Question…')

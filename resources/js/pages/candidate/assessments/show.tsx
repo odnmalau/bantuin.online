@@ -1,13 +1,46 @@
 import { Head, usePoll } from '@inertiajs/react';
-import { useEffect } from 'react';
+import { CalendarClock, CheckCircle2, FileText } from 'lucide-react';
+import { Fragment, useEffect } from 'react';
 import AssessmentController from '@/actions/App/Http/Controllers/Candidate/AssessmentController';
 import AssessmentStatusBadge from '@/components/assessment-status-badge';
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from '@/components/ui/accordion';
+import { Badge } from '@/components/ui/badge';
+import {
+    Card,
+    CardAction,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import {
+    Item,
+    ItemContent,
+    ItemDescription,
+    ItemGroup,
+    ItemMedia,
+    ItemSeparator,
+    ItemTitle,
+} from '@/components/ui/item';
 import candidate from '@/routes/candidate';
 
 type AnswerSnapshot = {
     question_id: number;
+    section_id: number | null;
+    section_title: string | null;
     question: string;
     answer: string;
+};
+
+type AnswerSection = {
+    key: string;
+    title: string;
+    answers: AnswerSnapshot[];
 };
 
 type Assessment = {
@@ -22,9 +55,6 @@ type Assessment = {
     } | null;
     answers_payload: AnswerSnapshot[];
     resume_original_name: string | null;
-    resume_score: number | null;
-    assessment_score: number | null;
-    ai_justification: string | null;
     status: string;
     created_at: string;
     evaluated_at: string | null;
@@ -43,6 +73,7 @@ const PROCESSING_STATUSES = [
 ];
 
 export default function CandidateAssessmentShow({ assessment }: Props) {
+    const answerSections = groupAnswersBySection(assessment.answers_payload);
     const { start, stop } = usePoll(
         2000,
         { only: ['assessment'] },
@@ -63,105 +94,168 @@ export default function CandidateAssessmentShow({ assessment }: Props) {
         <>
             <Head title="Assessment Status" />
 
-            <div className="space-y-6 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    {assessment.campaign ? (
-                        <p className="text-sm text-muted-foreground">
-                            {assessment.campaign.team.name} /{' '}
-                            {assessment.campaign.title} -{' '}
-                            {assessment.campaign.role_title}
-                        </p>
-                    ) : (
-                        <span />
-                    )}
-                    <AssessmentStatusBadge status={assessment.status} />
-                </div>
+            <div className="flex w-full flex-col gap-6 p-4">
+                <Card className="gap-0 bg-background-200">
+                    <CardHeader>
+                        <CardTitle>
+                            {assessment.campaign?.title ?? 'Assessment'}
+                        </CardTitle>
+                        <CardDescription>
+                            {assessment.campaign
+                                ? `${assessment.campaign.team.name} · ${assessment.campaign.role_title}`
+                                : 'Submitted assessment'}
+                        </CardDescription>
+                        <CardAction>
+                            <AssessmentStatusBadge status={assessment.status} />
+                        </CardAction>
+                    </CardHeader>
+                    <CardContent className="py-(--card-spacing)">
+                        <ItemGroup className="grid gap-4 md:grid-cols-3">
+                            <Item variant="outline" className="bg-background">
+                                <ItemMedia variant="icon">
+                                    <FileText />
+                                </ItemMedia>
+                                <ItemContent>
+                                    <ItemTitle>Resume</ItemTitle>
+                                    <ItemDescription className="truncate">
+                                        {assessment.resume_original_name ?? '-'}
+                                    </ItemDescription>
+                                </ItemContent>
+                            </Item>
+                            <Item variant="outline" className="bg-background">
+                                <ItemMedia variant="icon">
+                                    <CalendarClock />
+                                </ItemMedia>
+                                <ItemContent>
+                                    <ItemTitle>Submitted</ItemTitle>
+                                    <ItemDescription>
+                                        {new Date(
+                                            assessment.created_at,
+                                        ).toLocaleString()}
+                                    </ItemDescription>
+                                </ItemContent>
+                            </Item>
+                            <Item variant="outline" className="bg-background">
+                                <ItemMedia variant="icon">
+                                    <CheckCircle2 />
+                                </ItemMedia>
+                                <ItemContent>
+                                    <ItemTitle>Evaluated</ItemTitle>
+                                    <ItemDescription>
+                                        {assessment.evaluated_at
+                                            ? new Date(
+                                                  assessment.evaluated_at,
+                                              ).toLocaleString()
+                                            : 'Pending'}
+                                    </ItemDescription>
+                                </ItemContent>
+                            </Item>
+                        </ItemGroup>
+                    </CardContent>
+                </Card>
 
-                <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">Resume</p>
-                        <p className="mt-1 truncate text-sm font-medium">
-                            {assessment.resume_original_name ?? '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">
-                            Resume score
-                        </p>
-                        <p className="mt-1 text-2xl font-semibold">
-                            {assessment.resume_score ?? '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">Score</p>
-                        <p className="mt-1 text-2xl font-semibold">
-                            {assessment.assessment_score ?? '-'}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">
-                            Submitted
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                            {new Date(assessment.created_at).toLocaleString()}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border">
-                        <p className="text-sm text-muted-foreground">
-                            Evaluated
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                            {assessment.evaluated_at
-                                ? new Date(
-                                      assessment.evaluated_at,
-                                  ).toLocaleString()
-                                : '-'}
-                        </p>
-                    </div>
-                </div>
-
-                {assessment.ai_justification && (
-                    <section className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-                        <h2 className="text-base font-medium">
-                            AI justification
-                        </h2>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                            {assessment.ai_justification}
-                        </p>
-                    </section>
-                )}
-
-                <section className="space-y-4">
-                    <h2 className="text-base font-medium">Submitted answers</h2>
-                    {assessment.answers_payload.map((answer, index) => (
-                        <article
-                            key={answer.question_id}
-                            className="rounded-lg border border-sidebar-border/70 p-5 dark:border-sidebar-border"
+                <Card className="gap-0 overflow-hidden">
+                    <CardHeader className="border-b">
+                        <CardTitle>Submitted answers</CardTitle>
+                        <CardDescription>
+                            A read-only record of the answers included in your
+                            assessment.
+                        </CardDescription>
+                        <CardAction>
+                            <Badge variant="secondary">
+                                {assessment.answers_payload.length} answers
+                            </Badge>
+                        </CardAction>
+                    </CardHeader>
+                    <CardContent className="bg-background-200 py-(--card-spacing)">
+                        <Accordion
+                            type="multiple"
+                            className="overflow-hidden rounded-md border bg-background"
+                            defaultValue={answerSections.map(
+                                (section) => section.key,
+                            )}
                         >
-                            <div className="space-y-3">
-                                <div>
-                                    <p className="text-xs font-medium text-muted-foreground">
-                                        Question {index + 1}
-                                    </p>
-                                    <h3 className="mt-1 text-sm font-medium">
-                                        {answer.question}
-                                    </h3>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium text-muted-foreground">
-                                        Answer
-                                    </p>
-                                    <p className="mt-1 text-sm whitespace-pre-wrap">
-                                        {answer.answer}
-                                    </p>
-                                </div>
-                            </div>
-                        </article>
-                    ))}
-                </section>
+                            {answerSections.map((section) => (
+                                <AccordionItem
+                                    key={section.key}
+                                    value={section.key}
+                                >
+                                    <AccordionTrigger className="px-(--card-spacing) hover:no-underline">
+                                        <span className="flex items-center gap-2">
+                                            {section.title}
+                                            <Badge variant="secondary">
+                                                {section.answers.length}
+                                            </Badge>
+                                        </span>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="px-(--card-spacing)">
+                                        <ItemGroup className="gap-0 overflow-hidden rounded-md border">
+                                            {section.answers.map(
+                                                (answer, index) => (
+                                                    <Fragment
+                                                        key={answer.question_id}
+                                                    >
+                                                        {index > 0 ? (
+                                                            <ItemSeparator className="my-0" />
+                                                        ) : null}
+                                                        <Item
+                                                            size="sm"
+                                                            className="rounded-none border-0"
+                                                        >
+                                                            <ItemContent>
+                                                                <ItemTitle className="line-clamp-none">
+                                                                    Question{' '}
+                                                                    {index + 1}{' '}
+                                                                    ·{' '}
+                                                                    {
+                                                                        answer.question
+                                                                    }
+                                                                </ItemTitle>
+                                                                <ItemDescription className="line-clamp-none whitespace-pre-wrap">
+                                                                    {
+                                                                        answer.answer
+                                                                    }
+                                                                </ItemDescription>
+                                                            </ItemContent>
+                                                        </Item>
+                                                    </Fragment>
+                                                ),
+                                            )}
+                                        </ItemGroup>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
+                    </CardContent>
+                </Card>
             </div>
         </>
     );
+}
+
+function groupAnswersBySection(answers: AnswerSnapshot[]): AnswerSection[] {
+    const sections = new Map<string, AnswerSection>();
+
+    for (const answer of answers) {
+        const key = answer.section_id
+            ? `section-${answer.section_id}`
+            : `section-${answer.section_title ?? 'assessment'}`;
+        const existing = sections.get(key);
+
+        if (existing) {
+            existing.answers.push(answer);
+
+            continue;
+        }
+
+        sections.set(key, {
+            key,
+            title: answer.section_title ?? 'Assessment',
+            answers: [answer],
+        });
+    }
+
+    return Array.from(sections.values());
 }
 
 CandidateAssessmentShow.layout = (props: Partial<Props>) => {

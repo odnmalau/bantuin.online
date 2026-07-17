@@ -78,7 +78,15 @@ export function useSectionExpiryReload(isExpired: boolean): void {
         }
 
         router.reload({
-            only: ['examSession', 'currentSection', 'questions', 'sections'],
+            only: [
+                'state',
+                'assessment',
+                'campaign',
+                'examSession',
+                'currentSection',
+                'questions',
+                'sections',
+            ],
         });
     }, [isExpired]);
 }
