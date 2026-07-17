@@ -36,6 +36,31 @@ class QwenAssessmentGenerator
      */
     public function generate(Campaign $campaign, array $options): int
     {
+        return $this->generateDrafts($campaign, $options);
+    }
+
+    /**
+     * Generate draft questions for an existing campaign section.
+     *
+     * @param  array{question_count?: int, difficulty?: string, question_mix?: string|null}  $options
+     */
+    public function generateForSection(Campaign $campaign, CampaignSection $section, array $options): int
+    {
+        if ($section->campaign_id !== $campaign->id) {
+            throw new AssessmentGenerationException('The selected section does not belong to this campaign.');
+        }
+
+        return $this->generateDrafts($campaign, $options, $section);
+    }
+
+    /**
+     * @param  array{question_count?: int, difficulty?: string, question_mix?: string|null}  $options
+     */
+    private function generateDrafts(
+        Campaign $campaign,
+        array $options,
+        ?CampaignSection $targetSection = null,
+    ): int {
         $expectedTeamId = $campaign->team_id;
         $this->ensureCampaignTeamIsWritable($campaign, $expectedTeamId);
         $this->ensureNoActiveDrafts($campaign);
@@ -51,7 +76,7 @@ class QwenAssessmentGenerator
 
         $this->assertQwenApiKeyConfigured();
 
-        $prompt = $this->prompt($campaign, $generationOptions);
+        $prompt = $this->prompt($campaign, $generationOptions, $targetSection);
 
         $response = $this->promptStructuredAgent(
             new AssessmentGeneratorAgent,
@@ -65,13 +90,30 @@ class QwenAssessmentGenerator
             max(1, (int) ($generationOptions['question_count'] ?? 6)),
         );
 
-        return DB::transaction(function () use ($campaign, $expectedTeamId, $sections, $generationOptions): int {
+        return DB::transaction(function () use ($campaign, $expectedTeamId, $sections, $generationOptions, $targetSection): int {
             $lockedCampaign = Campaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
             $this->lifecycle->assertDefinitionEditable($lockedCampaign);
             $this->ensureCampaignTeamIsWritable($lockedCampaign, $expectedTeamId, true);
             $this->ensureNoActiveDrafts($lockedCampaign);
 
-            return $this->persistDrafts($lockedCampaign, $sections, $generationOptions);
+            $lockedTargetSection = $targetSection === null
+                ? null
+                : CampaignSection::query()
+                    ->whereBelongsTo($lockedCampaign)
+                    ->whereKey($targetSection->id)
+                    ->lockForUpdate()
+                    ->first();
+
+            if ($targetSection !== null && $lockedTargetSection === null) {
+                throw new AssessmentGenerationException('The selected section is no longer available.');
+            }
+
+            return $this->persistDrafts(
+                $lockedCampaign,
+                $sections,
+                $generationOptions,
+                $lockedTargetSection,
+            );
         });
     }
 
@@ -81,8 +123,11 @@ class QwenAssessmentGenerator
      * @param  array{question_count?: int, language?: string, difficulty?: string, question_mix?: string|null}  $options
      * @return array<string, mixed>
      */
-    public function promptPayload(Campaign $campaign, array $options): array
-    {
+    public function promptPayload(
+        Campaign $campaign,
+        array $options,
+        ?CampaignSection $targetSection = null,
+    ): array {
         return [
             'instruction' => 'Generate an assessment draft. Output JSON matching the structured schema.',
             'campaign' => [
@@ -102,6 +147,10 @@ class QwenAssessmentGenerator
                 'question_mix' => $options['question_mix'] ?? null,
             ],
             'allowed_question_types' => QuestionType::selectOptions(),
+            'target_section' => $targetSection === null ? null : [
+                'title' => $targetSection->title,
+                'description' => $targetSection->description,
+            ],
             'existing_content_to_avoid' => $campaign->sections
                 ->map(fn (CampaignSection $section): array => [
                     'section_title' => $section->title,
@@ -171,8 +220,12 @@ class QwenAssessmentGenerator
      * @param  array<int, array<string, mixed>>  $sections
      * @param  array{question_count?: int, language?: string, difficulty?: string, question_mix?: string|null}  $options
      */
-    private function persistDrafts(Campaign $campaign, array $sections, array $options): int
-    {
+    private function persistDrafts(
+        Campaign $campaign,
+        array $sections,
+        array $options,
+        ?CampaignSection $targetSection = null,
+    ): int {
         $createdQuestions = 0;
 
         $campaign->update([
@@ -180,26 +233,49 @@ class QwenAssessmentGenerator
             'activated_at' => null,
         ]);
 
-        foreach ($sections as $section) {
-            $campaignSection = $campaign->sections()->create(Arr::except($section, ['questions']));
+        if ($targetSection !== null) {
+            $nextSortOrder = ((int) $targetSection->questions()->max('sort_order')) + 10;
 
-            foreach ($section['questions'] as $question) {
-                $campaignSection->questions()->create([
+            foreach (collect($sections)->flatMap(fn (array $section): array => $section['questions']) as $question) {
+                $targetSection->questions()->create([
                     ...$question,
                     'campaign_id' => $campaign->id,
                     'ai_generated' => true,
                     'status' => QuestionStatus::Draft,
                     'is_required' => true,
+                    'sort_order' => $nextSortOrder,
                 ]);
 
                 $createdQuestions++;
+                $nextSortOrder += 10;
             }
+        } else {
+            foreach ($sections as $section) {
+                $campaignSection = $campaign->sections()->create(Arr::except($section, ['questions']));
+
+                foreach ($section['questions'] as $question) {
+                    $campaignSection->questions()->create([
+                        ...$question,
+                        'campaign_id' => $campaign->id,
+                        'ai_generated' => true,
+                        'status' => QuestionStatus::Draft,
+                        'is_required' => true,
+                    ]);
+
+                    $createdQuestions++;
+                }
+            }
+
+            $this->distribution->normalize($campaign);
         }
 
-        $this->distribution->normalize($campaign);
-
         $audit = $campaign->ai_generation_audit ?? [];
-        $audit[] = $this->generationAuditEntry($options, $createdQuestions, count($sections));
+        $audit[] = $this->generationAuditEntry(
+            $options,
+            $createdQuestions,
+            $targetSection === null ? count($sections) : 0,
+            $targetSection,
+        );
 
         $campaign->update([
             'ai_generation_audit' => $audit,
@@ -219,20 +295,29 @@ class QwenAssessmentGenerator
      *     generation_options: array<string, mixed>,
      *     sections_created: int,
      *     questions_created: int,
+     *     target_section_id?: int,
      * }
      */
-    private function generationAuditEntry(array $options, int $questionsCreated, int $sectionsCreated): array
-    {
+    private function generationAuditEntry(
+        array $options,
+        int $questionsCreated,
+        int $sectionsCreated,
+        ?CampaignSection $targetSection = null,
+    ): array {
         return [
             ...$this->generationAuditBase(AssessmentGeneratorAgent::class, $options),
             'sections_created' => $sectionsCreated,
             'questions_created' => $questionsCreated,
+            ...($targetSection === null ? [] : ['target_section_id' => $targetSection->id]),
         ];
     }
 
-    private function prompt(Campaign $campaign, array $options): string
-    {
-        return $this->encodePrompt($this->promptPayload($campaign, $options));
+    private function prompt(
+        Campaign $campaign,
+        array $options,
+        ?CampaignSection $targetSection = null,
+    ): string {
+        return $this->encodePrompt($this->promptPayload($campaign, $options, $targetSection));
     }
 
     private function generationNotes(): string

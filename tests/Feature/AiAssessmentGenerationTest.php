@@ -90,6 +90,72 @@ test('admin can generate draft assessment questions for a campaign', function ()
         && ! str_contains($prompt->prompt, 'Prefer practical debugging questions.'));
 });
 
+test('admin can generate one draft question for an existing campaign section', function () {
+    AssessmentGeneratorAgent::fake([
+        generatedAssessmentOutput(),
+    ]);
+
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create([
+        'role_title' => 'Backend Engineer',
+    ]);
+    $section = CampaignSection::factory()->for($campaign)->create([
+        'title' => 'Laravel Expertise',
+        'description' => 'Practical Laravel implementation skills.',
+    ]);
+    CampaignQuestion::factory()
+        ->for($campaign)
+        ->for($section, 'section')
+        ->create([
+            'status' => QuestionStatus::Approved,
+            'sort_order' => 30,
+        ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.campaigns.show', $campaign))
+        ->post(route('admin.campaigns.sections.generate-question', [$campaign, $section]), [
+            'question_count' => 10,
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.campaigns.show', $campaign));
+
+    $generatedQuestion = $section->questions()
+        ->where('status', QuestionStatus::Draft->value)
+        ->sole();
+
+    expect($campaign->sections()->count())->toBe(1)
+        ->and($generatedQuestion->campaign_id)->toBe($campaign->id)
+        ->and($generatedQuestion->ai_generated)->toBeTrue()
+        ->and($generatedQuestion->sort_order)->toBe(40);
+
+    $audit = $campaign->refresh()->ai_generation_audit;
+
+    expect($audit)->toHaveCount(1)
+        ->and($audit[0]['generation_options']['question_count'])->toBe(1)
+        ->and($audit[0]['questions_created'])->toBe(1)
+        ->and($audit[0]['sections_created'])->toBe(0)
+        ->and($audit[0]['target_section_id'])->toBe($section->id);
+
+    AssessmentGeneratorAgent::assertPrompted(fn ($prompt): bool => str_contains($prompt->prompt, 'target_section')
+        && str_contains($prompt->prompt, 'Laravel Expertise')
+        && str_contains($prompt->prompt, 'Practical Laravel implementation skills.'));
+});
+
+test('campaign question generation scopes the section to the campaign', function () {
+    AssessmentGeneratorAgent::fake();
+
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin, 'creator')->create();
+    $otherCampaign = Campaign::factory()->for($admin, 'creator')->create();
+    $section = CampaignSection::factory()->for($otherCampaign)->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.campaigns.sections.generate-question', [$campaign, $section]))
+        ->assertNotFound();
+
+    AssessmentGeneratorAgent::assertNeverPrompted();
+});
+
 test('assessment regeneration sends existing sections and questions as exclusion context', function () {
     AssessmentGeneratorAgent::fake([
         generatedAssessmentOutput(),

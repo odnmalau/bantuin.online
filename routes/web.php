@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\CampaignCloneController;
 use App\Http\Controllers\Admin\CampaignController;
 use App\Http\Controllers\Admin\CampaignInvitationController;
 use App\Http\Controllers\Admin\CampaignQuestionController;
+use App\Http\Controllers\Admin\CampaignQuestionGenerationController;
 use App\Http\Controllers\Admin\CampaignRankingController;
 use App\Http\Controllers\Admin\CampaignSectionController;
 use App\Http\Controllers\Admin\CampaignStatusController;
@@ -83,6 +84,9 @@ Route::middleware(['auth', 'current-team'])
             Route::post('campaigns/{campaign}/draft', [CampaignStatusController::class, 'draft'])->name('campaigns.draft');
             Route::patch('campaigns/{campaign}/ranking', [CampaignRankingController::class, 'update'])->name('campaigns.ranking.update');
             Route::post('campaigns/{campaign}/generate-assessment', [CampaignAssessmentGenerationController::class, 'store'])->name('campaigns.generate-assessment');
+            Route::post('campaigns/{campaign}/sections/{section}/generate-question', CampaignQuestionGenerationController::class)
+                ->scopeBindings()
+                ->name('campaigns.sections.generate-question');
             Route::post('campaigns/{campaign}/sections', [CampaignSectionController::class, 'store'])->name('campaigns.sections.store');
             Route::patch('campaigns/{campaign}/sections/reorder', [CampaignSectionController::class, 'reorder'])->name('campaigns.sections.reorder');
             Route::patch('campaigns/{campaign}/sections/{section}', [CampaignSectionController::class, 'update'])->name('campaigns.sections.update');

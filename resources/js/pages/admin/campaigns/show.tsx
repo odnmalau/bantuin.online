@@ -1,13 +1,11 @@
 import { Deferred, Form, Head, router, usePage } from '@inertiajs/react';
 import {
-    Check,
     ChevronRight,
     Copy,
     GripVertical,
     Mail,
     MoreHorizontal,
     Plus,
-    Rocket,
     Share2,
     Sparkles,
 } from 'lucide-react';
@@ -17,6 +15,7 @@ import CampaignAssessmentGenerationController from '@/actions/App/Http/Controlle
 import CampaignCloneController from '@/actions/App/Http/Controllers/Admin/CampaignCloneController';
 import CampaignController from '@/actions/App/Http/Controllers/Admin/CampaignController';
 import CampaignQuestionController from '@/actions/App/Http/Controllers/Admin/CampaignQuestionController';
+import CampaignQuestionGenerationController from '@/actions/App/Http/Controllers/Admin/CampaignQuestionGenerationController';
 import CampaignSectionController from '@/actions/App/Http/Controllers/Admin/CampaignSectionController';
 import CampaignStatusController from '@/actions/App/Http/Controllers/Admin/CampaignStatusController';
 import CampaignForm from '@/components/admin/campaign-form';
@@ -39,6 +38,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ButtonGroup } from '@/components/ui/button-group';
 import {
     Card,
     CardAction,
@@ -496,6 +496,9 @@ function CampaignDetailSkeleton() {
                                             ),
                                         )}
                                     </ItemGroup>
+                                    <div className="mt-3 flex justify-end">
+                                        <Skeleton className="h-10 w-44" />
+                                    </div>
                                 </div>
                             ) : null}
                         </div>
@@ -653,12 +656,7 @@ export default function AdminCampaignsShow({
                                                                     {processing && (
                                                                         <Spinner />
                                                                     )}
-                                                                    <Check
-                                                                        aria-hidden="true"
-                                                                        data-icon="inline-start"
-                                                                    />
-                                                                    Approve All
-                                                                    Drafts
+                                                                    Approve
                                                                 </Button>
                                                             )}
                                                         </Form>
@@ -683,8 +681,7 @@ export default function AdminCampaignsShow({
                                                                     {processing && (
                                                                         <Spinner />
                                                                     )}
-                                                                    Discard All
-                                                                    Drafts
+                                                                    Discard
                                                                 </Button>
                                                             )}
                                                         </Form>
@@ -1072,6 +1069,10 @@ export default function AdminCampaignsShow({
                                                                         questionTypes={
                                                                             questionTypes
                                                                         }
+                                                                        generationDisabled={
+                                                                            campaign.draft_questions_count >
+                                                                            0
+                                                                        }
                                                                     />
                                                                 </AccordionContent>
                                                             </AccordionItem>
@@ -1093,6 +1094,10 @@ export default function AdminCampaignsShow({
                                                 campaignId={campaign.id}
                                                 sectionCount={
                                                     campaign.sections.length
+                                                }
+                                                disabled={
+                                                    campaign.draft_questions_count >
+                                                    0
                                                 }
                                             />
                                         ) : null}
@@ -1154,9 +1159,11 @@ function GenerateAssessmentButton({
 function AddSectionSheet({
     campaignId,
     sectionCount,
+    disabled,
 }: {
     campaignId: number;
     sectionCount: number;
+    disabled: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const maximumContribution = Math.max(1, 100 - sectionCount);
@@ -1164,7 +1171,7 @@ function AddSectionSheet({
     return (
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-                <Button variant="outline" size="default">
+                <Button variant="outline" size="default" disabled={disabled}>
                     <Plus aria-hidden="true" data-icon="inline-start" />
                     Add Section…
                 </Button>
@@ -1369,26 +1376,61 @@ function AddQuestionAction({
     campaignId,
     section,
     questionTypes,
+    generationDisabled,
 }: {
     campaignId: number;
     section: CampaignSection;
     questionTypes: QuestionTypeOption[];
+    generationDisabled: boolean;
 }) {
     const [open, setOpen] = useState(false);
 
     return (
         <>
-            <div className="mt-3 flex justify-end">
-                <Button
-                    type="button"
-                    size="default"
-                    variant="outline"
-                    onClick={() => setOpen(true)}
-                >
-                    <Plus aria-hidden="true" data-icon="inline-start" />
-                    Add Question…
-                </Button>
-            </div>
+            <Form
+                {...CampaignQuestionGenerationController.form([
+                    campaignId,
+                    section.id,
+                ])}
+                options={{ preserveScroll: true }}
+                className="mt-3 flex flex-col items-end gap-1"
+            >
+                {({ errors, processing }) => (
+                    <>
+                        <ButtonGroup aria-label="Question actions">
+                            <Button
+                                type="button"
+                                size="default"
+                                variant="outline"
+                                disabled={generationDisabled}
+                                onClick={() => setOpen(true)}
+                            >
+                                <Plus
+                                    aria-hidden="true"
+                                    data-icon="inline-start"
+                                />
+                                Add Question…
+                            </Button>
+                            <Button
+                                type="submit"
+                                size="icon"
+                                variant="outline"
+                                aria-label="Generate question with AI"
+                                disabled={generationDisabled || processing}
+                            >
+                                {processing ? (
+                                    <Spinner aria-hidden="true" />
+                                ) : (
+                                    <Sparkles aria-hidden="true" />
+                                )}
+                            </Button>
+                        </ButtonGroup>
+                        <InputError
+                            message={errors[`generation.${section.id}`]}
+                        />
+                    </>
+                )}
+            </Form>
             <AddQuestionSheet
                 campaignId={campaignId}
                 section={section}
@@ -2309,7 +2351,6 @@ function CampaignStatusButton({ campaign }: { campaign: Campaign }) {
                         disabled={processing || !campaign.can_publish}
                     >
                         {processing && <Spinner />}
-                        <Rocket aria-hidden="true" data-icon="inline-start" />
                         Publish
                     </Button>
                     <InputError message={errors.campaign} />
