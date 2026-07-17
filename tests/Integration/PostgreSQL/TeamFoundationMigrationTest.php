@@ -142,7 +142,14 @@ function seedValidLegacyTeamData(string $connection): array
     $assessment = $database->table('assessments')->insertGetId([
         'user_id' => $candidates[2],
         'campaign_id' => $campaigns[2],
-        'answers_payload' => json_encode(['answer' => 'preserved'], JSON_THROW_ON_ERROR),
+        'answers_payload' => json_encode([
+            [
+                'question_id' => 1,
+                'question' => 'Explain a production tradeoff.',
+                'rubric' => 'Identifies the relevant tradeoff.',
+                'answer' => 'preserved',
+            ],
+        ], JSON_THROW_ON_ERROR),
         'status' => 'submitted',
         'created_at' => $now,
         'updated_at' => $now,
@@ -200,7 +207,14 @@ test('postgresql migrates production-shaped legacy data and enforces team constr
             ->and($invitations->pluck('campaign_id')->all())->toBe([$legacy['campaigns'][0], $legacy['campaigns'][1]])
             ->and($assessment->campaign_id)->toBe($legacy['campaigns'][2])
             ->and($assessment->user_id)->toBe($legacy['candidates'][2])
-            ->and(json_decode($assessment->answers_payload, true, flags: JSON_THROW_ON_ERROR))->toBe(['answer' => 'preserved'])
+            ->and(json_decode($assessment->answers_payload, true, flags: JSON_THROW_ON_ERROR))->toBe([
+                [
+                    'question_id' => 1,
+                    'question' => 'Explain a production tradeoff.',
+                    'rubric' => 'Identifies the relevant tradeoff.',
+                    'answer' => 'preserved',
+                ],
+            ])
             ->and($sessions)->toHaveCount(2)
             ->and($sessions->pluck('status')->unique()->all())->toBe([ExamSessionStatus::InProgress->value])
             ->and($sessions->pluck('id')->all())->toBe($legacy['sessions'])
