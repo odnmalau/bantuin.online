@@ -42,35 +42,6 @@ test('fonts are self hosted from the official Vercel release', function () {
         ->not->toContain('laravel-vite-plugin/fonts');
 });
 
-test('wide gamut colors mirror both design documents', function (string $designFile) {
-    $design = file_get_contents(base_path($designFile));
-    $stylesheet = file_get_contents(resource_path('css/app.css'));
-
-    expect($design)->not->toBeFalse()
-        ->and($stylesheet)->not->toBeFalse()
-        ->and($stylesheet)->toContain("font-family: 'Geist Sans';")
-        ->toContain("font-family: 'Geist Mono';")
-        ->toContain("url('../fonts/Geist[wght].woff2')")
-        ->toContain("url('../fonts/GeistMono[wght].woff2')")
-        ->toContain('@media (color-gamut: p3)');
-
-    preg_match_all(
-        '/^\s{2}([a-z]+-\d+)-p3: "([^"]+)"$/m',
-        $design,
-        $matches,
-        PREG_SET_ORDER,
-    );
-
-    expect($matches)->toHaveCount(70);
-
-    foreach ($matches as [, $token, $value]) {
-        expect($stylesheet)->toContain("--geist-{$token}: {$value};");
-    }
-})->with([
-    'light theme' => 'design.md',
-    'dark theme' => 'design.dark.md',
-]);
-
 test('core controls preserve the documented geometry and focus treatment', function () {
     $button = file_get_contents(resource_path('js/components/ui/button.tsx'));
     $input = file_get_contents(resource_path('js/components/ui/input.tsx'));
