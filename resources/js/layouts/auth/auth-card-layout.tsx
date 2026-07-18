@@ -32,7 +32,7 @@ export default function AuthCardLayout({
                 </Link>
 
                 <div className="flex flex-col gap-6">
-                    <Card>
+                    <Card className="bg-background-200">
                         <CardHeader className="px-8 pt-8 pb-0 text-center">
                             <CardTitle className="text-heading-20">
                                 {title}
