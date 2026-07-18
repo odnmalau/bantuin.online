@@ -1,13 +1,11 @@
 # Bantuin Online
 
-### AI Hiring Assessment Autopilot powered by Qwen Cloud
+### AI-powered hiring assessment platform
 
 [![Tests](https://github.com/odnmalau/bantuin.online/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/odnmalau/bantuin.online/actions/workflows/tests.yml)
 [![Lint](https://github.com/odnmalau/bantuin.online/actions/workflows/lint.yml/badge.svg?branch=master)](https://github.com/odnmalau/bantuin.online/actions/workflows/lint.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
-- **Hackathon:** [Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/)
-- **Track:** Track 4 — Autopilot Agent
 - **Live application:** [app.bantuin.online](https://app.bantuin.online)
 
 Bantuin Online is a production-oriented hiring assessment platform that turns a
@@ -18,8 +16,6 @@ and prepare an interview email. Humans remain in control of every consequential
 decision: generated questions are drafts until approved, and no interview email
 is sent until a hiring team member reviews the evidence and explicitly approves
 the outcome.
-
-<!-- Add the public three-minute demo video URL near the live application link before the final Devpost submission. -->
 
 ## The problem
 
@@ -86,9 +82,82 @@ Only an explicit approval queues the interview email.
 
 ## Architecture
 
-![Bantuin Online architecture: users access an Inertia React application through Cloudflare, Laravel and queue workers run on Alibaba Cloud, and a Qwen reasoner-structurer-critic pipeline stops at human checkpoints.](docs/architecture.svg)
+### System topology
 
-[Open the full-size architecture diagram](docs/architecture.svg).
+```mermaid
+flowchart LR
+    subgraph access["People and access"]
+        direction TB
+        hiring["Hiring Team<br/>Creates campaigns and reviews decisions"]
+        candidate["Candidate<br/>Uploads a resume and completes assessments"]
+        operator["Platform Operator<br/>Supports team lifecycle"]
+    end
+
+    subgraph experience["Experience and edge"]
+        direction TB
+        edge["Cloudflare Edge<br/>DNS, TLS, and edge security"]
+        frontend["Inertia React Application<br/>React, TypeScript, and Tailwind CSS"]
+    end
+
+    subgraph production["Alibaba Cloud production environment"]
+        direction TB
+        app["Laravel 13 Application<br/>FrankenPHP, policies, and orchestration"]
+        worker["Database Queue Worker<br/>Retries, backoff, and idempotent jobs"]
+        database[("PostgreSQL 17<br/>Application and audit data")]
+        runtime[("Persistent Runtime State<br/>Queues, locks, and sessions")]
+
+        app --> database
+        app --> worker
+        worker --> database
+        worker --> runtime
+    end
+
+    subgraph services["External services"]
+        oauth["Google OAuth<br/>Identity and sign-in"]
+        storage["Private Object Storage<br/>Candidate resume PDFs"]
+        qwen["Qwen Cloud<br/>Reasoning and structured output"]
+        email["Resend<br/>Interview email delivery"]
+    end
+
+    hiring --> edge
+    candidate --> edge
+    operator -.->|Isolated support authority| edge
+    edge --> frontend --> app
+    oauth --> app
+    app --> storage
+    worker --> qwen
+    worker --> email
+```
+
+### AI assessment workflow
+
+```mermaid
+flowchart LR
+    context["1. Campaign Context<br/>Role, skills, seniority, and threshold"]
+    reasoner["2. Qwen Reasoner<br/>Designs questions and rubrics"]
+    structurer["3. Structured Agent<br/>Validates and stores drafts"]
+    questionReview{"Human Checkpoint<br/>Review, edit, and approve"}
+    publish["Publish Campaign"]
+
+    candidateInput["4. Candidate Input<br/>Resume, answers, and integrity events"]
+    evaluation["5. AI Evaluation<br/>Screening, scoring, and confidence"]
+    critic["6. Backend and Critic<br/>Ranking and consistency checks"]
+    resultReview{"Human Checkpoint<br/>Approve, override, promote, or reject"}
+    action["7. Controlled Action<br/>Queue an approved interview email"]
+
+    qwenModels["Qwen Cloud<br/>qwen3.7-max reasoning<br/>qwen3.7-plus structured output"]
+
+    context --> reasoner --> structurer --> questionReview --> publish
+    publish --> candidateInput --> evaluation --> critic --> resultReview --> action
+
+    qwenModels -.-> reasoner
+    qwenModels -.-> structurer
+    qwenModels -.-> evaluation
+    qwenModels -.-> critic
+
+    classDef checkpoint fill:#fffbeb,stroke:#f59e0b,stroke-width:2px
+    class questionReview,resultReview checkpoint
+```
 
 The production container topology is defined in
 [`compose.production.yaml`](compose.production.yaml). It separates the web
@@ -96,8 +165,6 @@ application, queue worker, migration command, and PostgreSQL database, with
 health checks and persistent volumes. Images are verified in CI and published
 to GHCR with provenance metadata and an SBOM by
 [`docker-publish.yml`](.github/workflows/docker-publish.yml).
-
-<!-- Add the direct repository link to the Alibaba Cloud deployment proof here before the final Devpost submission. -->
 
 ## Why the Qwen integration is technically different
 
@@ -152,7 +219,7 @@ Representative implementation files:
   encrypted.
 - Demo accounts are protected from profile and team-lifecycle mutations.
 
-## Judge testing guide
+## Demo walkthrough
 
 No password or private credential is required. The login page provides
 **Demo Admin** and **Demo Candidate** buttons.
@@ -298,11 +365,10 @@ PostgreSQL integration cases were skipped because the integration database was
 not running. The GitHub Actions workflow runs the suite on PHP 8.4 and 8.5 and
 executes the PostgreSQL migration coverage against a real PostgreSQL service.
 
-## Built during the hackathon
+## Engineering highlights
 
-Development began during the hackathon submission period. The project evolved
-from an initial Laravel application into the current end-to-end autopilot,
-including:
+The platform combines the following capabilities into an end-to-end assessment
+workflow:
 
 - a custom Qwen Cloud provider and gateway for the Laravel AI SDK;
 - reasoner/structurer pipelines for generation, evaluation, and criticism;
@@ -311,17 +377,7 @@ including:
 - deterministic ranking, human review, recovery, and audit timelines;
 - production containers, health checks, CI verification, and Alibaba Cloud
   deployment support; and
-- protected, credential-free demo access for judges.
-
-Git history is retained to make the delivery timeline and technical evolution
-reviewable.
-
-## Documentation
-
-- [Architecture diagram](docs/architecture.svg)
-- [How the assessment autopilot works](docs/HOW_IT_WORKS_AI_ASSESSMENT_AUTOPILOT.md)
-- [Product requirements](docs/PRD_AI_ASSESSMENT_AUTOPILOT.md)
-- [Team tenancy architecture decision](docs/adr/0001-use-contextual-identities-for-team-tenancy.md)
+- protected, credential-free demo access for evaluation and testing.
 
 ## License
 

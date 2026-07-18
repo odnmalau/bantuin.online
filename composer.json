@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/react-starter-kit",
+    "name": "bantuin-online/platform",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "AI-powered hiring assessment platform with human-controlled decision workflows.",
     "keywords": [
         "laravel",
         "framework"
