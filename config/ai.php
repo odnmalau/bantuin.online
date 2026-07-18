@@ -84,7 +84,7 @@ return [
 
         'qwen' => [
             'driver' => 'qwen',
-            'key' => env('QWEN_API_KEY', env('DASHSCOPE_API_KEY')),
+            'key' => env('QWEN_API_KEY'),
             'url' => env('QWEN_BASE_URL', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'),
             'timeout' => (int) env('QWEN_TIMEOUT', 30),
             'models' => [
