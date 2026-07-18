@@ -1,3 +1,0 @@
-# Use contextual identities for team tenancy
-
-HirePilot will not classify a user globally as either an administrator or a candidate. Hiring authority comes from a durable Team Membership, candidacy comes from participation in a Campaign owned by another Team, and Platform Operator authority remains an independent support capability. This lets one account collaborate for one organization and participate as a candidate elsewhere without granting cross-Team access; historical membership and candidacy remain mutually exclusive within the same Team to protect assessment integrity. This replaces the simpler global-role model and requires authorization to derive authority from the relevant Team or Campaign context.

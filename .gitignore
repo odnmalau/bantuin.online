@@ -28,11 +28,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
-/docs
-!/docs/
-/docs/*
-!/docs/agents/
-!/docs/agents/*.md
-!/docs/adr/
-!/docs/adr/*.md
+/docs/
+/design.md
+/design.dark.md
 /.pnpm-store
