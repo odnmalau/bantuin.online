@@ -2,6 +2,7 @@
 
 test('assessment queue budgets cover supported qwen calls below retry after', function () {
     $qwenTimeout = (int) config('assessment.qwen.timeout');
+    $reasonerTimeout = (int) config('assessment.qwen.reasoner_timeout');
     $transportAttemptCount = (int) config('assessment.qwen.transport_attempt_count');
     $repairAttempts = (int) config('assessment.evaluation.repair_attempts');
     $resumeProcessingMargin = (int) config('assessment.queue.resume_processing_margin');
@@ -12,16 +13,22 @@ test('assessment queue budgets cover supported qwen calls below retry after', fu
     $staleAfter = (int) config('assessment.queue.external_work_stale_after');
     $retryAfter = (int) config('queue.connections.database.retry_after');
 
-    $attemptSeconds = $qwenTimeout * $transportAttemptCount;
-    $supportedCalls = 1 + $repairAttempts + 1;
-    $minimumResumeTimeout = $attemptSeconds + $resumeProcessingMargin;
-    $minimumEvaluationTimeout = ($attemptSeconds * $supportedCalls) + $processingMargin;
+    $structuredAttemptSeconds = $qwenTimeout * $transportAttemptCount;
+    $reasonerAttemptSeconds = $reasonerTimeout * $transportAttemptCount;
+    $supportedReasonerCalls = 2;
+    $supportedStructuredCalls = 2 + $repairAttempts;
+    $minimumResumeTimeout = $structuredAttemptSeconds + $resumeProcessingMargin;
+    $minimumEvaluationTimeout = ($reasonerAttemptSeconds * $supportedReasonerCalls)
+        + ($structuredAttemptSeconds * $supportedStructuredCalls)
+        + $processingMargin;
 
     expect($transportAttemptCount)->toBeGreaterThan(0)
-        ->and($attemptSeconds)->toBe($qwenTimeout * $transportAttemptCount)
-        ->and($supportedCalls)->toBe(1 + $repairAttempts + 1)
+        ->and($structuredAttemptSeconds)->toBe($qwenTimeout * $transportAttemptCount)
+        ->and($reasonerAttemptSeconds)->toBe($reasonerTimeout * $transportAttemptCount)
+        ->and($supportedReasonerCalls)->toBe(2)
+        ->and($supportedStructuredCalls)->toBe(2 + $repairAttempts)
         ->and($resumeTimeout)->toBe($minimumResumeTimeout)
-        ->and($resumeTimeout)->toBeGreaterThan($attemptSeconds)
+        ->and($resumeTimeout)->toBeGreaterThan($structuredAttemptSeconds)
         ->and($evaluationTimeout)->toBe($minimumEvaluationTimeout)
         ->and($evaluationTimeout)->toBeGreaterThan(30)
         ->and($retryAfter)->toBeGreaterThan($resumeTimeout)

@@ -6,7 +6,10 @@ return [
     'qwen' => [
         'provider' => env('QWEN_PROVIDER', 'qwen'),
         'model' => env('QWEN_MODEL', 'qwen3.7-plus'),
+        'reasoner_model' => env('QWEN_REASONER_MODEL', 'qwen3.7-max'),
+        'structured_model' => env('QWEN_STRUCTURED_MODEL', env('QWEN_MODEL', 'qwen3.7-plus')),
         'timeout' => (int) env('QWEN_TIMEOUT', 30),
+        'reasoner_timeout' => (int) env('QWEN_REASONER_TIMEOUT', 120),
         'transport_attempt_count' => (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2),
         'transport_retry_sleep_ms' => (int) env('ASSESSMENT_QWEN_TRANSPORT_RETRY_SLEEP_MS', 300),
     ],
@@ -36,10 +39,10 @@ return [
 
     'queue' => [
         /*
-         * Supported evaluation calls: initial evaluator + configured repair attempts + critic.
-         * attemptSeconds = qwen_timeout * transport_attempt_count
-         * resume_timeout must exceed one attemptSeconds budget + processing margin.
-         * evaluation_timeout must exceed supported_calls * attemptSeconds + processing margin.
+         * Supported evaluation calls: evaluator reasoner + evaluator structurer +
+         * configured structurer repairs + critic reasoner + critic structurer.
+         * resume_timeout must exceed one structured attempt budget + processing margin.
+         * evaluation_timeout must exceed all reasoner and structured attempt budgets.
          * queue retry_after/visibility and stale_after must exceed all job timeouts.
          */
         'resume_processing_margin' => (int) env('ASSESSMENT_RESUME_PROCESSING_MARGIN', 30),
@@ -53,14 +56,17 @@ return [
         ),
         'evaluation_timeout' => (int) env(
             'ASSESSMENT_EVALUATION_JOB_TIMEOUT',
-            ((int) env('QWEN_TIMEOUT', 30)
+            ((int) env('QWEN_REASONER_TIMEOUT', 120)
                 * (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2)
-                * (1 + (int) env('ASSESSMENT_EVALUATION_REPAIR_ATTEMPTS', 1) + 1))
+                * 2)
+            + ((int) env('QWEN_TIMEOUT', 30)
+                * (int) env('ASSESSMENT_QWEN_TRANSPORT_ATTEMPTS', 2)
+                * (2 + (int) env('ASSESSMENT_EVALUATION_REPAIR_ATTEMPTS', 1)))
             + (int) env('ASSESSMENT_EVALUATION_PROCESSING_MARGIN', 30),
         ),
         'external_work_stale_after' => (int) env(
             'ASSESSMENT_EXTERNAL_WORK_STALE_AFTER',
-            (int) env('ASSESSMENT_QUEUE_RETRY_AFTER', 270),
+            (int) env('ASSESSMENT_QUEUE_RETRY_AFTER', 750),
         ),
     ],
 

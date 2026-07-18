@@ -50,6 +50,9 @@ expect()->extend('toBeOne', function () {
 |
 */
 
+use App\Ai\Agents\AssessmentCriticReasonerAgent;
+use App\Ai\Agents\AssessmentEvaluationReasonerAgent;
+use App\Ai\Agents\AssessmentGenerationReasonerAgent;
 use App\Models\Assessment;
 use App\Models\Campaign;
 use App\Models\CampaignInvitation;
@@ -129,6 +132,24 @@ function assessmentEvaluationResponse(
             'body' => $includeEmail ? 'Thank you for completing the assessment. We would like to invite you to continue to the interview stage.' : null,
         ],
     ];
+}
+
+function fakeAssessmentEvaluationReasoning(
+    string $report = 'Question 1 scores 82 with confidence 90 and meets the rubric. The candidate should receive a generic interview invitation.',
+): void {
+    AssessmentEvaluationReasonerAgent::fake([$report]);
+}
+
+function fakeAssessmentCriticReasoning(
+    string $report = 'Recommend passed with no manual review. The assessment package is consistent and safe for review.',
+): void {
+    AssessmentCriticReasonerAgent::fake([$report]);
+}
+
+function fakeAssessmentGenerationReasoning(
+    string $report = 'Design one practical backend section with two role-specific questions and observable rubrics.',
+): void {
+    AssessmentGenerationReasonerAgent::fake([$report, $report]);
 }
 
 function assignCandidateToCampaignExam(User $candidate, Campaign $campaign, ?User $invitedBy = null): CampaignInvitation

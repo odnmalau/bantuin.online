@@ -21,6 +21,7 @@ beforeEach(function () {
     $this->withoutVite();
     config()->set('ai.providers.qwen.key', 'test-qwen-key');
     config()->set('assessment.threshold', 75);
+    fakeAssessmentCriticReasoning();
     AssessmentCriticAgent::fake([
         [
             'outcome' => 'passed',
@@ -54,6 +55,8 @@ test('assessment autopilot product flow works end to end', function () {
             'expected_rubric' => 'Mentions read performance, write cost, and storage tradeoffs.',
             'sort_order' => 1,
         ]);
+
+    fakeAssessmentEvaluationReasoning();
 
     AssessmentEvaluatorAgent::fake([
         assessmentEvaluationResponse(82, [$question->id]),

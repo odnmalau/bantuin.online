@@ -18,6 +18,7 @@ beforeEach(function () {
         'resume_score' => 0,
         'assessment_score' => 100,
     ]);
+    fakeAssessmentCriticReasoning();
     AssessmentCriticAgent::fake([
         [
             'outcome' => 'passed',
@@ -73,6 +74,7 @@ test('ranking calculator ignores legacy campaign weights and uses assessment sco
 });
 
 test('evaluation job persists open ended assessment scoring fields', function () {
+    fakeAssessmentEvaluationReasoning();
     AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(86)]);
 
     $assessment = Assessment::factory()

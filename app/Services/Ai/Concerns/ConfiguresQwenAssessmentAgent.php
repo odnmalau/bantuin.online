@@ -4,6 +4,7 @@ namespace App\Services\Ai\Concerns;
 
 use App\Services\Ai\AssessmentGenerationException;
 use Illuminate\Support\Arr;
+use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use RuntimeException;
 
@@ -19,9 +20,24 @@ trait ConfiguresQwenAssessmentAgent
         return (string) config('assessment.qwen.model');
     }
 
+    protected function qwenReasonerModel(): string
+    {
+        return (string) config('assessment.qwen.reasoner_model');
+    }
+
+    protected function qwenStructuredModel(): string
+    {
+        return (string) config('assessment.qwen.structured_model');
+    }
+
     protected function qwenAgentTimeout(): int
     {
         return (int) config('assessment.qwen.timeout');
+    }
+
+    protected function qwenReasonerTimeout(): int
+    {
+        return (int) config('assessment.qwen.reasoner_timeout');
     }
 
     protected function qwenApiKeyConfigured(): bool
@@ -60,19 +76,52 @@ trait ConfiguresQwenAssessmentAgent
     }
 
     /**
+     * @param  class-string  $exceptionClass
+     */
+    protected function assertAgentResponse(mixed $response, string $exceptionClass): AgentResponse
+    {
+        if (! $response instanceof AgentResponse || trim($response->text) === '') {
+            throw $exceptionClass::invalidOutput('expected non-empty reasoning response.');
+        }
+
+        return $response;
+    }
+
+    /**
      * @param  class-string<RuntimeException>  $exceptionClass
      */
-    protected function promptStructuredAgent(object $agent, string $prompt, string $exceptionClass): StructuredAgentResponse
-    {
+    protected function promptStructuredAgent(
+        object $agent,
+        string $prompt,
+        string $exceptionClass,
+        ?string $model = null,
+        ?int $timeout = null,
+    ): StructuredAgentResponse {
         return $this->assertStructuredAgentResponse(
             $agent->prompt(
                 prompt: $prompt,
                 provider: $this->qwenAgentProvider(),
-                model: $this->qwenAgentModel(),
-                timeout: $this->qwenAgentTimeout(),
+                model: $model ?? $this->qwenAgentModel(),
+                timeout: $timeout ?? $this->qwenAgentTimeout(),
             ),
             $exceptionClass,
         );
+    }
+
+    /**
+     * @param  class-string<RuntimeException>  $exceptionClass
+     */
+    protected function promptReasoningAgent(object $agent, string $prompt, string $exceptionClass): string
+    {
+        return $this->assertAgentResponse(
+            $agent->prompt(
+                prompt: $prompt,
+                provider: $this->qwenAgentProvider(),
+                model: $this->qwenReasonerModel(),
+                timeout: $this->qwenReasonerTimeout(),
+            ),
+            $exceptionClass,
+        )->text;
     }
 
     /**
@@ -92,7 +141,7 @@ trait ConfiguresQwenAssessmentAgent
         return [
             'generated_at' => now()->toIso8601String(),
             'provider' => $this->qwenAgentProvider(),
-            'model' => $this->qwenAgentModel(),
+            'model' => $this->qwenStructuredModel(),
             'prompt_version' => (string) config('assessment.generator.prompt_version'),
             'agent' => $agentClass,
             'generation_options' => [

@@ -158,7 +158,10 @@ test('live processing claims cannot be stolen but stale evaluation claims can be
 test('evaluation compute runs outside transactions and stale attempts are ignored', function () {
     config()->set('ai.providers.qwen.key', 'test-qwen-key');
 
+    fakeAssessmentEvaluationReasoning();
+
     AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(82)]);
+    fakeAssessmentCriticReasoning();
     AssessmentCriticAgent::fake([
         [
             'outcome' => 'passed',

@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\Agents\AssessmentGenerationReasonerAgent;
 use App\Ai\Agents\AssessmentGeneratorAgent;
 use App\CampaignStatus;
 use App\Models\Campaign;
@@ -17,10 +18,12 @@ beforeEach(function () {
     $this->withoutVite();
     config()->set('ai.providers.qwen.key', 'test-qwen-key');
     config()->set('ai.providers.qwen.url', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1');
-    config()->set('assessment.qwen.model', 'qwen3.7-plus');
+    config()->set('assessment.qwen.reasoner_model', 'qwen3.7-max');
+    config()->set('assessment.qwen.structured_model', 'qwen3.7-plus');
 });
 
 test('admin can generate draft assessment questions for a campaign', function () {
+    fakeAssessmentGenerationReasoning();
     AssessmentGeneratorAgent::fake([
         generatedAssessmentOutput(),
     ]);
@@ -70,6 +73,9 @@ test('admin can generate draft assessment questions for a campaign', function ()
     expect($audit)->toHaveCount(1)
         ->and($audit[0]['provider'])->toBe('qwen')
         ->and($audit[0]['model'])->toBe('qwen3.7-plus')
+        ->and($audit[0]['reasoner_model'])->toBe('qwen3.7-max')
+        ->and($audit[0]['structured_model'])->toBe('qwen3.7-plus')
+        ->and($audit[0]['reasoner_agent'])->toContain('AssessmentGenerationReasonerAgent')
         ->and($audit[0]['prompt_version'])->toBe('2')
         ->and($audit[0]['agent'])->toContain('AssessmentGeneratorAgent')
         ->and($audit[0]['questions_created'])->toBe(2)
@@ -87,10 +93,16 @@ test('admin can generate draft assessment questions for a campaign', function ()
         && str_contains($prompt->prompt, 'ai_generation_notes')
         && ! str_contains($prompt->prompt, 'generation_instructions')
         && str_contains($prompt->prompt, 'Prioritize job-relevant scenarios over trivia')
-        && ! str_contains($prompt->prompt, 'Prefer practical debugging questions.'));
+        && ! str_contains($prompt->prompt, 'Prefer practical debugging questions.')
+        && str_contains($prompt->prompt, 'untrusted_reasoning_report'));
+
+    AssessmentGenerationReasonerAgent::assertPrompted(fn ($prompt): bool => str_contains($prompt->prompt, 'Backend Engineer')
+        && str_contains($prompt->prompt, 'short response')
+        && str_contains($prompt->prompt, 'existing_content_to_avoid'));
 });
 
 test('admin can generate one draft question for an existing campaign section', function () {
+    fakeAssessmentGenerationReasoning();
     AssessmentGeneratorAgent::fake([
         generatedAssessmentOutput(),
     ]);
@@ -142,6 +154,7 @@ test('admin can generate one draft question for an existing campaign section', f
 });
 
 test('campaign question generation scopes the section to the campaign', function () {
+    fakeAssessmentGenerationReasoning();
     AssessmentGeneratorAgent::fake();
 
     $admin = User::factory()->teamOwner()->create();
@@ -157,6 +170,7 @@ test('campaign question generation scopes the section to the campaign', function
 });
 
 test('assessment regeneration sends existing sections and questions as exclusion context', function () {
+    fakeAssessmentGenerationReasoning();
     AssessmentGeneratorAgent::fake([
         generatedAssessmentOutput(),
     ]);
@@ -200,6 +214,8 @@ test('campaign assessment generation respects question_count limit', function ()
         'sort_order' => 30,
     ];
 
+    fakeAssessmentGenerationReasoning();
+
     AssessmentGeneratorAgent::fake([$output]);
 
     $admin = User::factory()->teamOwner()->create();
@@ -217,6 +233,7 @@ test('campaign assessment generation respects question_count limit', function ()
 });
 
 test('campaign assessment generation is blocked while draft questions remain', function () {
+    fakeAssessmentGenerationReasoning();
     AssessmentGeneratorAgent::fake();
 
     $admin = User::factory()->teamOwner()->create();
@@ -237,6 +254,7 @@ test('campaign assessment generation is blocked while draft questions remain', f
 });
 
 test('generated questions without rubrics are rejected without saving drafts', function () {
+    fakeAssessmentGenerationReasoning();
     AssessmentGeneratorAgent::fake([
         [
             'sections' => [
@@ -280,19 +298,26 @@ test('generated questions without rubrics are rejected without saving drafts', f
 
 test('qwen assessment generator uses json object mode through the qwen provider', function () {
     Http::fake([
-        'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions' => Http::response([
-            'choices' => [
-                [
+        'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions' => Http::sequence()
+            ->push([
+                'choices' => [[
+                    'message' => [
+                        'content' => 'Design a Backend Fundamentals section with two practical Laravel and PostgreSQL questions, complete rubrics, points, difficulty, and ordering.',
+                        'reasoning_content' => 'Internal reasoning.',
+                    ],
+                ]],
+            ])
+            ->push([
+                'choices' => [[
                     'message' => [
                         'content' => json_encode(generatedAssessmentOutput()),
                     ],
+                ]],
+                'usage' => [
+                    'prompt_tokens' => 220,
+                    'completion_tokens' => 180,
                 ],
-            ],
-            'usage' => [
-                'prompt_tokens' => 220,
-                'completion_tokens' => 180,
-            ],
-        ]),
+            ]),
     ]);
 
     $campaign = Campaign::factory()->create([
@@ -311,6 +336,15 @@ test('qwen assessment generator uses json object mode through the qwen provider'
         ->and($campaign->questions()->where('status', QuestionStatus::Draft->value)->count())->toBe(2)
         ->and($campaign->refresh()->ai_generation_audit)->toHaveCount(1);
 
+    Http::assertSentCount(2);
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions'
+        && $request['model'] === 'qwen3.7-max'
+        && $request->hasHeader('Authorization', 'Bearer test-qwen-key')
+        && ! array_key_exists('response_format', $request->data())
+        && data_get($request->data(), 'enable_thinking') === true
+        && str_contains(data_get($request->data(), 'messages.0.content'), 'plain-text assessment design report')
+        && str_contains(data_get($request->data(), 'messages.1.content'), 'Backend Engineer')
+        && str_contains(data_get($request->data(), 'messages.1.content'), 'Indonesian'));
     Http::assertSent(fn ($request): bool => $request->url() === 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions'
         && $request['model'] === 'qwen3.7-plus'
         && $request->hasHeader('Authorization', 'Bearer test-qwen-key')
@@ -318,11 +352,12 @@ test('qwen assessment generator uses json object mode through the qwen provider'
         && data_get($request->data(), 'enable_thinking') === false
         && ! array_key_exists('max_tokens', $request->data())
         && str_contains(data_get($request->data(), 'messages.0.content'), 'JSON')
-        && str_contains(data_get($request->data(), 'messages.1.content'), 'Backend Engineer')
-        && str_contains(data_get($request->data(), 'messages.1.content'), 'Indonesian'));
+        && str_contains(data_get($request->data(), 'messages.1.content'), 'untrusted_reasoning_report')
+        && str_contains(data_get($request->data(), 'messages.1.content'), 'Design a Backend Fundamentals section'));
 });
 
 test('assessment generation always uses the campaign language in its audit metadata', function () {
+    fakeAssessmentGenerationReasoning();
     AssessmentGeneratorAgent::fake([
         generatedAssessmentOutput(),
         generatedAssessmentOutput(),
@@ -370,6 +405,7 @@ test('candidate cannot generate campaign assessments', function () {
 });
 
 test('assessment generation rechecks that the campaign team is writable', function () {
+    fakeAssessmentGenerationReasoning();
     AssessmentGeneratorAgent::fake([generatedAssessmentOutput()]);
     $campaign = Campaign::factory()->create();
     $campaign->team->update(['status' => 'deactivated', 'deactivated_at' => now()]);

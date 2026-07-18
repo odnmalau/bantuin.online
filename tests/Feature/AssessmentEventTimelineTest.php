@@ -29,6 +29,7 @@ beforeEach(function () {
     config()->set('assessment.qwen.provider', 'qwen');
     config()->set('assessment.qwen.model', 'qwen3.7-plus');
     config()->set('ai.providers.qwen.key', 'test-qwen-key');
+    fakeAssessmentCriticReasoning();
     AssessmentCriticAgent::fake([
         [
             'outcome' => 'passed',
@@ -90,6 +91,7 @@ test('assessment event recorder redacts sensitive payload keys', function () {
 });
 
 test('evaluation job records agent activity timeline events', function () {
+    fakeAssessmentEvaluationReasoning();
     AssessmentEvaluatorAgent::fake([assessmentEvaluationResponse(82)]);
 
     $assessment = Assessment::factory()
