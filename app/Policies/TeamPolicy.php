@@ -39,7 +39,9 @@ class TeamPolicy
      */
     public function update(User $user, Team $team): bool
     {
-        if ($team->status !== TeamStatus::Active || $user->current_team_id !== $team->id) {
+        if ($team->isDemo()
+            || $team->status !== TeamStatus::Active
+            || $user->current_team_id !== $team->id) {
             return false;
         }
 
@@ -51,12 +53,13 @@ class TeamPolicy
 
     public function invite(User $user, Team $team, TeamMembershipRole $role): bool
     {
-        return TeamCapability::canInvite($user, $team, $role);
+        return ! $team->isDemo() && TeamCapability::canInvite($user, $team, $role);
     }
 
     public function transferOwnership(User $user, Team $team): bool
     {
-        return $team->status === TeamStatus::Active
+        return ! $team->isDemo()
+            && $team->status === TeamStatus::Active
             && $user->current_team_id === $team->id
             && $user->activeTeamMemberships()
                 ->where('team_id', $team->id)
@@ -66,7 +69,9 @@ class TeamPolicy
 
     public function deactivate(User $user, Team $team): bool
     {
-        return $team->status === TeamStatus::Active && $this->isCurrentOwner($user, $team);
+        return ! $team->isDemo()
+            && $team->status === TeamStatus::Active
+            && $this->isCurrentOwner($user, $team);
     }
 
     public function reactivate(User $user, Team $team): bool
@@ -91,7 +96,7 @@ class TeamPolicy
      */
     public function delete(User $user, Team $team): bool
     {
-        return $this->isCurrentOwner($user, $team);
+        return ! $team->isDemo() && $this->isCurrentOwner($user, $team);
     }
 
     /**

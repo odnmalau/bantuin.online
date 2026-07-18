@@ -6,6 +6,7 @@ use App\TeamMembershipRole;
 use App\TeamStatus;
 use Database\Factories\TeamFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -28,6 +29,8 @@ class Team extends Model
     ];
 
     private ?int $pendingOwnerId = null;
+
+    private ?bool $demo = null;
 
     public static function createForOwner(User $owner, string $name): self
     {
@@ -60,6 +63,14 @@ class Team extends Model
         return $this->hasOne(TeamMembership::class)
             ->where('role', TeamMembershipRole::Owner)
             ->whereNull('ended_at');
+    }
+
+    public function isDemo(): bool
+    {
+        return $this->demo ??= $this->ownerMembership()
+            ->whereHas('user', fn (Builder $query): Builder => $query
+                ->where('email', User::DEMO_ADMIN_EMAIL))
+            ->exists();
     }
 
     /** @return HasMany<Campaign, $this> */

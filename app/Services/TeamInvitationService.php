@@ -53,7 +53,8 @@ class TeamInvitationService
 
             $isAuthorizedOperator = $actorContext === 'platform_operator' && $inviter->isPlatformOperator();
 
-            if ($lockedTeam->status !== TeamStatus::Active
+            if ($lockedTeam->isDemo()
+                || $lockedTeam->status !== TeamStatus::Active
                 || (! $isAuthorizedOperator && ! TeamCapability::canManageRole($inviterRole, $role))) {
                 throw ValidationException::withMessages([
                     'invitation' => __('You are no longer authorized to issue this Team Invitation.'),
@@ -159,7 +160,7 @@ class TeamInvitationService
                 ]);
             }
 
-            if ($team->status !== TeamStatus::Active) {
+            if ($team->isDemo() || $team->status !== TeamStatus::Active) {
                 throw ValidationException::withMessages([
                     'invitation' => __('This Team is not accepting membership changes.'),
                 ]);

@@ -45,7 +45,8 @@ class OwnershipTransferService
             $ownerMembership = $lockedTeam->ownerMembership()->lockForUpdate()->firstOrFail();
             $recipientMembership = TeamMembership::query()->whereKey($recipient->id)->lockForUpdate()->firstOrFail();
 
-            if ($lockedTeam->status !== TeamStatus::Active
+            if ($lockedTeam->isDemo()
+                || $lockedTeam->status !== TeamStatus::Active
                 || ($byOperator ? ! $actor->isPlatformOperator() : $ownerMembership->user_id !== $actor->id)
                 || $recipientMembership->team_id !== $lockedTeam->id
                 || ! $recipientMembership->isActive()
@@ -117,7 +118,8 @@ class OwnershipTransferService
                 $lockedTransfer->update(['status' => OwnershipTransferStatus::Expired]);
             }
 
-            if (! $lockedTransfer->isRedeemable()
+            if ($team->isDemo()
+                || ! $lockedTransfer->isRedeemable()
                 || $team->status !== TeamStatus::Active
                 || ! $ownerMembership->isActive()
                 || $ownerMembership->role !== TeamMembershipRole::Owner

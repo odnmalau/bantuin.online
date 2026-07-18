@@ -13,7 +13,8 @@ class TeamInvitationPolicy
      */
     public function revoke(User $user, TeamInvitation $teamInvitation): bool
     {
-        return TeamCapability::canRevokeInvitation($user, $teamInvitation);
+        return ! $teamInvitation->team->isDemo()
+            && TeamCapability::canRevokeInvitation($user, $teamInvitation);
     }
 
     /**
@@ -21,6 +22,7 @@ class TeamInvitationPolicy
      */
     public function resend(User $user, TeamInvitation $teamInvitation): bool
     {
-        return TeamCapability::canResendInvitation($user, $teamInvitation);
+        return ! $teamInvitation->team->isDemo()
+            && TeamCapability::canResendInvitation($user, $teamInvitation);
     }
 }

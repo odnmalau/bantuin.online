@@ -15,7 +15,8 @@ class TeamMembershipPolicy
      */
     public function changeRole(User $user, TeamMembership $teamMembership): bool
     {
-        return TeamCapability::canChangeRole($user, $teamMembership);
+        return ! $teamMembership->team->isDemo()
+            && TeamCapability::canChangeRole($user, $teamMembership);
     }
 
     /**
@@ -23,7 +24,8 @@ class TeamMembershipPolicy
      */
     public function remove(User $user, TeamMembership $teamMembership): bool
     {
-        return TeamCapability::canRemove($user, $teamMembership);
+        return ! $teamMembership->team->isDemo()
+            && TeamCapability::canRemove($user, $teamMembership);
     }
 
     /**
@@ -31,7 +33,8 @@ class TeamMembershipPolicy
      */
     public function leave(User $user, TeamMembership $teamMembership): bool
     {
-        return $teamMembership->user_id === $user->id
+        return ! $teamMembership->team->isDemo()
+            && $teamMembership->user_id === $user->id
             && $teamMembership->isActive()
             && $teamMembership->role !== TeamMembershipRole::Owner
             && $user->current_team_id === $teamMembership->team_id

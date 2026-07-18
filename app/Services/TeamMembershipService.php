@@ -26,7 +26,8 @@ class TeamMembershipService
                 ->lockForUpdate()
                 ->first();
 
-            if ($team->status !== TeamStatus::Active
+            if ($team->isDemo()
+                || $team->status !== TeamStatus::Active
                 || ! $lockedMembership->isActive()
                 || $lockedMembership->role === TeamMembershipRole::Owner
                 || $actorMembership?->role !== TeamMembershipRole::Owner
@@ -71,7 +72,8 @@ class TeamMembershipService
                     || ($actorMembership?->role === TeamMembershipRole::Administrator
                         && $lockedMembership->role === TeamMembershipRole::Collaborator));
 
-            if ($team->status !== TeamStatus::Active
+            if ($team->isDemo()
+                || $team->status !== TeamStatus::Active
                 || ! $lockedMembership->isActive()
                 || (! $mayDepart && ! $mayRemove)) {
                 throw ValidationException::withMessages([

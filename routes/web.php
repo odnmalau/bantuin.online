@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\CampaignRankingController;
 use App\Http\Controllers\Admin\CampaignSectionController;
 use App\Http\Controllers\Admin\CampaignStatusController;
 use App\Http\Controllers\Admin\RankingController;
+use App\Http\Controllers\Auth\DemoLoginController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
@@ -34,6 +35,12 @@ Route::redirect('/', '/dashboard')->name('home');
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [LoginController::class, 'create'])->name('login');
+    Route::post('auth/demo/admin', [DemoLoginController::class, 'admin'])
+        ->middleware('throttle:10,1')
+        ->name('auth.demo.admin');
+    Route::post('auth/demo/candidate', [DemoLoginController::class, 'candidate'])
+        ->middleware('throttle:10,1')
+        ->name('auth.demo.candidate');
 
     Route::get('auth/google/redirect', [GoogleAuthController::class, 'redirect'])->name('auth.google.redirect');
     Route::get('auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');

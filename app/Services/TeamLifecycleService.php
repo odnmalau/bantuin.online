@@ -35,6 +35,10 @@ class TeamLifecycleService
             $lockedTeam = Team::query()->whereKey($team->id)->lockForUpdate()->firstOrFail();
             $byOperator ? $this->assertOperator($actor) : $this->assertOwner($lockedTeam, $actor);
 
+            if ($lockedTeam->isDemo()) {
+                throw ValidationException::withMessages(['team' => __('The Demo Team cannot be deactivated.')]);
+            }
+
             if ($lockedTeam->status !== TeamStatus::Active) {
                 throw ValidationException::withMessages(['team' => __('This Team is already deactivated.')]);
             }
@@ -119,6 +123,10 @@ class TeamLifecycleService
         DB::transaction(function () use ($team, $actor): void {
             $lockedTeam = Team::query()->whereKey($team->id)->lockForUpdate()->firstOrFail();
             $ownerMembership = $this->assertOwner($lockedTeam, $actor);
+
+            if ($lockedTeam->isDemo()) {
+                throw ValidationException::withMessages(['team' => __('The Demo Team cannot be deleted.')]);
+            }
 
             if ($blocker = $this->emptyTeamDeletionBlocker($lockedTeam, $ownerMembership->id)) {
                 throw ValidationException::withMessages(['team' => $blocker]);

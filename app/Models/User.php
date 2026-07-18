@@ -19,6 +19,10 @@ use LogicException;
 #[Hidden(['remember_token'])]
 class User extends Authenticatable
 {
+    public const DEMO_ADMIN_EMAIL = 'demo-admin@bantuin.online';
+
+    public const DEMO_CANDIDATE_EMAIL = 'demo-candidate@bantuin.online';
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, SoftDeletes;
 
@@ -87,6 +91,11 @@ class User extends Authenticatable
     public function isPlatformOperator(): bool
     {
         return $this->platformOperatorAuthorities()->active()->exists();
+    }
+
+    public function isDemoAccount(): bool
+    {
+        return in_array($this->email, [self::DEMO_ADMIN_EMAIL, self::DEMO_CANDIDATE_EMAIL], true);
     }
 
     public function selectCurrentTeam(Team $team): void

@@ -8,6 +8,11 @@ use Illuminate\Validation\Rule;
 
 class ProfileDeleteRequest extends FormRequest
 {
+    public function authorize(): bool
+    {
+        return $this->user()?->isDemoAccount() === false;
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
