@@ -49,14 +49,19 @@ services:
             - '443:8443/udp'
         environment:
             <<: *app-environment
-            SERVER_NAME: app.bantuin.online
-            CADDY_AUTO_HTTPS: 'on'
+            CADDY_HTTP_SERVER_ADDRESS: http://app.bantuin.online
+            CADDY_HTTPS_SERVER_ADDRESS: https://app.bantuin.online
+            CADDY_AUTO_HTTPS: 'off'
             CADDY_ADMIN: 'off'
             SSL_MODE: full
+            SSL_CERTIFICATE_FILE: /etc/ssl/certs/cloudflare-origin.pem
+            SSL_PRIVATE_KEY_FILE: /etc/ssl/private/cloudflare-origin.key
             HEALTHCHECK_PATH: /up
         volumes:
             - caddy_data:/data
             - caddy_config:/config
+            - ./tls/cloudflare-origin.pem:/etc/ssl/certs/cloudflare-origin.pem:ro
+            - ./tls/cloudflare-origin.key:/etc/ssl/private/cloudflare-origin.key:ro
         healthcheck:
             test:
                 - CMD
