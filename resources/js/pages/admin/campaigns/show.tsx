@@ -91,6 +91,7 @@ import {
     ItemSeparator,
     ItemTitle,
 } from '@/components/ui/item';
+import { Marker, MarkerContent, MarkerIcon } from '@/components/ui/marker';
 import {
     Select,
     SelectContent,
@@ -124,6 +125,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { UnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
+import { cn } from '@/lib/utils';
 import admin from '@/routes/admin';
 import type { SharedData } from '@/types';
 
@@ -669,7 +671,17 @@ export default function AdminCampaignsShow({
                                                 className="assessment-content-shimmer"
                                             />
                                         ) : null}
-                                        <div>
+                                        <div
+                                            inert={
+                                                isGeneratingAssessment ||
+                                                undefined
+                                            }
+                                            className={cn(
+                                                'transition-opacity',
+                                                isGeneratingAssessment &&
+                                                    'opacity-40',
+                                            )}
+                                        >
                                             {campaign.sections.length === 0 ? (
                                                 <Empty className="rounded-none p-8">
                                                     <EmptyHeader>
@@ -1040,7 +1052,12 @@ export default function AdminCampaignsShow({
                                         </div>
                                     </CardContent>
 
-                                    <CardFooter className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing)">
+                                    <CardFooter
+                                        inert={
+                                            isGeneratingAssessment || undefined
+                                        }
+                                        className="-mb-(--card-spacing) justify-between gap-3 border-t bg-background py-(--card-spacing) transition-opacity inert:opacity-40"
+                                    >
                                         <p className="text-sm text-muted-foreground">
                                             Add another section when the
                                             assessment needs a separate topic or
@@ -1350,38 +1367,61 @@ function AddQuestionAction({
                     section.id,
                 ])}
                 options={{ preserveScroll: true }}
-                className="mt-3 flex flex-col items-end gap-1"
+                className="mt-3 flex w-full flex-col items-end gap-1"
             >
                 {({ errors, processing }) => (
                     <>
-                        <ButtonGroup aria-label="Question actions">
-                            <Button
-                                type="button"
-                                size="default"
-                                variant="outline"
-                                disabled={generationDisabled}
-                                onClick={() => setOpen(true)}
+                        <div className="flex w-full items-center justify-between gap-3">
+                            {processing ? (
+                                <Marker
+                                    role="status"
+                                    data-test="question-generation-status"
+                                    className="w-auto"
+                                >
+                                    <MarkerIcon>
+                                        <Spinner />
+                                    </MarkerIcon>
+                                    <MarkerContent className="shimmer">
+                                        Generating question…
+                                    </MarkerContent>
+                                </Marker>
+                            ) : null}
+                            <ButtonGroup
+                                aria-label="Question actions"
+                                className="ml-auto"
                             >
-                                <Plus
-                                    aria-hidden="true"
-                                    data-icon="inline-start"
-                                />
-                                Add Question…
-                            </Button>
-                            <Button
-                                type="submit"
-                                size="icon"
-                                variant="outline"
-                                aria-label="Generate question with AI"
-                                disabled={generationDisabled || processing}
-                            >
-                                {processing ? (
-                                    <Spinner aria-hidden="true" />
-                                ) : (
-                                    <Sparkles aria-hidden="true" />
-                                )}
-                            </Button>
-                        </ButtonGroup>
+                                <Button
+                                    type="button"
+                                    size="default"
+                                    variant="outline"
+                                    disabled={generationDisabled}
+                                    onClick={() => setOpen(true)}
+                                >
+                                    <Plus
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                    />
+                                    Add Question…
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    size="icon"
+                                    variant="outline"
+                                    aria-label={
+                                        processing
+                                            ? 'Generating question with AI'
+                                            : 'Generate question with AI'
+                                    }
+                                    disabled={generationDisabled || processing}
+                                >
+                                    {processing ? (
+                                        <Spinner aria-hidden="true" />
+                                    ) : (
+                                        <Sparkles aria-hidden="true" />
+                                    )}
+                                </Button>
+                            </ButtonGroup>
+                        </div>
                         <InputError
                             message={errors[`generation.${section.id}`]}
                         />

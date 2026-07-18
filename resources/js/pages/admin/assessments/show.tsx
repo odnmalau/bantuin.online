@@ -1,7 +1,7 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePoll } from '@inertiajs/react';
 import {
     CheckCircle2,
-    EllipsisVertical,
+    Ellipsis,
     FileText,
     Inbox,
     Mail,
@@ -12,7 +12,8 @@ import {
     TrendingUp,
     XCircle,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Bar, ComposedChart, LabelList, Scatter, XAxis, YAxis } from 'recharts';
 import AssessmentController from '@/actions/App/Http/Controllers/Admin/AssessmentController';
 import AssessmentStatusBadge from '@/components/assessment-status-badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -32,12 +33,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
-    CardAction,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    ChartContainer,
+    ChartTooltip,
+    ChartTooltipContent,
+} from '@/components/ui/chart';
+import type { ChartConfig } from '@/components/ui/chart';
 import {
     Dialog,
     DialogClose,
@@ -71,24 +77,18 @@ import {
     FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import admin from '@/routes/admin';
 
 type AnswerSnapshot = {
     question_id: number;
+    section_id?: number | null;
+    section_title?: string | null;
     question: string;
     rubric: string;
     answer: string;
@@ -119,36 +119,6 @@ type EvaluationPayload = {
     question_evaluations: QuestionEvaluation[];
     section_scores: SectionScore[];
     manual_review_reasons?: string[];
-};
-
-type RankingPayload = {
-    components?: {
-        resume_score?: number | null;
-        assessment_score?: number | null;
-    };
-    configured_weights?: {
-        resume_score?: number;
-        assessment_score?: number;
-    };
-    normalized_weights?: {
-        resume_score?: number;
-        assessment_score?: number;
-    };
-    missing_components?: string[];
-    weighting_mode?: string;
-    formula?: string;
-    section_scores?: SectionScore[];
-};
-
-type CriticPayload = {
-    outcome?: string;
-    summary?: string;
-    findings?: string[];
-    manual_review_required?: boolean;
-    repaired_email?: {
-        subject?: string | null;
-        body?: string | null;
-    };
 };
 
 type Assessment = {
@@ -182,9 +152,7 @@ type Assessment = {
     assessment_score: number | null;
     evaluation_payload: EvaluationPayload | null;
     ranking_score: number | null;
-    ranking_payload: RankingPayload | null;
     section_scores: SectionScore[];
-    critic_payload: CriticPayload | null;
     ai_justification: string | null;
     ai_email_subject: string | null;
     ai_email_body: string | null;
@@ -206,6 +174,26 @@ type Assessment = {
 type Props = {
     assessment: Assessment;
 };
+
+type AnswerSection = {
+    key: string;
+    title: string;
+    answers: AnswerSnapshot[];
+};
+
+const PROCESSING_STATUSES = [
+    'submitted',
+    'resume_processing',
+    'resume_screening',
+    'evaluating',
+];
+
+const sectionScoreChartConfig = {
+    score: {
+        label: 'Score',
+        color: 'var(--chart-1)',
+    },
+} satisfies ChartConfig;
 
 function candidateInitials(name: string | null, email: string | null) {
     if (name) {
@@ -232,6 +220,33 @@ function scoreOrDash(score: number | null | undefined) {
     return score ?? '-';
 }
 
+function groupAnswersBySection(answers: AnswerSnapshot[]): AnswerSection[] {
+    const sections = new Map<string, AnswerSection>();
+
+    answers.forEach((answer) => {
+        const title = answer.section_title?.trim() || 'General';
+        const key =
+            answer.section_id !== null && answer.section_id !== undefined
+                ? `section-${answer.section_id}`
+                : `section-${title}`;
+        const section = sections.get(key);
+
+        if (section) {
+            section.answers.push(answer);
+
+            return;
+        }
+
+        sections.set(key, {
+            key,
+            title,
+            answers: [answer],
+        });
+    });
+
+    return Array.from(sections.values());
+}
+
 export default function AdminAssessmentsShow({ assessment }: Props) {
     const subject =
         assessment.approved_email_subject ??
@@ -244,6 +259,22 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
         assessment.candidate.email ??
         'Unknown candidate';
     const assessmentScore = assessment.assessment_score;
+    const isProcessing = PROCESSING_STATUSES.includes(assessment.status);
+    const { start, stop } = usePoll(
+        2000,
+        { only: ['assessment'] },
+        { autoStart: false, mode: 'rest' },
+    );
+
+    useEffect(() => {
+        if (isProcessing) {
+            start();
+
+            return;
+        }
+
+        stop();
+    }, [isProcessing, start, stop]);
 
     return (
         <>
@@ -261,15 +292,22 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
                     <ScoreMetric
                         label="Ranking score"
                         score={assessment.ranking_score}
+                        isProcessing={isProcessing}
                     />
                     <ScoreMetric
                         label="Resume"
                         score={assessment.resume_score}
+                        isProcessing={isProcessing}
                     />
-                    <ScoreMetric label="Assessment" score={assessmentScore} />
+                    <ScoreMetric
+                        label="Assessment"
+                        score={assessmentScore}
+                        isProcessing={isProcessing}
+                    />
                     <ScoreMetric
                         label="AI confidence"
                         score={assessment.evaluation_payload?.confidence}
+                        isProcessing={isProcessing}
                     />
                 </div>
 
@@ -295,33 +333,18 @@ export default function AdminAssessmentsShow({ assessment }: Props) {
                     </Alert>
                 ) : null}
 
-                {assessment.ranking_payload?.missing_components &&
-                assessment.ranking_payload.missing_components.length > 0 ? (
-                    <Alert>
-                        <SlidersHorizontal />
-                        <AlertTitle>Ranking components missing</AlertTitle>
-                        <AlertDescription>
-                            Missing components:{' '}
-                            {assessment.ranking_payload.missing_components.join(
-                                ', ',
-                            )}
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
+                <EvaluationSummary assessment={assessment} />
 
-                <Tabs defaultValue="overview" className="gap-4">
+                <SectionPerformance
+                    assessment={assessment}
+                    isProcessing={isProcessing}
+                />
+
+                <Tabs defaultValue="resume" className="gap-4">
                     <TabsList variant="line" className="w-full justify-start">
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="resume">Resume</TabsTrigger>
                         <TabsTrigger value="answers">Answers</TabsTrigger>
                     </TabsList>
-
-                    <TabsContent
-                        value="overview"
-                        className="flex flex-col gap-6"
-                    >
-                        <OverviewTab assessment={assessment} />
-                    </TabsContent>
 
                     <TabsContent value="resume" className="flex flex-col gap-6">
                         <ResumeTab assessment={assessment} />
@@ -385,11 +408,6 @@ function AssessmentOverviewCard({
                                 <AssessmentStatusBadge
                                     status={assessment.status}
                                 />
-                                {assessment.needs_manual_review ? (
-                                    <Badge variant="outline">
-                                        Needs review
-                                    </Badge>
-                                ) : null}
                             </div>
                             <CardDescription className="truncate">
                                 {assessment.candidate.email ?? '-'}
@@ -398,153 +416,180 @@ function AssessmentOverviewCard({
                                 {assessment.campaign.role_title ?? 'Role'} ·{' '}
                                 {assessment.campaign.title ?? 'Campaign'}
                             </p>
+                            <p className="text-sm text-muted-foreground">
+                                Submitted {formatDate(assessment.created_at)}
+                            </p>
                         </div>
                     </div>
 
-                    <AssessmentActionsMenu
+                    <AssessmentReviewActions
                         assessment={assessment}
                         subject={subject}
                         body={body}
                     />
                 </div>
             </CardHeader>
+        </Card>
+    );
+}
+
+function EvaluationSummary({ assessment }: { assessment: Assessment }) {
+    if (!assessment.ai_justification) {
+        return null;
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>AI Evaluation Summary</CardTitle>
+                <CardDescription>
+                    The primary recommendation for this candidate review.
+                </CardDescription>
+            </CardHeader>
             <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <MetaItem
-                        label="Submitted"
-                        value={formatDate(assessment.created_at)}
-                    />
-                    <MetaItem
-                        label="Evaluated"
-                        value={formatDate(assessment.evaluated_at)}
-                    />
-                    <MetaItem
-                        label="Approved"
-                        value={formatDate(assessment.approved_at)}
-                    />
-                    <MetaItem
-                        label="Email sent"
-                        value={formatDate(assessment.email_sent_at)}
-                    />
-                </div>
+                <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                    {assessment.ai_justification}
+                </p>
             </CardContent>
         </Card>
     );
 }
 
-function OverviewTab({ assessment }: { assessment: Assessment }) {
+function SectionPerformance({
+    assessment,
+    isProcessing,
+}: {
+    assessment: Assessment;
+    isProcessing: boolean;
+}) {
+    const chartData = assessment.section_scores.flatMap((section) =>
+        section.score === null
+            ? []
+            : [
+                  {
+                      section: section.title,
+                      score: section.score,
+                      points: `${section.earned_points}/${section.total_points}`,
+                  },
+              ],
+    );
+
     return (
-        <>
-            {assessment.ai_justification ? (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>AI Justification</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-                            {assessment.ai_justification}
-                        </p>
-                    </CardContent>
-                </Card>
-            ) : null}
-
-            {assessment.critic_payload ? (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Critic Review</CardTitle>
-                        <CardDescription>
-                            {assessment.critic_payload.summary ??
-                                'No critic summary available.'}
-                        </CardDescription>
-                        <CardAction>
-                            <div className="flex flex-col items-end gap-1.5">
-                                <Badge variant="outline">
-                                    {assessment.critic_payload.outcome ?? '-'}
-                                </Badge>
-                                {assessment.critic_payload
-                                    .manual_review_required ? (
-                                    <Badge variant="secondary">
-                                        Manual review required
-                                    </Badge>
-                                ) : null}
-                            </div>
-                        </CardAction>
-                    </CardHeader>
-                    {assessment.critic_payload.findings &&
-                    assessment.critic_payload.findings.length > 0 ? (
-                        <CardContent>
-                            <div className="flex flex-wrap gap-2">
-                                {assessment.critic_payload.findings.map(
-                                    (finding) => (
-                                        <Badge key={finding} variant="outline">
-                                            {finding}
-                                        </Badge>
-                                    ),
-                                )}
-                            </div>
-                        </CardContent>
-                    ) : null}
-                </Card>
-            ) : null}
-
-            {assessment.section_scores.length > 0 ? (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Section scores</CardTitle>
-                        <CardDescription>
-                            Per-section results used in the ranking package.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Section</TableHead>
-                                    <TableHead>Weight</TableHead>
-                                    <TableHead>Points</TableHead>
-                                    <TableHead>Score</TableHead>
-                                    <TableHead className="w-40">
-                                        Progress
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {assessment.section_scores.map((section) => (
-                                    <TableRow
-                                        key={`${section.section_id ?? 'section'}-${section.title}`}
-                                    >
-                                        <TableCell className="font-medium">
-                                            {section.title}
-                                        </TableCell>
-                                        <TableCell>{section.weight}</TableCell>
-                                        <TableCell>
-                                            {section.earned_points}/
-                                            {section.total_points}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline">
-                                                {section.score ?? '-'}%
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            {section.score !== null ? (
-                                                <Progress
-                                                    value={section.score}
-                                                />
-                                            ) : (
-                                                <span className="text-muted-foreground">
-                                                    -
+        <Card>
+            <CardHeader>
+                <CardTitle>Section Performance</CardTitle>
+                <CardDescription>
+                    A quick comparison of the candidate's assessment results.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {isProcessing && chartData.length === 0 ? (
+                    <div className="flex flex-col gap-4" aria-hidden="true">
+                        <Skeleton className="h-8 w-3/4" />
+                        <Skeleton className="h-8 w-2/3" />
+                        <Skeleton className="h-8 w-4/5" />
+                    </div>
+                ) : chartData.length === 0 ? (
+                    <Empty className="border border-dashed">
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                                <Medal />
+                            </EmptyMedia>
+                            <EmptyTitle>No section scores yet</EmptyTitle>
+                            <EmptyDescription>
+                                Section scores appear after assessment
+                                evaluation completes.
+                            </EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                ) : (
+                    <ChartContainer
+                        config={sectionScoreChartConfig}
+                        className="aspect-auto w-full"
+                        style={{
+                            height: Math.max(180, chartData.length * 44),
+                        }}
+                    >
+                        <ComposedChart
+                            accessibilityLayer
+                            data={chartData}
+                            layout="vertical"
+                            margin={{ left: 8, right: 48 }}
+                        >
+                            <XAxis type="number" domain={[0, 100]} hide />
+                            <YAxis
+                                dataKey="section"
+                                type="category"
+                                tickLine={false}
+                                axisLine={false}
+                                width={152}
+                                tickFormatter={(value: string) =>
+                                    value.length > 24
+                                        ? `${value.slice(0, 22)}…`
+                                        : value
+                                }
+                            />
+                            <ChartTooltip
+                                cursor={false}
+                                content={
+                                    <ChartTooltipContent
+                                        hideLabel
+                                        hideIndicator
+                                        formatter={(_value, _name, item) => (
+                                            <div className="flex min-w-44 flex-1 flex-col gap-1">
+                                                <span className="mb-1 font-medium">
+                                                    {item.payload.section}
                                                 </span>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            ) : null}
-        </>
+                                                <div className="flex justify-between gap-4">
+                                                    <span className="text-muted-foreground">
+                                                        Score
+                                                    </span>
+                                                    <span className="font-mono font-medium tabular-nums">
+                                                        {item.payload.score}%
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between gap-4">
+                                                    <span className="text-muted-foreground">
+                                                        Points
+                                                    </span>
+                                                    <span className="font-mono font-medium tabular-nums">
+                                                        {item.payload.points}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    />
+                                }
+                            />
+                            <Bar
+                                dataKey="score"
+                                fill="var(--color-score)"
+                                fillOpacity={0.28}
+                                barSize={4}
+                                radius={999}
+                                background={{
+                                    fill: 'var(--muted)',
+                                    radius: 999,
+                                }}
+                            >
+                                <LabelList
+                                    dataKey="score"
+                                    position="right"
+                                    formatter={(value) => `${String(value)}%`}
+                                    className="fill-foreground"
+                                    fontSize={12}
+                                />
+                            </Bar>
+                            <Scatter
+                                dataKey="score"
+                                fill="var(--color-score)"
+                                tooltipType="none"
+                            />
+                        </ComposedChart>
+                    </ChartContainer>
+                )}
+            </CardContent>
+        </Card>
     );
 }
 
@@ -555,88 +600,66 @@ function ResumeTab({ assessment }: { assessment: Assessment }) {
         null;
 
     return (
-        <div className="grid gap-6 lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]">
+        <div className="flex flex-col gap-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Resume file</CardTitle>
+                    <CardTitle>Resume Screening</CardTitle>
+                    <CardDescription className="flex flex-wrap gap-x-3 gap-y-1">
+                        <span className="truncate">
+                            {assessment.resume_original_name ?? 'No file'}
+                        </span>
+                        <span>
+                            Score {scoreOrDash(assessment.resume_score)}
+                        </span>
+                        <span>
+                            Confidence{' '}
+                            {assessment.resume_payload?.confidence ?? '-'}
+                        </span>
+                    </CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                    <FieldGroup className="gap-4">
-                        <MetaItem
-                            label="Filename"
-                            value={assessment.resume_original_name ?? '-'}
-                        />
-                        <MetaItem
-                            label="Score"
-                            value={scoreOrDash(assessment.resume_score)}
-                        />
-                        <MetaItem
-                            label="Confidence"
-                            value={assessment.resume_payload?.confidence ?? '-'}
-                        />
-                    </FieldGroup>
-                    {assessment.resume_score !== null ? (
-                        <Progress value={assessment.resume_score} />
-                    ) : null}
+                <CardContent>
+                    {summary ? (
+                        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                            {summary}
+                        </p>
+                    ) : (
+                        <Empty className="border border-dashed">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon">
+                                    <FileText />
+                                </EmptyMedia>
+                                <EmptyTitle>No resume screening yet</EmptyTitle>
+                                <EmptyDescription>
+                                    Screening results appear after resume
+                                    evaluation completes.
+                                </EmptyDescription>
+                            </EmptyHeader>
+                        </Empty>
+                    )}
                 </CardContent>
             </Card>
 
-            <div className="flex flex-col gap-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Resume Screening</CardTitle>
-                        <CardDescription>
-                            AI screening summary and skill signals.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {summary ? (
-                            <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-                                {summary}
-                            </p>
-                        ) : (
-                            <Empty className="border border-dashed">
-                                <EmptyHeader>
-                                    <EmptyMedia variant="icon">
-                                        <FileText />
-                                    </EmptyMedia>
-                                    <EmptyTitle>
-                                        No resume screening yet
-                                    </EmptyTitle>
-                                    <EmptyDescription>
-                                        Screening results appear after resume
-                                        evaluation completes.
-                                    </EmptyDescription>
-                                </EmptyHeader>
-                            </Empty>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                    <SkillGroup
-                        title="Matched skills"
-                        items={assessment.resume_payload?.matched_skills ?? []}
-                        variant="default"
-                    />
-                    <SkillGroup
-                        title="Missing skills"
-                        items={assessment.resume_payload?.missing_skills ?? []}
-                        variant="outline"
-                    />
-                    <SkillGroup
-                        title="Risk flags"
-                        items={assessment.resume_payload?.risk_flags ?? []}
-                        variant="destructive"
-                    />
-                    <SkillGroup
-                        title="Interview probes"
-                        items={
-                            assessment.resume_payload?.interview_probes ?? []
-                        }
-                        variant="secondary"
-                    />
-                </div>
+            <div className="grid gap-4 md:grid-cols-2">
+                <SkillGroup
+                    title="Matched skills"
+                    items={assessment.resume_payload?.matched_skills ?? []}
+                    variant="default"
+                />
+                <SkillGroup
+                    title="Missing skills"
+                    items={assessment.resume_payload?.missing_skills ?? []}
+                    variant="outline"
+                />
+                <SkillGroup
+                    title="Risk flags"
+                    items={assessment.resume_payload?.risk_flags ?? []}
+                    variant="destructive"
+                />
+                <SkillGroup
+                    title="Interview probes"
+                    items={assessment.resume_payload?.interview_probes ?? []}
+                    variant="secondary"
+                />
             </div>
         </div>
     );
@@ -660,77 +683,98 @@ function AnswersTab({ assessment }: { assessment: Assessment }) {
         );
     }
 
+    const answerSections = groupAnswersBySection(assessment.answers_payload);
+
     return (
         <ScrollArea className="h-[70vh] rounded-lg">
-            <div className="flex flex-col gap-4 pr-4">
-                {assessment.answers_payload.map((answer, index) => {
-                    const evaluation =
-                        assessment.evaluation_payload?.question_evaluations.find(
-                            (item) => item.question_id === answer.question_id,
-                        );
+            <div className="flex flex-col gap-8 pr-4">
+                {answerSections.map((section) => (
+                    <section key={section.key} className="flex flex-col gap-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h3 className="font-medium">{section.title}</h3>
+                            <Badge variant="secondary">
+                                {section.answers.length}{' '}
+                                {section.answers.length === 1
+                                    ? 'question'
+                                    : 'questions'}
+                            </Badge>
+                        </div>
 
-                    return (
-                        <Card key={answer.question_id}>
-                            <CardHeader>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <CardDescription>
-                                        Question {index + 1}
-                                    </CardDescription>
-                                    {evaluation ? (
-                                        <div className="flex flex-wrap gap-2">
-                                            <Badge variant="secondary">
-                                                Score {evaluation.score}
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                Confidence{' '}
-                                                {evaluation.confidence}%
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                {evaluation.earned_points}/
-                                                {evaluation.points} pts
-                                            </Badge>
+                        {section.answers.map((answer, index) => {
+                            const evaluation =
+                                assessment.evaluation_payload?.question_evaluations.find(
+                                    (item) =>
+                                        item.question_id === answer.question_id,
+                                );
+
+                            return (
+                                <Card key={answer.question_id}>
+                                    <CardHeader>
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <CardDescription>
+                                                Question {index + 1}
+                                            </CardDescription>
+                                            {evaluation ? (
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Badge variant="secondary">
+                                                        Score {evaluation.score}
+                                                    </Badge>
+                                                    <Badge variant="outline">
+                                                        Confidence{' '}
+                                                        {evaluation.confidence}%
+                                                    </Badge>
+                                                    <Badge variant="outline">
+                                                        {
+                                                            evaluation.earned_points
+                                                        }
+                                                        /{evaluation.points} pts
+                                                    </Badge>
+                                                </div>
+                                            ) : null}
                                         </div>
-                                    ) : null}
-                                </div>
-                                <CardTitle>{answer.question}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-4">
-                                <Field>
-                                    <FieldLabel>Rubric</FieldLabel>
-                                    <FieldContent>
-                                        <p className="text-sm whitespace-pre-wrap">
-                                            {answer.rubric}
-                                        </p>
-                                    </FieldContent>
-                                </Field>
-                                <Separator />
-                                <Field>
-                                    <FieldLabel>Answer</FieldLabel>
-                                    <FieldContent>
-                                        <p className="text-sm whitespace-pre-wrap">
-                                            {answer.answer}
-                                        </p>
-                                    </FieldContent>
-                                </Field>
-                                {evaluation ? (
-                                    <>
-                                        <Separator />
+                                        <CardTitle>{answer.question}</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex flex-col gap-4">
                                         <Field>
-                                            <FieldLabel>
-                                                AI evaluation
-                                            </FieldLabel>
+                                            <FieldLabel>Rubric</FieldLabel>
                                             <FieldContent>
                                                 <p className="text-sm whitespace-pre-wrap">
-                                                    {evaluation.justification}
+                                                    {answer.rubric}
                                                 </p>
                                             </FieldContent>
                                         </Field>
-                                    </>
-                                ) : null}
-                            </CardContent>
-                        </Card>
-                    );
-                })}
+                                        <Separator />
+                                        <Field>
+                                            <FieldLabel>Answer</FieldLabel>
+                                            <FieldContent>
+                                                <p className="text-sm whitespace-pre-wrap">
+                                                    {answer.answer}
+                                                </p>
+                                            </FieldContent>
+                                        </Field>
+                                        {evaluation ? (
+                                            <>
+                                                <Separator />
+                                                <Field>
+                                                    <FieldLabel>
+                                                        AI evaluation
+                                                    </FieldLabel>
+                                                    <FieldContent>
+                                                        <p className="text-sm whitespace-pre-wrap">
+                                                            {
+                                                                evaluation.justification
+                                                            }
+                                                        </p>
+                                                    </FieldContent>
+                                                </Field>
+                                            </>
+                                        ) : null}
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </section>
+                ))}
             </div>
         </ScrollArea>
     );
@@ -851,34 +895,25 @@ function InterviewEmailDialog({
                                     </Field>
                                 </FieldGroup>
 
-                                <DialogFooter className="sm:justify-between">
-                                    <RejectAssessmentDialog
-                                        assessment={assessment}
-                                    />
-                                    <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                                        <DialogClose asChild>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                            >
-                                                Cancel
-                                            </Button>
-                                        </DialogClose>
-                                        <Button
-                                            type="submit"
-                                            disabled={
-                                                processing ||
-                                                !assessment.can_review
-                                            }
-                                        >
-                                            {processing ? (
-                                                <Spinner />
-                                            ) : (
-                                                <CheckCircle2 data-icon="inline-start" />
-                                            )}
-                                            Approve
+                                <DialogFooter>
+                                    <DialogClose asChild>
+                                        <Button type="button" variant="outline">
+                                            Cancel
                                         </Button>
-                                    </div>
+                                    </DialogClose>
+                                    <Button
+                                        type="submit"
+                                        disabled={
+                                            processing || !assessment.can_review
+                                        }
+                                    >
+                                        {processing ? (
+                                            <Spinner />
+                                        ) : (
+                                            <CheckCircle2 data-icon="inline-start" />
+                                        )}
+                                        Approve
+                                    </Button>
                                 </DialogFooter>
                             </>
                         );
@@ -892,37 +927,32 @@ function InterviewEmailDialog({
 function ScoreMetric({
     label,
     score,
+    isProcessing = false,
 }: {
     label: string;
     score: number | null | undefined;
+    isProcessing?: boolean;
 }) {
+    const isPending = isProcessing && typeof score !== 'number';
+
     return (
         <Card size="sm">
             <CardHeader>
                 <CardDescription>{label}</CardDescription>
                 <CardTitle>
-                    <span className="text-2xl tabular-nums">
-                        {scoreOrDash(score)}
-                    </span>
+                    {isPending ? (
+                        <Skeleton
+                            className="h-7 w-16"
+                            aria-label={`${label} is being calculated`}
+                        />
+                    ) : (
+                        <span className="text-2xl tabular-nums">
+                            {scoreOrDash(score)}
+                        </span>
+                    )}
                 </CardTitle>
             </CardHeader>
-            {typeof score === 'number' ? (
-                <CardContent>
-                    <Progress value={score} />
-                </CardContent>
-            ) : null}
         </Card>
-    );
-}
-
-function MetaItem({ label, value }: { label: string; value: string | number }) {
-    return (
-        <Field>
-            <FieldLabel>{label}</FieldLabel>
-            <FieldContent>
-                <p className="text-sm font-medium break-words">{value}</p>
-            </FieldContent>
-        </Field>
     );
 }
 
@@ -974,7 +1004,7 @@ type AssessmentAction =
     | 'promote'
     | 'override_score';
 
-function AssessmentActionsMenu({
+function AssessmentReviewActions({
     assessment,
     subject,
     body,
@@ -993,26 +1023,43 @@ function AssessmentActionsMenu({
 
     return (
         <>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
-                        <EllipsisVertical data-icon="inline-start" />
-                        Actions
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-48">
-                    <DropdownMenuGroup>
-                        <DropdownMenuItem
-                            onSelect={() => setOpenAction('email')}
-                        >
-                            <Mail />
-                            Interview Email
-                        </DropdownMenuItem>
-                    </DropdownMenuGroup>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+                {assessment.can_review ? (
+                    <>
+                        <RejectAssessmentDialog assessment={assessment} />
+                        <Button onClick={() => setOpenAction('email')}>
+                            Review & Approve
+                        </Button>
+                    </>
+                ) : null}
 
-                    {hasRecoveryAction ? (
-                        <>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="More assessment actions"
+                        >
+                            <Ellipsis />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-48">
+                        {!assessment.can_review ? (
+                            <DropdownMenuGroup>
+                                <DropdownMenuItem
+                                    onSelect={() => setOpenAction('email')}
+                                >
+                                    <Mail />
+                                    View Interview Email
+                                </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                        ) : null}
+
+                        {!assessment.can_review && hasRecoveryAction ? (
                             <DropdownMenuSeparator />
+                        ) : null}
+
+                        {hasRecoveryAction ? (
                             <DropdownMenuGroup>
                                 {assessment.can_retry ? (
                                     <DropdownMenuItem
@@ -1053,10 +1100,10 @@ function AssessmentActionsMenu({
                                     </DropdownMenuItem>
                                 ) : null}
                             </DropdownMenuGroup>
-                        </>
-                    ) : null}
-                </DropdownMenuContent>
-            </DropdownMenu>
+                        ) : null}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
 
             <InterviewEmailDialog
                 assessment={assessment}
@@ -1559,7 +1606,6 @@ function RejectAssessmentDialog({ assessment }: { assessment: Assessment }) {
         <AlertDialog>
             <AlertDialogTrigger asChild>
                 <Button variant="outline" disabled={!assessment.can_review}>
-                    <XCircle data-icon="inline-start" />
                     Reject
                 </Button>
             </AlertDialogTrigger>

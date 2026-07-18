@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { Spinner } from '@/components/ui/spinner';
 
 type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
 
@@ -6,11 +7,30 @@ type Props = {
     status: string;
 };
 
-const statuses: Record<string, { label: string; variant: BadgeVariant }> = {
-    submitted: { label: 'Submitted', variant: 'secondary' },
-    evaluating: { label: 'Evaluating', variant: 'secondary' },
-    resume_processing: { label: 'Resume processing', variant: 'secondary' },
-    resume_screening: { label: 'Resume screening', variant: 'secondary' },
+const statuses: Record<
+    string,
+    { label: string; variant: BadgeVariant; processing?: boolean }
+> = {
+    submitted: {
+        label: 'Submitted',
+        variant: 'secondary',
+        processing: true,
+    },
+    evaluating: {
+        label: 'Evaluating',
+        variant: 'secondary',
+        processing: true,
+    },
+    resume_processing: {
+        label: 'Resume processing',
+        variant: 'secondary',
+        processing: true,
+    },
+    resume_screening: {
+        label: 'Resume screening',
+        variant: 'secondary',
+        processing: true,
+    },
     pending_approval: { label: 'Pending approval', variant: 'default' },
     evaluated: { label: 'Evaluated', variant: 'secondary' },
     ranking_ready: { label: 'Ranking ready', variant: 'default' },
@@ -30,5 +50,20 @@ export default function AssessmentStatusBadge({ status }: Props) {
         variant: 'secondary' as const,
     };
 
-    return <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>;
+    return (
+        <Badge
+            variant={statusConfig.variant}
+            role={statusConfig.processing ? 'status' : undefined}
+            aria-live={statusConfig.processing ? 'polite' : undefined}
+        >
+            {statusConfig.processing ? <Spinner aria-hidden="true" /> : null}
+            <span
+                className={
+                    statusConfig.processing ? 'ai-status-shimmer' : undefined
+                }
+            >
+                {statusConfig.label}
+            </span>
+        </Badge>
+    );
 }

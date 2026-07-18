@@ -147,8 +147,39 @@ test('candidate assessment surfaces use wide shadcn composition', function () {
         ->and($styles)->toContain("html:fullscreen[data-secure-exam-active='true'] [data-app-header]");
 });
 
+test('AI assessment processing surfaces poll and expose shimmer feedback', function () {
+    $candidateAssessment = file_get_contents(resource_path('js/pages/candidate/assessments/show.tsx'));
+    $adminAssessment = file_get_contents(resource_path('js/pages/admin/assessments/show.tsx'));
+    $statusBadge = file_get_contents(resource_path('js/components/assessment-status-badge.tsx'));
+    $styles = file_get_contents(resource_path('css/app.css'));
+
+    expect($candidateAssessment)->not->toBeFalse()
+        ->toContain('const PROCESSING_STATUSES = [')
+        ->toContain('const { start, stop } = usePoll(')
+        ->toContain("{ only: ['assessment'] }")
+        ->toContain("{ autoStart: false, mode: 'rest' }")
+        ->and($adminAssessment)->not->toBeFalse()
+        ->toContain("import { Form, Head, usePoll } from '@inertiajs/react';")
+        ->toContain('const isProcessing = PROCESSING_STATUSES.includes(assessment.status);')
+        ->toContain('const { start, stop } = usePoll(')
+        ->toContain('isProcessing={isProcessing}')
+        ->toContain('<Skeleton')
+        ->toContain('is being calculated')
+        ->and($statusBadge)->not->toBeFalse()
+        ->toContain('processing: true')
+        ->toContain("role={statusConfig.processing ? 'status' : undefined}")
+        ->toContain('<Spinner aria-hidden="true" />')
+        ->toContain("statusConfig.processing ? 'ai-status-shimmer' : undefined")
+        ->and($styles)->not->toBeFalse()
+        ->toContain('.ai-status-shimmer')
+        ->toContain('@keyframes ai-status-shimmer');
+});
+
 test('campaign assessment authoring uses compact disclosure and item components', function () {
     $campaign = file_get_contents(resource_path('js/pages/admin/campaigns/show.tsx'));
+    $questionGeneration = str($campaign)
+        ->between('function AddQuestionAction(', 'function EditSectionSheet(')
+        ->toString();
 
     expect($campaign)->not->toBeFalse()
         ->toContain('<Accordion')
@@ -173,6 +204,19 @@ test('campaign assessment authoring uses compact disclosure and item components'
         ->not->toContain('Edit Snapshot')
         ->not->toContain('id="generate-language"')
         ->not->toContain('{section.description ? (');
+
+    expect($questionGeneration)
+        ->toContain('className="flex w-full items-center justify-between gap-3"')
+        ->toContain('data-test="question-generation-status"')
+        ->toContain('className="w-auto"')
+        ->toContain('className="ml-auto"')
+        ->toContain('role="status"')
+        ->toContain('<MarkerIcon>')
+        ->toContain('<Spinner />')
+        ->toContain('<MarkerContent className="shimmer">')
+        ->toContain('Generating question…')
+        ->toContain("? 'Generating question with AI'")
+        ->not->toContain('QuestionGenerationSkeleton');
 });
 
 test('interactive surfaces use native links and buttons', function () {
@@ -240,6 +284,9 @@ test('campaign assessment generation uses the shimmer button treatment', functio
         ->toContain('@keyframes spin-around')
         ->toContain('.assessment-content-shimmer')
         ->toContain('mask-composite: exclude')
+        ->not->toContain('.assessment-processing-veil')
+        ->not->toContain('@keyframes assessment-processing-sweep')
+        ->not->toContain('backdrop-filter: blur(1px)')
         ->and($shimmerButton)->not->toBeFalse()
         ->toContain("shimmerColor = 'var(--foreground)'")
         ->toContain("shimmerSize = '0.05em'")
@@ -257,6 +304,12 @@ test('campaign assessment generation uses the shimmer button treatment', functio
         ->toContain('Generating Assessment…')
         ->toContain("'--shimmer-color':")
         ->toContain('assessment-content-shimmer')
+        ->not->toContain('data-test="assessment-processing-status"')
+        ->not->toContain('Generating sections')
+        ->not->toContain('and questions…')
+        ->toContain('isGeneratingAssessment ||')
+        ->toContain("isGeneratingAssessment &&\n                                                    'opacity-40'")
+        ->toContain('inert:opacity-40')
         ->toContain('bg-background-200')
         ->toContain('role="status"')
         ->toContain('Loading campaign details…')
