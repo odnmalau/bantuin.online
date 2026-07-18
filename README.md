@@ -95,7 +95,7 @@ flowchart LR
 
     subgraph experience["Experience and edge"]
         direction TB
-        edge["Cloudflare Edge<br/>DNS, TLS, and edge security"]
+        edge["Edge Network<br/>DNS, TLS, and edge security"]
         frontend["Inertia React Application<br/>React, TypeScript, and Tailwind CSS"]
     end
 
@@ -260,9 +260,9 @@ been used, create a new campaign with a distinct title.
 | Frontend           | Inertia.js 3, React 19, TypeScript, Tailwind CSS 4         |
 | Database and queue | PostgreSQL 17, Laravel database queue                      |
 | Authentication     | Google OAuth with Laravel Socialite, protected demo access |
-| Resume processing  | Private R2 storage, Poppler `pdftotext`                    |
+| Resume processing  | Private object storage, Poppler `pdftotext`                |
 | Email              | Laravel Mail and Resend                                    |
-| Deployment         | Docker, FrankenPHP, Alibaba Cloud compute, Cloudflare edge |
+| Deployment         | Docker, FrankenPHP, Alibaba Cloud compute, edge network    |
 | Quality            | Pest 4, PHPUnit 12, Pint, ESLint, Prettier, TypeScript     |
 
 ## Local installation
@@ -312,16 +312,14 @@ QWEN_MODEL=qwen3.7-plus
 QWEN_REASONER_MODEL=qwen3.7-max
 QWEN_STRUCTURED_MODEL=qwen3.7-plus
 
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_PRIVATE_BUCKET=
-R2_ENDPOINT=
-
 RESEND_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=${APP_URL}/auth/google/callback
 ```
+
+Private object storage credentials can be configured using the storage
+variables documented in `.env.example`.
 
 Never commit `.env` or production secret values.
 
