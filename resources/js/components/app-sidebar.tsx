@@ -2,7 +2,6 @@ import { Link, usePage } from '@inertiajs/react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-import { TeamSwitcher } from '@/components/team-switcher';
 import {
     Sidebar,
     SidebarContent,
@@ -38,9 +37,7 @@ export function AppSidebar() {
                     <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
                         Platform Support mode
                     </div>
-                ) : (
-                    <TeamSwitcher className="w-full justify-between" />
-                )}
+                ) : null}
             </SidebarHeader>
 
             {mainNavItems.length > 0 && (

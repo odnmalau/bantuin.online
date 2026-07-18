@@ -3,7 +3,6 @@ import { Menu } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Breadcrumbs } from '@/components/breadcrumbs';
-import { TeamSwitcher } from '@/components/team-switcher';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -79,9 +78,6 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                     <AppLogoIcon className="h-6 w-6" />
                                 </SheetHeader>
                                 <div className="flex h-full flex-1 flex-col gap-4 p-4">
-                                    {!isCandidateMode ? (
-                                        <TeamSwitcher className="w-full" />
-                                    ) : null}
                                     <div className="flex h-full flex-col justify-between text-sm">
                                         <div className="flex flex-col space-y-4">
                                             {mainNavItems.map((item) => (
@@ -146,9 +142,6 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
 
                     <div className="ml-auto flex items-center space-x-2">
-                        {!isCandidateMode ? (
-                            <TeamSwitcher className="hidden max-w-52 sm:flex" />
-                        ) : null}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button

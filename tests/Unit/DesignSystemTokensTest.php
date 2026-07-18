@@ -288,3 +288,15 @@ test('button and dropdown actions use pointer cursors', function () {
         ->toContain('cursor-pointer')
         ->not->toContain('cursor-default');
 });
+
+test('global navigation does not render the team selector', function () {
+    $header = file_get_contents(resource_path('js/components/app-header.tsx'));
+    $sidebar = file_get_contents(resource_path('js/components/app-sidebar.tsx'));
+
+    expect($header)
+        ->not->toContain('@/components/team-switcher')
+        ->not->toContain('<TeamSwitcher')
+        ->and($sidebar)
+        ->not->toContain('@/components/team-switcher')
+        ->not->toContain('<TeamSwitcher');
+});
