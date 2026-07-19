@@ -81,6 +81,28 @@ test('creating an invitation queues the exam invite email job', function () {
     Queue::assertPushed(SendCampaignExamInvitationEmail::class);
 });
 
+test('demo candidate invitations never queue an exam invite email job', function () {
+    Queue::fake();
+
+    $admin = User::factory()->teamOwner()->create();
+    $campaign = Campaign::factory()->for($admin->currentTeam)->active()->create([
+        'created_by' => $admin->id,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.campaigns.invitations.store', $campaign), [
+            'email' => User::DEMO_CANDIDATE_EMAIL,
+            'send_email' => true,
+        ])
+        ->assertRedirect();
+
+    $invitation = CampaignInvitation::query()->sole();
+
+    app(CampaignInvitationService::class)->resend($invitation);
+
+    Queue::assertNothingPushed();
+});
+
 test('exam invite email job sends mailable with invite link', function () {
     Mail::fake();
 

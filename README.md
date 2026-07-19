@@ -233,13 +233,15 @@ No password or private credential is required. The login page provides
 3. Choose **Generate assessment with AI**. Inspect the Qwen-generated draft
    sections, questions, and rubrics.
 4. Edit or approve the draft questions, then publish the campaign.
-5. Invite `demo-candidate@bantuin.online`. Disable email delivery and copy the
-   latest invite link shown by the application.
+5. Open **Candidate Invitations** and choose **Invite Demo Candidate**. Demo
+   invitations are created without sending email.
 
 ### End-to-end candidate and review walkthrough
 
-1. Open the copied invite link in a private browser window.
-2. Choose **Demo Candidate** to redeem the invitation.
+1. Open the application in a private browser window and choose
+   **Demo Candidate**.
+2. Pending active demo invitations are accepted automatically and become
+   available to the candidate.
 3. Upload a PDF resume, start the secure exam, answer each section, and submit.
 4. Return to the Demo Admin session and open **Rankings**. Processing statuses
    update automatically while the queued Qwen pipeline runs.

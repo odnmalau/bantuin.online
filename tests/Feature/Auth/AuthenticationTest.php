@@ -1,5 +1,8 @@
 <?php
 
+use App\CampaignInvitationStatus;
+use App\Models\Campaign;
+use App\Models\CampaignInvitation;
 use App\Models\User;
 use App\TeamMembershipRole;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -52,4 +55,22 @@ test('demo login reuses an existing candidate account', function () {
     $this->assertAuthenticatedAs($user);
 
     expect(User::query()->where('email', $user->email)->count())->toBe(1);
+});
+
+test('demo candidate login accepts matching pending campaign invitations', function () {
+    $campaign = Campaign::factory()->active()->create();
+    $invitation = CampaignInvitation::factory()->for($campaign)->create([
+        'email' => User::DEMO_CANDIDATE_EMAIL,
+        'user_id' => null,
+    ]);
+
+    $this->post(route('auth.demo.candidate'))
+        ->assertRedirect(route('dashboard'));
+
+    $candidate = User::query()->where('email', User::DEMO_CANDIDATE_EMAIL)->sole();
+
+    expect($invitation->fresh())
+        ->status->toBe(CampaignInvitationStatus::Accepted)
+        ->user_id->toBe($candidate->id)
+        ->accepted_at->not->toBeNull();
 });

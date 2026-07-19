@@ -114,7 +114,7 @@ class CampaignInvitationService
 
         $inviteUrl = $this->inviteUrlForToken($plainToken);
 
-        if ($sendEmail) {
+        if ($sendEmail && $normalizedEmail !== User::DEMO_CANDIDATE_EMAIL) {
             SendCampaignExamInvitationEmail::dispatch($invitation, $plainToken);
         }
 
@@ -188,7 +188,9 @@ class CampaignInvitationService
             return $lockedInvitation;
         });
 
-        SendCampaignExamInvitationEmail::dispatch($lockedInvitation, $plainToken);
+        if (! $lockedInvitation->matchesEmail(User::DEMO_CANDIDATE_EMAIL)) {
+            SendCampaignExamInvitationEmail::dispatch($lockedInvitation, $plainToken);
+        }
     }
 
     public function claimEmailDelivery(
@@ -298,6 +300,26 @@ class CampaignInvitationService
         }
 
         return CampaignInvitation::query()->find((int) $invitationId);
+    }
+
+    public function acceptPendingDemoCandidateInvitations(User $user): void
+    {
+        if ($user->email !== User::DEMO_CANDIDATE_EMAIL) {
+            return;
+        }
+
+        CampaignInvitation::query()
+            ->where('email', User::DEMO_CANDIDATE_EMAIL)
+            ->where('status', CampaignInvitationStatus::Pending)
+            ->where(fn ($query) => $query
+                ->whereNull('expires_at')
+                ->orWhere('expires_at', '>', now()))
+            ->whereHas('campaign', fn ($query) => $query
+                ->where('status', CampaignStatus::Active->value)
+                ->whereHas('team', fn ($teamQuery) => $teamQuery->where('status', TeamStatus::Active->value)))
+            ->oldest('id')
+            ->get()
+            ->each(fn (CampaignInvitation $invitation) => $this->acceptForUser($invitation, $user));
     }
 
     public function acceptForUser(CampaignInvitation $invitation, User $user): CampaignInvitation

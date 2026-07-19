@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\CampaignInvitationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -28,9 +29,10 @@ class DemoLoginController extends Controller
         return $this->login($request, $user);
     }
 
-    public function candidate(Request $request): RedirectResponse
+    public function candidate(Request $request, CampaignInvitationService $invitations): RedirectResponse
     {
         $user = $this->findOrCreateUser('Demo Candidate', User::DEMO_CANDIDATE_EMAIL);
+        $invitations->acceptPendingDemoCandidateInvitations($user);
 
         return $this->login($request, $user);
     }

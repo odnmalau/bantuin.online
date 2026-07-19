@@ -2001,8 +2001,15 @@ function CandidateInvitationsDialog({
     invitations: CampaignInvitationRow[];
     latestInviteUrl: string | undefined;
 }) {
-    const { locale, timeZone } = usePage<SharedData>().props;
+    const { auth, locale, timeZone } = usePage<SharedData>().props;
     const canInvite = campaign.status === 'active';
+    const isDemoAdmin = auth.user?.email === 'demo-admin@bantuin.online';
+    const demoCandidateEmail = 'demo-candidate@bantuin.online';
+    const demoCandidateInvitation = invitations.find(
+        (invitation) =>
+            invitation.email === demoCandidateEmail &&
+            ['pending', 'accepted'].includes(invitation.status),
+    );
     const dateTimeFormatter = new Intl.DateTimeFormat(normalizeLocale(locale), {
         dateStyle: 'medium',
         timeStyle: 'short',
@@ -2027,6 +2034,58 @@ function CandidateInvitationsDialog({
                     </DialogDescription>
                 </DialogHeader>
 
+                {canInvite && isDemoAdmin ? (
+                    <Form
+                        action={admin.campaigns.invitations.store.url(
+                            campaign.id,
+                        )}
+                        method="post"
+                        options={{ preserveScroll: true }}
+                    >
+                        {({ errors, processing }) => (
+                            <Item variant="muted">
+                                <ItemContent>
+                                    <ItemTitle>Demo candidate</ItemTitle>
+                                    <ItemDescription>
+                                        {errors.email ??
+                                            'Use the shared demo account without sending an email.'}
+                                    </ItemDescription>
+                                </ItemContent>
+                                <ItemActions>
+                                    <input
+                                        type="hidden"
+                                        name="email"
+                                        value={demoCandidateEmail}
+                                    />
+                                    <input
+                                        type="hidden"
+                                        name="send_email"
+                                        value="0"
+                                    />
+                                    <Button
+                                        disabled={
+                                            processing ||
+                                            demoCandidateInvitation !==
+                                                undefined
+                                        }
+                                        type="submit"
+                                        variant="secondary"
+                                    >
+                                        {processing && <Spinner />}
+                                        <Sparkles
+                                            aria-hidden="true"
+                                            data-icon="inline-start"
+                                        />
+                                        {demoCandidateInvitation
+                                            ? 'Demo Candidate Invited'
+                                            : 'Invite Demo Candidate'}
+                                    </Button>
+                                </ItemActions>
+                            </Item>
+                        )}
+                    </Form>
+                ) : null}
+
                 {canInvite ? (
                     <Form
                         action={admin.campaigns.invitations.store.url(
@@ -2047,7 +2106,9 @@ function CandidateInvitationsDialog({
                                     }
                                 >
                                     <FieldLabel htmlFor="invitation-email">
-                                        Candidate email
+                                        {isDemoAdmin
+                                            ? 'Invite another candidate'
+                                            : 'Candidate email'}
                                     </FieldLabel>
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                                         <Input
