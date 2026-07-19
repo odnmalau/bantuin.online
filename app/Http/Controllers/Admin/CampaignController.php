@@ -137,7 +137,7 @@ class CampaignController extends Controller
 
             $validated = $request->validated();
 
-            $campaign = Campaign::query()->create([
+            return Campaign::query()->create([
                 ...$validated,
                 'team_id' => $team->id,
                 'created_by' => $user->id,
@@ -145,10 +145,6 @@ class CampaignController extends Controller
                 'status' => CampaignStatus::Draft,
                 'activated_at' => null,
             ]);
-
-            $this->createDefaultSection($campaign);
-
-            return $campaign;
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign created.')]);
@@ -341,18 +337,6 @@ class CampaignController extends Controller
 
         throw ValidationException::withMessages([
             'campaign' => __($publishability['error_message']),
-        ]);
-    }
-
-    private function createDefaultSection(Campaign $campaign): void
-    {
-        CampaignSection::query()->create([
-            'campaign_id' => $campaign->id,
-            'title' => 'Knowledge Check',
-            'description' => 'Initial section for generated or manually-added screening questions.',
-            'duration_minutes' => 30,
-            'weight' => 100,
-            'sort_order' => 10,
         ]);
     }
 

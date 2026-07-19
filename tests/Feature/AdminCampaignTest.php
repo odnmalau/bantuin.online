@@ -145,7 +145,7 @@ test('admin campaign pagination uses campaign ids to break created at ties', fun
         );
 });
 
-test('admin can create a campaign with a default section', function () {
+test('admin can create a campaign without a default section', function () {
     $admin = User::factory()->teamOwner()->create();
     $currentTeam = $admin->currentTeam;
 
@@ -174,7 +174,7 @@ test('admin can create a campaign with a default section', function () {
         ->status->toBe(CampaignStatus::Draft)
         ->activated_at->toBeNull()
         ->ranking_weights->toMatchArray(Campaign::defaultRankingWeights())
-        ->and($campaign->sections()->count())->toBe(1);
+        ->and($campaign->sections()->exists())->toBeFalse();
 });
 
 test('admin cannot create a campaign for a deactivated current team', function () {

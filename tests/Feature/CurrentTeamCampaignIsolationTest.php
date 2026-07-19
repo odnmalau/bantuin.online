@@ -58,7 +58,16 @@ test('each authorized Team membership can manage campaigns', function (string $r
         ->delete(route('admin.campaigns.sections.destroy', [$campaign, $temporarySection]))
         ->assertSessionHasNoErrors();
 
-    $section = $campaign->sections()->firstOrFail();
+    $this->actingAs($user)
+        ->post(route('admin.campaigns.sections.store', $campaign), [
+            'title' => 'Technical Reasoning',
+            'description' => 'Evaluate practical engineering decisions.',
+            'duration_minutes' => 30,
+            'weight' => 100,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $section = $campaign->sections()->sole();
     $this->actingAs($user)
         ->post(route('admin.campaigns.questions.store', $campaign), [
             'campaign_section_id' => $section->id,
