@@ -17,6 +17,8 @@ decision: generated questions are drafts until approved, and no interview email
 is sent until a hiring team member reviews the evidence and explicitly approves
 the outcome.
 
+![Bantuin Online candidate assessment review](.github/candidate-review.png)
+
 ## The problem
 
 Technical hiring is often fragmented across documents, form builders,
@@ -269,14 +271,21 @@ been used, create a new campaign with a distinct title.
 
 ## Local installation
 
-### Requirements
+### Core requirements
 
 - PHP 8.4 or 8.5 with Composer 2
 - Node.js 22 and pnpm 11
 - PostgreSQL
 - `poppler-utils` for PDF text extraction
-- S3-compatible private object storage for candidate resumes
-- Qwen Cloud API credentials
+
+The complete workflow also uses these external integrations:
+
+- Qwen Cloud credentials for assessment generation, resume screening, answer
+  evaluation, and the critic pass;
+- Google OAuth credentials for standard team sign-in;
+- Resend credentials for interview email delivery; and
+- S3-compatible private object storage for production resume handling. Local
+  development can use the local filesystem disk.
 
 On Debian or Ubuntu, install Poppler with:
 
@@ -286,17 +295,15 @@ sudo apt-get install poppler-utils
 
 ### Setup
 
-Clone the repository and run:
+Clone the repository, create the environment file, and configure the PostgreSQL
+connection before running the setup command:
 
 ```bash
-composer setup
+cp .env.example .env
 ```
 
-The setup command installs PHP and JavaScript dependencies, copies
-`.env.example` when needed, generates an application key, runs migrations, and
-builds frontend assets.
-
-Configure these values in `.env` before exercising the full workflow:
+At minimum, confirm these application and database values in `.env` and ensure
+the configured PostgreSQL database exists:
 
 ```dotenv
 APP_URL=http://localhost:8000
@@ -308,6 +315,20 @@ DB_DATABASE=HirePilot
 DB_USERNAME=postgres
 DB_PASSWORD=
 
+FILESYSTEM_DISK=local
+```
+
+Then install the dependencies, generate the application key, run the
+migrations, and build the frontend assets:
+
+```bash
+composer setup
+```
+
+Configure the relevant external service credentials before exercising the full
+workflow:
+
+```dotenv
 QWEN_API_KEY=
 QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 QWEN_MODEL=qwen3.7-plus
@@ -360,10 +381,9 @@ pnpm run types:check
 pnpm run build
 ```
 
-The latest local audit completed 499 tests: 494 passed and five optional local
-PostgreSQL integration cases were skipped because the integration database was
-not running. The GitHub Actions workflow runs the suite on PHP 8.4 and 8.5 and
-executes the PostgreSQL migration coverage against a real PostgreSQL service.
+The GitHub Actions workflow runs the test suite on PHP 8.4 and 8.5 and executes
+the PostgreSQL migration coverage against a real PostgreSQL service. The status
+badges at the top of this README report the latest CI result.
 
 ## Engineering highlights
 
